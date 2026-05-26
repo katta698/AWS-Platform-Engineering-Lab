@@ -1,0 +1,111 @@
+{
+  "Comment": "Enterprise EC2 Self-Service Provisioning Workflow",
+  "StartAt": "ValidateRequest",
+  "States": {
+
+    "ValidateRequest": {
+      "Type": "Pass",
+      "Comment": "Validates required fields — passes through for lab demo",
+      "Next": "UpdateTicketInProgress"
+    },
+
+    "UpdateTicketInProgress": {
+      "Type": "Task",
+      "Comment": "Set ServiceNow ticket to In Progress before starting deployment",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${StatusUpdaterLambdaArn}",
+        "Payload": {
+          "status": "in_progress",
+          "ticket_id.$": "$.ticket_id",
+          "ticket_number.$": "$.ticket_number",
+          "message": "Infrastructure provisioning started"
+        }
+      },
+      "ResultPath": "$.sn_update",
+      "Next": "TriggerDeployment"
+    },
+
+    "TriggerDeployment": {
+      "Type": "Task",
+      "Comment": "Triggers GitHub Actions and WAITS for Terraform callback token",
+      "Resource": "arn:aws:states:::lambda:invoke.waitForTaskToken",
+      "Parameters": {
+        "FunctionName": "${DeploymentTriggerLambdaArn}",
+        "Payload": {
+          "TaskToken.$": "$$.Task.Token",
+          "input.$": "$"
+        }
+      },
+      "TimeoutSeconds": 1800,
+      "HeartbeatSeconds": 300,
+      "ResultPath": "$.deployment",
+      "Retry": [{
+        "ErrorEquals": ["States.HeartbeatTimeout"],
+        "MaxAttempts": 1
+      }],
+      "Catch": [{
+        "ErrorEquals": ["States.TaskFailed", "States.Timeout"],
+        "Next": "NotifyFailure",
+        "ResultPath": "$.error"
+      }],
+      "Next": "CheckDeploymentResult"
+    },
+
+    "CheckDeploymentResult": {
+      "Type": "Choice",
+      "Choices": [{
+        "Variable": "$.deployment.status",
+        "StringEquals": "success",
+        "Next": "NotifySuccess"
+      }],
+      "Default": "NotifyFailure"
+    },
+
+    "NotifySuccess": {
+      "Type": "Task",
+      "Comment": "Update ServiceNow ticket with success — resolve and close",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${StatusUpdaterLambdaArn}",
+        "Payload": {
+          "status": "success",
+          "ticket_id.$": "$.ticket_id",
+          "ticket_number.$": "$.ticket_number",
+          "alb_dns_name.$": "$.deployment.alb_dns_name",
+          "asg_name.$": "$.deployment.asg_name",
+          "dashboard_url.$": "$.deployment.dashboard_url"
+        }
+      },
+      "ResultPath": "$.final_update",
+      "Next": "ProvisioningComplete"
+    },
+
+    "NotifyFailure": {
+      "Type": "Task",
+      "Comment": "Update ServiceNow ticket with failure details",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${StatusUpdaterLambdaArn}",
+        "Payload": {
+          "status": "failure",
+          "ticket_id.$": "$.ticket_id",
+          "ticket_number.$": "$.ticket_number",
+          "error.$": "$.error"
+        }
+      },
+      "ResultPath": "$.failure_update",
+      "Next": "ProvisioningFailed"
+    },
+
+    "ProvisioningComplete": {
+      "Type": "Succeed"
+    },
+
+    "ProvisioningFailed": {
+      "Type": "Fail",
+      "Error": "ProvisioningError",
+      "Cause": "Infrastructure provisioning failed — see work_notes in ServiceNow ticket"
+    }
+  }
+}

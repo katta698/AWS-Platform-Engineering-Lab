@@ -1,0 +1,40 @@
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+terraform.tfvars
+*.auto.tfvars
+
+# Lambda build artifacts
+lambda/**/__pycache__/
+lambda/**/*.pyc
+lambda/**/*.zip
+__pycache__/
+*.pyc
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Secrets
+*.pem
+*.key
+.env
+.env.*
+
+# Execution files
+EXECUTION*
+
+# Local docs and notes
+docs/
+
+# Blog / personal artifacts
+BLOG*
+embed*
+LINKEDIN*

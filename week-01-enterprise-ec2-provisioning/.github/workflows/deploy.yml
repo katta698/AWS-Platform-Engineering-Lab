@@ -1,0 +1,226 @@
+###############################################################################
+# GitHub Actions: Terraform Deploy
+# Triggered by: ServiceNow → Lambda → repository_dispatch event
+# Pattern: OIDC auth (no static AWS credentials stored in GitHub)
+###############################################################################
+
+name: Deploy Infrastructure
+
+on:
+  repository_dispatch:
+    types: [provision-infrastructure]
+
+  # Manual trigger for testing
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment"
+        required: true
+        default: "dev"
+        type: choice
+        options: [dev, staging, prod]
+      instance_type:
+        description: "EC2 instance type"
+        default: "t3.medium"
+      desired_capacity:
+        description: "ASG desired capacity"
+        default: "2"
+      ticket_id:
+        description: "ServiceNow ticket ID (optional for manual runs)"
+        default: ""
+
+env:
+  TF_VERSION:  "1.7.5"
+  TF_WORK_DIR: "terraform/environments/${{ github.event.client_payload.environment || inputs.environment || 'dev' }}"
+  AWS_REGION:  "us-east-1"
+
+jobs:
+  # ── Plan ──────────────────────────────────────────────────────────────────
+  plan:
+    name: "Terraform Plan"
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.client_payload.environment || inputs.environment || 'dev' }}
+
+    permissions:
+      id-token: write   # Required for OIDC
+      contents: read
+      pull-requests: write
+
+    outputs:
+      plan_exit_code: ${{ steps.plan.outputs.exit_code }}
+      environment:    ${{ steps.set-env.outputs.environment }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set deployment parameters
+        id: set-env
+        run: |
+          # Handle both repository_dispatch and workflow_dispatch
+          ENVIRONMENT="${{ github.event.client_payload.environment || inputs.environment || 'dev' }}"
+          INSTANCE_TYPE="${{ github.event.client_payload.instance_type || inputs.instance_type || 't3.medium' }}"
+          DESIRED_CAPACITY="${{ github.event.client_payload.desired_capacity || inputs.desired_capacity || '2' }}"
+          TICKET_ID="${{ github.event.client_payload.ticket_id || inputs.ticket_id || '' }}"
+          TASK_TOKEN="${{ github.event.client_payload.task_token || '' }}"
+
+          echo "environment=$ENVIRONMENT"          >> $GITHUB_OUTPUT
+          echo "instance_type=$INSTANCE_TYPE"      >> $GITHUB_OUTPUT
+          echo "desired_capacity=$DESIRED_CAPACITY" >> $GITHUB_OUTPUT
+          echo "ticket_id=$TICKET_ID"              >> $GITHUB_OUTPUT
+          echo "task_token=$TASK_TOKEN"             >> $GITHUB_OUTPUT
+          echo "tf_work_dir=terraform/environments/$ENVIRONMENT" >> $GITHUB_OUTPUT
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region:     ${{ env.AWS_REGION }}
+          role-session-name: "GitHubActions-${{ github.run_id }}"
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Init
+        working-directory: ${{ steps.set-env.outputs.tf_work_dir }}
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" \
+            -backend-config="region=${{ env.AWS_REGION }}"
+
+      - name: Terraform Format
+        working-directory: ${{ steps.set-env.outputs.tf_work_dir }}
+        run: terraform fmt -recursive
+
+      - name: Terraform Validate
+        working-directory: ${{ steps.set-env.outputs.tf_work_dir }}
+        run: terraform validate
+
+      - name: Terraform Plan
+        id: plan
+        working-directory: ${{ steps.set-env.outputs.tf_work_dir }}
+        run: |
+          terraform plan \
+            -var="environment=${{ steps.set-env.outputs.environment }}" \
+            -var="instance_type=${{ steps.set-env.outputs.instance_type }}" \
+            -var="asg_desired_capacity=${{ steps.set-env.outputs.desired_capacity }}" \
+            -var="servicenow_ticket_id=${{ steps.set-env.outputs.ticket_id }}" \
+            -var="artifact_bucket_name=${{ secrets.ARTIFACT_BUCKET || 'jay-terraformstate-bucket' }}" \
+            -var="tf_state_bucket=${{ secrets.TF_STATE_BUCKET }}" \
+            -var="github_org=${{ github.repository_owner }}" \
+            -var="github_repo=${{ github.event.repository.name }}" \
+            -var="github_token=${{ secrets.GH_TOKEN_PAT }}" \
+            -var="servicenow_instance_url=${{ secrets.SERVICENOW_INSTANCE_URL }}" \
+            -var="servicenow_username=${{ secrets.SERVICENOW_USERNAME }}" \
+            -var="servicenow_password=${{ secrets.SERVICENOW_PASSWORD }}" \
+            -var="webhook_secret=${{ secrets.WEBHOOK_SECRET }}" \
+            -var="create_github_oidc_provider=false" \
+            -var="existing_oidc_provider_arn=arn:aws:iam::684346483786:oidc-provider/token.actions.githubusercontent.com" \
+            -out=tfplan \
+            -detailed-exitcode 2>&1 | tee plan_output.txt
+          echo "exit_code=${PIPESTATUS[0]}" >> $GITHUB_OUTPUT
+
+      - name: Upload plan artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan-${{ github.run_id }}
+          path: ${{ steps.set-env.outputs.tf_work_dir }}/tfplan
+          retention-days: 1
+
+  # ── Apply ─────────────────────────────────────────────────────────────────
+  apply:
+    name: "Terraform Apply"
+    needs: plan
+    runs-on: ubuntu-latest
+    environment: ${{ needs.plan.outputs.environment }}
+    if: needs.plan.outputs.plan_exit_code != '0' || github.event_name == 'repository_dispatch'
+
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set deployment parameters
+        id: set-env
+        run: |
+          ENVIRONMENT="${{ github.event.client_payload.environment || inputs.environment || 'dev' }}"
+          echo "environment=$ENVIRONMENT"          >> $GITHUB_OUTPUT
+          echo "tf_work_dir=terraform/environments/$ENVIRONMENT" >> $GITHUB_OUTPUT
+          echo "ticket_id=${{ github.event.client_payload.ticket_id || inputs.ticket_id || '' }}" >> $GITHUB_OUTPUT
+          echo "task_token=${{ github.event.client_payload.task_token || '' }}" >> $GITHUB_OUTPUT
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region:     ${{ env.AWS_REGION }}
+          role-session-name: "GitHubActions-Apply-${{ github.run_id }}"
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - name: Terraform Init
+        working-directory: ${{ steps.set-env.outputs.tf_work_dir }}
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" \
+            -backend-config="region=${{ env.AWS_REGION }}"
+
+      - name: Download plan
+        uses: actions/download-artifact@v4
+        with:
+          name: tfplan-${{ github.run_id }}
+          path: ${{ steps.set-env.outputs.tf_work_dir }}
+
+      - name: Terraform Apply
+        id: apply
+        working-directory: ${{ steps.set-env.outputs.tf_work_dir }}
+        run: |
+          terraform apply -auto-approve tfplan
+          echo "alb_dns=$(terraform output -raw alb_dns_name)" >> $GITHUB_OUTPUT
+          echo "asg_name=$(terraform output -raw asg_name)"    >> $GITHUB_OUTPUT
+          echo "dashboard_url=$(terraform output -raw cloudwatch_dashboard_url)" >> $GITHUB_OUTPUT
+
+      - name: Send SUCCESS callback to Step Functions
+        if: success() && steps.set-env.outputs.task_token != ''
+        env:
+          TASK_TOKEN: ${{ steps.set-env.outputs.task_token }}
+        run: |
+          aws stepfunctions send-task-success \
+            --task-token "$TASK_TOKEN" \
+            --task-output "{
+              \"status\": \"success\",
+              \"alb_dns_name\": \"${{ steps.apply.outputs.alb_dns }}\",
+              \"asg_name\": \"${{ steps.apply.outputs.asg_name }}\",
+              \"dashboard_url\": \"${{ steps.apply.outputs.dashboard_url }}\"
+            }"
+
+      - name: Send FAILURE callback to Step Functions
+        if: failure() && steps.set-env.outputs.task_token != ''
+        env:
+          TASK_TOKEN: ${{ steps.set-env.outputs.task_token }}
+        run: |
+          aws stepfunctions send-task-failure \
+            --task-token "$TASK_TOKEN" \
+            --error "TerraformApplyFailed" \
+            --cause "Terraform apply failed — see GitHub Actions run ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+      - name: Deployment summary
+        if: always()
+        run: |
+          echo "## Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| Environment | ${{ steps.set-env.outputs.environment }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Ticket | ${{ steps.set-env.outputs.ticket_id }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| ALB DNS | ${{ steps.apply.outputs.alb_dns }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| ASG | ${{ steps.apply.outputs.asg_name }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Run | ${{ github.run_id }} |" >> $GITHUB_STEP_SUMMARY
