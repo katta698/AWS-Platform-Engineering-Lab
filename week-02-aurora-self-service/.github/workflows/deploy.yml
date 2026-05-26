@@ -1,0 +1,162 @@
+###############################################################################
+# GitHub Actions: Terraform Deploy — Week 2 Aurora Self-Service
+# OIDC auth (no static AWS credentials stored in GitHub)
+###############################################################################
+
+name: Deploy Infrastructure
+
+on:
+  repository_dispatch:
+    types: [provision-infrastructure]
+
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment"
+        required: true
+        default: "dev"
+        type: choice
+        options: [dev, staging, prod]
+      ticket_id:
+        description: "ServiceNow ticket ID (optional)"
+        default: ""
+
+env:
+  TF_VERSION:  "1.7.5"
+  AWS_REGION:  "us-east-1"
+
+jobs:
+  plan:
+    name: "Terraform Plan"
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.client_payload.environment || inputs.environment || 'dev' }}
+
+    permissions:
+      id-token: write
+      contents: read
+
+    outputs:
+      plan_exit_code: ${{ steps.plan.outputs.exit_code }}
+      environment:    ${{ steps.set-env.outputs.environment }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set deployment parameters
+        id: set-env
+        run: |
+          ENV="${{ github.event.client_payload.environment || inputs.environment || 'dev' }}"
+          echo "environment=$ENV" >> $GITHUB_OUTPUT
+          echo "tf_work_dir=terraform/environments/$ENV" >> $GITHUB_OUTPUT
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region:     ${{ env.AWS_REGION }}
+          role-session-name: "GitHubActions-${{ github.run_id }}"
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Init
+        working-directory: ${{ steps.set-env.outputs.tf_work_dir }}
+        run: terraform init
+
+      - name: Terraform Validate
+        working-directory: ${{ steps.set-env.outputs.tf_work_dir }}
+        run: terraform validate
+
+      - name: Terraform Plan
+        id: plan
+        working-directory: ${{ steps.set-env.outputs.tf_work_dir }}
+        run: |
+          terraform plan \
+            -var="master_password=${{ secrets.AURORA_MASTER_PASSWORD }}" \
+            -var="alert_email=${{ secrets.ALERT_EMAIL }}" \
+            -var="pg8000_layer_arn=${{ secrets.PG8000_LAYER_ARN }}" \
+            -var="servicenow_instance_url=${{ secrets.SERVICENOW_INSTANCE_URL }}" \
+            -var="servicenow_username=${{ secrets.SERVICENOW_USERNAME }}" \
+            -var="servicenow_password=${{ secrets.SERVICENOW_PASSWORD }}" \
+            -var="webhook_secret=${{ secrets.WEBHOOK_SECRET }}" \
+            -var="github_org=${{ github.repository_owner }}" \
+            -var="github_repo=${{ github.event.repository.name }}" \
+            -var="github_token=${{ secrets.GH_TOKEN_PAT }}" \
+            -var="create_github_oidc_provider=false" \
+            -var="existing_oidc_provider_arn=arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:oidc-provider/token.actions.githubusercontent.com" \
+            -out=tfplan \
+            -detailed-exitcode 2>&1 | tee plan_output.txt
+          echo "exit_code=${PIPESTATUS[0]}" >> $GITHUB_OUTPUT
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tfplan-${{ github.run_id }}
+          path: ${{ steps.set-env.outputs.tf_work_dir }}/tfplan
+          retention-days: 1
+
+  apply:
+    name: "Terraform Apply"
+    needs: plan
+    runs-on: ubuntu-latest
+    environment: ${{ needs.plan.outputs.environment }}
+    if: needs.plan.outputs.plan_exit_code != '0' || github.event_name == 'repository_dispatch'
+
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set deployment parameters
+        id: set-env
+        run: |
+          ENV="${{ github.event.client_payload.environment || inputs.environment || 'dev' }}"
+          echo "environment=$ENV" >> $GITHUB_OUTPUT
+          echo "tf_work_dir=terraform/environments/$ENV" >> $GITHUB_OUTPUT
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region:     ${{ env.AWS_REGION }}
+          role-session-name: "GitHubActions-Apply-${{ github.run_id }}"
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - name: Terraform Init
+        working-directory: ${{ steps.set-env.outputs.tf_work_dir }}
+        run: terraform init
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: tfplan-${{ github.run_id }}
+          path: ${{ steps.set-env.outputs.tf_work_dir }}
+
+      - name: Terraform Apply
+        id: apply
+        working-directory: ${{ steps.set-env.outputs.tf_work_dir }}
+        run: |
+          terraform apply -auto-approve tfplan
+          echo "api_url=$(terraform output -raw api_gateway_url)"         >> $GITHUB_OUTPUT
+          echo "writer=$(terraform output -raw aurora_writer_endpoint)"   >> $GITHUB_OUTPUT
+          echo "reader=$(terraform output -raw aurora_reader_endpoint)"   >> $GITHUB_OUTPUT
+          echo "secret=$(terraform output -raw master_secret_name)"       >> $GITHUB_OUTPUT
+          echo "dashboard=$(terraform output -raw cloudwatch_dashboard_url)" >> $GITHUB_OUTPUT
+
+      - name: Deployment summary
+        if: always()
+        run: |
+          echo "## Week 2 Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| Environment | ${{ steps.set-env.outputs.environment }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| API URL | ${{ steps.apply.outputs.api_url }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Aurora Writer | ${{ steps.apply.outputs.writer }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Master Secret | ${{ steps.apply.outputs.secret }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Dashboard | ${{ steps.apply.outputs.dashboard }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Run | ${{ github.run_id }} |" >> $GITHUB_STEP_SUMMARY

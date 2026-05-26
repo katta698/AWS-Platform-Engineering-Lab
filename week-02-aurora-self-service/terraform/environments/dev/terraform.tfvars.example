@@ -1,0 +1,35 @@
+# ── Copy this file to terraform.tfvars and fill all values ───────────────────
+# terraform.tfvars is gitignored — never commit secrets
+
+project     = "selfservice-db"
+environment = "dev"
+aws_region  = "us-east-1"
+
+# Aurora master credentials
+master_username = "dbadmin"
+master_password = "CHANGE_ME_use_a_strong_password_32chars+"
+
+# Aurora scaling (Serverless v2)
+aurora_min_capacity = 0.5   # Scales near-zero when idle
+aurora_max_capacity = 16    # 16 ACUs = ~32 vCPUs
+
+# Lambda layer ARN (build with: sh scripts/build_layer.sh)
+pg8000_layer_arn = "arn:aws:lambda:us-east-1:ACCOUNT_ID:layer:pg8000-python312:1"
+
+# Notifications
+alert_email = "your@email.com"
+
+# ServiceNow (from your developer instance)
+servicenow_instance_url = "https://devXXXXX.service-now.com"
+servicenow_username     = "admin"
+servicenow_password     = "your_servicenow_password"
+
+# Webhook HMAC secret (generate with: openssl rand -hex 32)
+webhook_secret = "your_webhook_secret_here"
+
+# GitHub (for OIDC — reused from Week 1)
+github_org                  = "your_github_username"
+github_repo                 = "week-02-aurora-self-service"
+github_token                = "ghp_your_token_here"
+create_github_oidc_provider = false
+existing_oidc_provider_arn  = "arn:aws:iam::YOUR_ACCOUNT_ID:oidc-provider/token.actions.githubusercontent.com"
