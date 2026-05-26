@@ -249,11 +249,48 @@ sh scripts/cleanup.sh
 
 ## Troubleshooting
 
+### Terraform / Deploy errors
+
 | Error | Cause | Fix |
 |-------|-------|-----|
-| `could not connect to server` | Lambda can't reach Aurora | Check Lambda SG has access to Aurora SG on port 5432 |
-| `pg8000 module not found` | Layer not attached | Verify `pg8000_layer_arn` in tfvars matches published layer |
-| `password authentication failed` | Master secret stale | `aws secretsmanager get-secret-value --secret-id /selfservice-db/dev/aurora/master` |
-| `ResourceAlreadyExistsException` | Log group survived destroy | Run `sh scripts/deploy.sh` — pre-flight cleans it |
-| `ExecutionAlreadyExists` | Duplicate ticket submission | Idempotent — webhook_receiver handles this gracefully |
-| Aurora not available after apply | Cold start takes ~10 min | Wait and retry — Serverless v2 writer needs time to provision |
+| `Cycle: module.step_functions ... module.lambda` | Lambda needs state machine ARN, Step Functions needs Lambda ARNs — circular dependency | Use `local.state_machine_arn` computed from account ID instead of `module.step_functions.state_machine_arn` |
+| `InvalidParameterValue: Character sets beyond ASCII` | Em-dash (`—`) in SG or subnet group description | Replace `—` with `-` in all AWS resource description fields |
+| `ResourceAlreadyExistsException` on log group | CloudWatch log groups survive `terraform destroy` if they contain data | Run `sh scripts/deploy.sh` — pre-flight deletes orphaned log groups before plan |
+| `InvalidParameterInput: should have required property 'region'` | CloudWatch dashboard widget missing `region` field | Add `region = data.aws_region.current.name` to every widget's properties block |
+| `Data API is not enabled` in RDS Query Editor | `enable_http_endpoint` not set on cluster | Add `enable_http_endpoint = true` to `aws_rds_cluster` resource |
+| `pg8000 module not found` in Lambda | Layer not attached or wrong ARN | Verify `pg8000_layer_arn` in tfvars matches published layer ARN exactly |
+| Aurora not available after apply | Serverless v2 writer takes ~10 min to provision | Wait and retry — `terraform apply` completes before instance is fully warm |
+
+### AWS CLI on Windows Git Bash
+
+| Error | Cause | Fix |
+|-------|-------|-----|
+| `Invalid name. Must be a valid name containing alphanumeric characters` | Git Bash converts `/path` to `C:/Program Files/Git/path` | Add `export MSYS_NO_PATHCONV=1` before any AWS CLI command with `/` paths |
+| `MSYS_NO_PATHCONV=1 SECRET=$(aws ...)` returns empty | `MSYS_NO_PATHCONV=1` doesn't apply to variable assignments | Export it first: `export MSYS_NO_PATHCONV=1` then run the command separately |
+| `python3: command not found` | Windows uses `python` not `python3` | Replace all `python3` with `python` in commands |
+| `zip: command not found` in scripts | `zip` not included in Git Bash on Windows | Use Python to create zips: `python -c "import zipfile..."` |
+
+### Connectivity
+
+| Error | Cause | Fix |
+|-------|-------|-----|
+| `psql: connection timed out` from laptop | Aurora is in private subnets — no public route | Use RDS Query Editor in AWS Console (requires `enable_http_endpoint = true`) |
+| Lambda `could not connect to server` | Lambda SG not allowed in Aurora SG ingress | Aurora SG must have `ingress { security_groups = [lambda_sg_id] }` on port 5432 |
+| `password authentication failed` | Master secret has wrong password | Check: `aws secretsmanager get-secret-value --secret-id /selfservice-db/dev/aurora/master` |
+
+### Secret Rotation
+
+| Error | Cause | Fix |
+|-------|-------|-----|
+| `Secret does not have rotation enabled` | Tried to rotate before rotation was configured | Run `enable_rotation()` in db_provisioner first, or enable via console |
+| App breaks after 30 days | App cached the password at startup | App must fetch secret from Secrets Manager at connection time, never cache passwords |
+| `ExecutionAlreadyExists` | Same ticket submitted twice | Idempotent by design — webhook_receiver handles this gracefully, second request is a no-op |
+
+### Layer Build (build_layer.sh)
+
+| Error | Cause | Fix |
+|-------|-------|-----|
+| `zip: command not found` | No zip on Windows | Script uses Python zipfile module instead |
+| `python3: command not found` | Windows naming | Script uses `python` |
+| `Value '[python.12]' failed to satisfy enum` | `python3.12` was changed to `python.12` by replace-all | Ensure `--compatible-runtimes python3.12` (never `python.12`) |
+| Layer name shows `pg8000-python12` instead of `pg8000-python312` | Same replace-all issue on layer name | Cosmetic only — ARN is valid and works fine |
