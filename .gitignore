@@ -1,0 +1,27 @@
+# Terraform
+**/.terraform/
+**/.terraform.lock.hcl
+**/terraform.tfvars
+**/tfplan
+**/*.tfstate
+**/*.tfstate.backup
+
+# Week subdirectory .github folders (workflows live at repo root)
+week-*/.github/
+
+# Blog HTML files (kept locally, not needed on GitHub)
+week-*/blog/*.html
+
+# Lambda build artifacts
+**/lambda_layer/
+**/layer.zip
+**/function.zip
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# OS
+.DS_Store
+Thumbs.db
