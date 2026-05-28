@@ -1,0 +1,116 @@
+###############################################################################
+# GitHub Actions: Terraform Destroy — Week 2 Aurora Self-Service
+# MANUAL ONLY — requires environment approval
+# Use for decommissioning or cost cleanup between sessions
+###############################################################################
+
+name: "Week 2 — Destroy Aurora Self-Service"
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Environment to destroy"
+        required: true
+        type: choice
+        options: [dev, staging]  # prod deliberately excluded
+      ticket_id:
+        description: "ServiceNow decommission ticket ID (or 'manual')"
+        required: true
+      confirm:
+        description: "Type DESTROY to confirm"
+        required: true
+
+env:
+  TF_VERSION: "1.7.5"
+  AWS_REGION: "us-east-1"
+  WEEK_DIR:   "week-02-aurora-self-service"
+
+jobs:
+  destroy:
+    name: "Terraform Destroy"
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}-destroy  # Requires separate approval env
+
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Validate confirmation
+        run: |
+          if [ "${{ inputs.confirm }}" != "DESTROY" ]; then
+            echo "❌ Confirmation text does not match. Aborting."
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region:     ${{ env.AWS_REGION }}
+          role-session-name: "GitHubActions-Destroy-${{ github.run_id }}"
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Init
+        working-directory: ${{ env.WEEK_DIR }}/terraform/environments/${{ inputs.environment }}
+        run: terraform init
+
+      - name: Terraform Destroy Plan
+        working-directory: ${{ env.WEEK_DIR }}/terraform/environments/${{ inputs.environment }}
+        run: |
+          terraform plan -destroy \
+            -var="master_password=${{ secrets.AURORA_MASTER_PASSWORD }}" \
+            -var="alert_email=${{ secrets.ALERT_EMAIL }}" \
+            -var="pg8000_layer_arn=${{ secrets.PG8000_LAYER_ARN }}" \
+            -var="servicenow_instance_url=${{ secrets.SERVICENOW_INSTANCE_URL }}" \
+            -var="servicenow_username=${{ secrets.SERVICENOW_USERNAME }}" \
+            -var="servicenow_password=${{ secrets.SERVICENOW_PASSWORD }}" \
+            -var="webhook_secret=${{ secrets.WEBHOOK_SECRET }}" \
+            -var="github_org=${{ github.repository_owner }}" \
+            -var="github_repo=${{ github.event.repository.name }}" \
+            -var="github_token=${{ secrets.GH_TOKEN_PAT }}" \
+            -var="create_github_oidc_provider=false" \
+            -var="existing_oidc_provider_arn=arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:oidc-provider/token.actions.githubusercontent.com" \
+            -out=destroy.tfplan
+
+      - name: Terraform Destroy Apply
+        working-directory: ${{ env.WEEK_DIR }}/terraform/environments/${{ inputs.environment }}
+        run: terraform apply -auto-approve destroy.tfplan
+
+      - name: Delete CloudWatch log groups
+        run: |
+          ENV="${{ inputs.environment }}"
+          for LOG_GROUP in \
+            "/aws/lambda/selfservice-db-${ENV}-webhook-receiver" \
+            "/aws/lambda/selfservice-db-${ENV}-db-provisioner" \
+            "/aws/lambda/selfservice-db-${ENV}-status-updater" \
+            "/aws/lambda/selfservice-db-${ENV}-secret-rotation" \
+            "/aws/states/selfservice-db-${ENV}-db-provisioning" \
+            "/aws/rds/cluster/selfservice-db-${ENV}-aurora/postgresql"; do
+            aws logs delete-log-group \
+              --log-group-name "$LOG_GROUP" \
+              --region ${{ env.AWS_REGION }} 2>/dev/null \
+              && echo "Deleted: $LOG_GROUP" \
+              || echo "Not found (OK): $LOG_GROUP"
+          done
+
+      - name: Destroy summary
+        if: always()
+        run: |
+          echo "## Week 2 Destroy Summary" >> $GITHUB_STEP_SUMMARY
+          echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| Environment | ${{ inputs.environment }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Ticket | ${{ inputs.ticket_id }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Destroyed by | ${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Run | ${{ github.run_id }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "> S3 state bucket, OIDC provider, and pg8000 Lambda layer retained." >> $GITHUB_STEP_SUMMARY
