@@ -93,8 +93,8 @@ curl -X POST "$API_URL" \
 
 ### Step 5 — Retrieve credentials
 ```bash
-aws secretsmanager get-secret-value \
-  --secret-id /selfservice-db/dev/db/my_app_db \
+MSYS_NO_PATHCONV=1 aws secretsmanager get-secret-value \
+  --secret-id /selfservice-db/dev/db/ameya_db \
   --query SecretString --output text | python -m json.tool
 ```
 
@@ -123,9 +123,12 @@ cd terraform/environments/dev
 terraform output api_gateway_url
 ```
 
-In your ServiceNow developer instance:
+In your ServiceNow developer instance, complete the following three parts **in order**:
 
-**Create Outbound REST Message:**
+---
+
+**Part A — Create Outbound REST Message** *(the API connection to AWS)*
+
 1. Search → "Outbound REST Message" → New
 2. Name: `AWS DB Provisioning`
 3. Endpoint: `<your api_gateway_url>` (e.g. `https://xxxx.execute-api.us-east-1.amazonaws.com/dev/provision`)
@@ -144,7 +147,42 @@ In your ServiceNow developer instance:
 ```
 9. Save
 
-**Create Business Rule:**
+---
+
+**Part B — Create Service Catalog Item** *(the "front door" users submit)*
+
+> Create this before the Business Rule so users have something to request,
+> and so the Business Rule condition name matches exactly.
+
+1. Search → "Service Catalog" → **Catalog Builder** → **New Item**
+2. Fill in the basic details:
+   - **Item Name**: `Request Database`
+   - **Short description**: `Request an isolated PostgreSQL database — credentials delivered automatically`
+3. Set **Catalogs** → click the field → select **Service Catalog** (the default catalog)
+   > Without this the item won't appear in the portal — the Catalogs field defaults to empty
+4. Set **Category** → select **Software** (or create a new one e.g. "Databases" / "Infrastructure")
+   > Category controls which section the item appears under in the Service Portal
+5. Save the basic details, then open the **Questions** tab
+6. Click **Insert new question** and add the following three variables:
+
+| Question Label | Name | Question Subtype | Mandatory |
+|----------------|------|------------------|-----------|
+| Database Name | `db_name` | Text - Single-line | Yes |
+| Team | `team` | Text - Single-line | Yes |
+| Purpose | `purpose` | Text - Multi-line | No |
+
+   For each: click **Insert new question** → set Question subtype → fill **Question label** and **Name** → check **Mandatory** where required → Save
+
+7. Click **Publish** to make the item live — status should show **Published** in Catalog Builder
+
+---
+
+**Part C — Create Business Rule** *(fires automatically when catalog item is submitted)*
+
+> The Business Rule reads the catalog variables (`db_name`, `team`) and calls
+> the Outbound REST Message you created in Part A. It runs server-side after
+> the RITM record is inserted — no user action required.
+
 1. Search → "Business Rules" → New
 2. Name: `Trigger DB Provisioning`
 3. Table: `sc_req_item` (RITM)
@@ -171,28 +209,18 @@ In your ServiceNow developer instance:
 ### Step 8 — Set up GitHub Actions
 
 ```bash
-# Create the GitHub repo first
-gh repo create week-02-aurora-self-service --public
-
-# Push code
-git init
-git add .
-git commit -m "Week 2: Aurora self-service database platform"
-git remote add origin https://github.com/katta698/week-02-aurora-self-service.git
-git push -u origin main
-
-# Add all required secrets
-gh secret set AWS_ROLE_ARN          --body "arn:aws:iam::684346483786:role/github-actions-role"
-gh secret set AWS_ACCOUNT_ID        --body "684346483786"
-gh secret set AURORA_MASTER_PASSWORD --body "your_master_password"
-gh secret set ALERT_EMAIL           --body "katta.jayant@gmail.com"
-gh secret set PG8000_LAYER_ARN      --body "arn:aws:lambda:us-east-1:684346483786:layer:pg8000-python12:1"
+# Add all required secrets to your GitHub repo
+gh secret set AWS_ROLE_ARN            --body "arn:aws:iam::684346483786:role/github-actions-role"
+gh secret set AWS_ACCOUNT_ID          --body "684346483786"
+gh secret set AURORA_MASTER_PASSWORD  --body "your_master_password"
+gh secret set ALERT_EMAIL             --body "katta.jayant@gmail.com"
+gh secret set PG8000_LAYER_ARN        --body "arn:aws:lambda:us-east-1:684346483786:layer:pg8000-python12:1"
 gh secret set SERVICENOW_INSTANCE_URL --body "https://devXXXXX.service-now.com"
-gh secret set SERVICENOW_USERNAME   --body "admin"
-gh secret set SERVICENOW_PASSWORD   --body "your_sn_password"
-gh secret set WEBHOOK_SECRET        --body "your_webhook_secret"
-gh secret set GH_TOKEN_PAT          --body "ghp_your_token"
-gh secret set TF_STATE_BUCKET       --body "jay-terraformstate-bucket"
+gh secret set SERVICENOW_USERNAME     --body "admin"
+gh secret set SERVICENOW_PASSWORD     --body "your_sn_password"
+gh secret set WEBHOOK_SECRET          --body "your_webhook_secret"
+gh secret set GH_TOKEN_PAT            --body "ghp_your_token"
+gh secret set TF_STATE_BUCKET         --body "jay-terraformstate-bucket"
 ```
 
 ### Step 9 — End-to-End Test via ServiceNow
@@ -294,3 +322,14 @@ sh scripts/cleanup.sh
 | `python3: command not found` | Windows naming | Script uses `python` |
 | `Value '[python.12]' failed to satisfy enum` | `python3.12` was changed to `python.12` by replace-all | Ensure `--compatible-runtimes python3.12` (never `python.12`) |
 | Layer name shows `pg8000-python12` instead of `pg8000-python312` | Same replace-all issue on layer name | Cosmetic only — ARN is valid and works fine |
+
+### GitHub Actions
+
+| Error | Cause | Fix |
+|-------|-------|-----|
+| Workflows not visible in Actions tab | `.github/workflows/` inside week subfolder — GitHub only reads from repo root | Move workflow files to `.github/workflows/` at repo root; rename with week prefix e.g. `week-02-deploy.yml` |
+| `Not authorized to perform sts:AssumeRoleWithWebIdentity` | IAM role trust policy has wrong repo name | Run `aws iam get-role --role-name <role> --query Role.AssumeRolePolicyDocument` to check; update `sub` condition to `repo:katta698/AWS-Platform-Engineering-Lab:*` |
+| `Not authorized to perform sts:AssumeRoleWithWebIdentity` (environment workflows) | Trust policy allows `ref:refs/heads/*` but not `environment:*` sub claims | Use `StringLike` with `repo:katta698/AWS-Platform-Engineering-Lab:*` wildcard to cover both branches and environments |
+| `AWS_ROLE_ARN` secret points to non-existent role | Secret was set to `github-actions-role` but actual role is `github-actions-dev-deploy-role` | Update secret to `arn:aws:iam::684346483786:role/github-actions-dev-deploy-role`; verify with `aws iam list-roles --query "Roles[?contains(RoleName,'github')].RoleName"` |
+| `Unsupported argument: use_lockfile` in Terraform Init | `use_lockfile = true` in backend block requires Terraform >= 1.10; workflow was pinned to 1.7.5 | Upgrade `TF_VERSION` to `1.10.5` in the workflow file |
+| Deploy workflow does not build pg8000 layer | Layer build is intentionally separate — build once, reuse ARN | Run `sh scripts/build_layer.sh` once manually; store ARN in `PG8000_LAYER_ARN` GitHub secret; workflow reads from secret |
