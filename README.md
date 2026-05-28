@@ -62,6 +62,33 @@ Every project follows the same enterprise pattern:
 
 **Resources:** 67 Terraform resources
 
+**End-to-end validated:**
+- ServiceNow RITM submitted → Step Functions execution → database provisioned → ticket closed in **8.7 seconds**
+- RDS Query Editor confirmed: `postgres`, `rdsadmin`, `selfservice`, `myapp_db`, `jay_test` databases on shared Aurora cluster
+- Secrets Manager auto-rotation enabled per tenant database
+
+**Key lessons learned:**
+- `use_lockfile = true` in Terraform backend requires Terraform >= 1.10 — workflows pinned to 1.7.5 will fail at init
+- GitHub OIDC trust policy `sub` condition must use `StringLike` with `:*` wildcard to cover both branch and environment-scoped workflows
+- IAM role for GitHub Actions must reference the correct repo name — trust policy is case-sensitive
+- pg8000 Lambda layer is built once via `build_layer.sh` and reused across deploys — the deploy workflow reads the ARN from `PG8000_LAYER_ARN` GitHub secret
+- `.github/workflows/` must live at repo root — subfolders are ignored by GitHub Actions
+
+---
+
+## GitHub Actions Workflows
+
+All workflows live at repo root `.github/workflows/` (GitHub only reads from this location):
+
+| Workflow | Trigger | Purpose |
+|---|---|---|
+| `week-01-deploy.yml` | `workflow_dispatch` / `repository_dispatch` | Deploy Week 1 EC2 infrastructure |
+| `week-01-destroy.yml` | `workflow_dispatch` (manual only) | Destroy Week 1 — requires typing `DESTROY` |
+| `week-02-deploy.yml` | `workflow_dispatch` / `repository_dispatch` | Deploy Week 2 Aurora infrastructure |
+| `week-02-destroy.yml` | `workflow_dispatch` (manual only) | Destroy Week 2 — requires typing `DESTROY` + ticket ID |
+
+All workflows use OIDC federation — no static AWS credentials stored in GitHub. IAM role: `github-actions-dev-deploy-role`.
+
 ---
 
 ## Common Patterns Across All Weeks
@@ -89,14 +116,14 @@ ServiceNow ticket closed with details
 ```bash
 # Required tools
 aws --version          # AWS CLI v2
-terraform --version    # >= 1.7
-gh --version           # GitHub CLI
+terraform --version    # >= 1.10 (use_lockfile support)
 python --version       # Python 3.x
 
 # AWS bootstrap (done once in Week 1)
 # - S3 bucket for Terraform state: jay-terraformstate-bucket
 # - GitHub OIDC provider: token.actions.githubusercontent.com
-# - IAM role for GitHub Actions
+# - IAM role: github-actions-dev-deploy-role
+#   Trust policy must use StringLike with repo:katta698/AWS-Platform-Engineering-Lab:*
 ```
 
 ---
@@ -125,7 +152,7 @@ sh scripts/deploy.sh    # rebuilds everything in ~10 min
 Each week includes a full blog post and LinkedIn write-up:
 
 - Week 01 blog: https://blog.jayanthkatta.com/2026/05/week-1-from-ticket-to-ec2-in-6-minutes.html
-- Week 02 blog: *(coming soon)*
+- Week 02 blog: *(publish pending — HTML ready in week-02-aurora-self-service/blog/)*
 
 ---
 
