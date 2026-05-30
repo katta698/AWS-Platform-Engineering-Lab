@@ -152,7 +152,8 @@ sh scripts/deploy.sh    # rebuilds everything in ~10 min
 Each week includes a full blog post and LinkedIn write-up:
 
 - Week 01 blog: https://blog.jayanthkatta.com/2026/05/week-1-from-ticket-to-ec2-in-6-minutes.html
-- Week 02 blog: *(publish pending — HTML ready in week-02-aurora-self-service/blog/)*
+- Week 02 blog: https://blog.jayanthkatta.com/2026/05/week-2-automating-postgresql.html
+- Week 03 blog: *(publish pending)*
 
 ---
 
