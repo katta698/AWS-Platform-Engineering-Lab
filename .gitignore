@@ -22,6 +22,9 @@ __pycache__/
 *.pyc
 *.pyo
 
+# Local explainer docs (personal study notes, not for GitHub)
+**/EXPLAINER.md
+
 # OS
 .DS_Store
 Thumbs.db
