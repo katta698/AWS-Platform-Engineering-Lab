@@ -9,7 +9,7 @@
 # Week subdirectory .github folders (workflows live at repo root)
 week-*/.github/
 
-# Blog HTML files (kept locally, not needed on GitHub)
+# Blog files (kept locally, screenshots pushed separately)
 week-*/blog/*.html
 
 # Lambda build artifacts
@@ -22,8 +22,9 @@ __pycache__/
 *.pyc
 *.pyo
 
-# Local explainer docs (personal study notes, not for GitHub)
+# Local study and prep docs (not for GitHub)
 **/EXPLAINER.md
+**/BLOG_PREP.md
 
 # OS
 .DS_Store
