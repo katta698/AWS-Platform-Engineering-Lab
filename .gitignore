@@ -31,6 +31,9 @@ __pycache__/
 # Blog screenshots (large files, kept locally)
 **/blog/screenshots/
 
+# Local session context
+SESSION_CONTEXT.md
+
 # OS
 .DS_Store
 Thumbs.db
