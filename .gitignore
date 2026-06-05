@@ -25,6 +25,11 @@ __pycache__/
 # Local study and prep docs (not for GitHub)
 **/EXPLAINER.md
 **/BLOG_PREP.md
+**/COMMANDS.md
+**/SCREENSHOTS.md
+
+# Blog screenshots (large files, kept locally)
+**/blog/screenshots/
 
 # OS
 .DS_Store
