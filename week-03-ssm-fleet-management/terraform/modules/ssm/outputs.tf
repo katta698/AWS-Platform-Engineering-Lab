@@ -1,0 +1,9 @@
+output "session_logs_bucket"         { value = aws_s3_bucket.session_logs.id }
+output "session_logs_bucket_arn"     { value = aws_s3_bucket.session_logs.arn }
+output "session_log_group_name"      { value = aws_cloudwatch_log_group.sessions.name }
+output "linux_patch_baseline_id"     { value = aws_ssm_patch_baseline.amazon_linux.id }
+output "windows_patch_baseline_id"   { value = aws_ssm_patch_baseline.windows.id }
+output "maintenance_window_id"       { value = aws_ssm_maintenance_window.weekly.id }
+output "onboard_document_name"       { value = aws_ssm_document.onboard_instance.name }
+output "patch_fleet_document_name"   { value = aws_ssm_document.patch_fleet.name }
+output "session_prefs_document_name" { value = aws_ssm_document.session_preferences.name }

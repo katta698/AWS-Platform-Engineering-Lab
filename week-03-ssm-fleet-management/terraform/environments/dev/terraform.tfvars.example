@@ -1,0 +1,13 @@
+project                 = "fleet-mgmt"
+environment             = "dev"
+aws_region              = "us-east-1"
+vpc_cidr                = "10.3.0.0/16"
+instance_type           = "t3.micro"
+desired_capacity        = 2
+min_size                = 1
+max_size                = 4
+alert_email             = "katta.jayant@gmail.com"
+webhook_secret          = "your-webhook-secret-here"
+servicenow_instance_url = "https://devXXXXX.service-now.com"
+servicenow_username     = "admin"
+servicenow_password     = "your-servicenow-password"

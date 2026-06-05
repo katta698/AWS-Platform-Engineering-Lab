@@ -1,0 +1,159 @@
+{
+  "Comment": "Fleet Intelligence Pipeline — SSM → S3 → Glue Crawler → Glue ETL → Athena",
+  "StartAt": "StartCrawler",
+  "States": {
+
+    "StartCrawler": {
+      "Type": "Task",
+      "Resource": "${glue_trigger_arn}",
+      "Parameters": {
+        "action": "start_crawler",
+        "ticket_id.$": "$.ticket_id",
+        "report_scope.$": "$.report_scope",
+        "environment.$": "$.environment"
+      },
+      "ResultPath": "$.crawler_result",
+      "Next": "WaitForCrawler",
+      "Retry": [{
+        "ErrorEquals": ["States.TaskFailed"],
+        "IntervalSeconds": 5,
+        "MaxAttempts": 2,
+        "BackoffRate": 2
+      }],
+      "Catch": [{
+        "ErrorEquals": ["States.ALL"],
+        "Next": "PipelineFailed",
+        "ResultPath": "$.error"
+      }]
+    },
+
+    "WaitForCrawler": {
+      "Type": "Wait",
+      "Seconds": 30,
+      "Next": "CheckCrawlerStatus"
+    },
+
+    "CheckCrawlerStatus": {
+      "Type": "Task",
+      "Resource": "${glue_trigger_arn}",
+      "Parameters": {
+        "action": "get_crawler_status",
+        "ticket_id.$": "$.ticket_id"
+      },
+      "ResultPath": "$.crawler_status",
+      "Next": "IsCrawlerReady",
+      "Retry": [{
+        "ErrorEquals": ["States.TaskFailed"],
+        "IntervalSeconds": 10,
+        "MaxAttempts": 3,
+        "BackoffRate": 1.5
+      }]
+    },
+
+    "IsCrawlerReady": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.crawler_status.ready",
+          "BooleanEquals": true,
+          "Next": "StartETLJob"
+        }
+      ],
+      "Default": "WaitForCrawler"
+    },
+
+    "StartETLJob": {
+      "Type": "Task",
+      "Resource": "${glue_trigger_arn}",
+      "Parameters": {
+        "action": "start_etl_job",
+        "ticket_id.$": "$.ticket_id",
+        "report_scope.$": "$.report_scope"
+      },
+      "ResultPath": "$.etl_result",
+      "Next": "WaitForETLJob",
+      "Retry": [{
+        "ErrorEquals": ["States.TaskFailed"],
+        "IntervalSeconds": 5,
+        "MaxAttempts": 2,
+        "BackoffRate": 2
+      }],
+      "Catch": [{
+        "ErrorEquals": ["States.ALL"],
+        "Next": "PipelineFailed",
+        "ResultPath": "$.error"
+      }]
+    },
+
+    "WaitForETLJob": {
+      "Type": "Wait",
+      "Seconds": 60,
+      "Next": "CheckETLJobStatus"
+    },
+
+    "CheckETLJobStatus": {
+      "Type": "Task",
+      "Resource": "${glue_trigger_arn}",
+      "Parameters": {
+        "action": "get_job_status",
+        "ticket_id.$": "$.ticket_id",
+        "job_run_id.$": "$.etl_result.job_run_id"
+      },
+      "ResultPath": "$.job_status",
+      "Next": "IsJobDone",
+      "Retry": [{
+        "ErrorEquals": ["States.TaskFailed"],
+        "IntervalSeconds": 10,
+        "MaxAttempts": 3,
+        "BackoffRate": 1.5
+      }]
+    },
+
+    "IsJobDone": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.job_status.succeeded",
+          "BooleanEquals": true,
+          "Next": "PipelineSucceeded"
+        },
+        {
+          "Variable": "$.job_status.failed",
+          "BooleanEquals": true,
+          "Next": "PipelineFailed"
+        }
+      ],
+      "Default": "WaitForETLJob"
+    },
+
+    "PipelineSucceeded": {
+      "Type": "Task",
+      "Resource": "${status_updater_arn}",
+      "Parameters": {
+        "ticket_id.$": "$.ticket_id",
+        "job_run_id.$": "$.etl_result.job_run_id",
+        "pipeline_succeeded": true,
+        "environment.$": "$.environment"
+      },
+      "End": true
+    },
+
+    "PipelineFailed": {
+      "Type": "Task",
+      "Resource": "${status_updater_arn}",
+      "Parameters": {
+        "ticket_id.$": "$.ticket_id",
+        "job_run_id.$": "$.etl_result.job_run_id",
+        "pipeline_succeeded": false,
+        "environment.$": "$.environment"
+      },
+      "Next": "Fail"
+    },
+
+    "Fail": {
+      "Type": "Fail",
+      "Error": "FleetPipelineFailed",
+      "Cause": "Glue ETL job failed — check CloudWatch logs"
+    }
+  }
+}

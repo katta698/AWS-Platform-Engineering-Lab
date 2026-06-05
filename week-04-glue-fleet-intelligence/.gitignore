@@ -1,0 +1,24 @@
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfplan
+tfplan
+.terraform.lock.hcl
+terraform.tfvars
+
+# Lambda zip packages (built locally — not committed)
+lambda/**/*.zip
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+
+# macOS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
