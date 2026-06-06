@@ -103,9 +103,6 @@ sh scripts/deploy.sh
 # EC2 instances appear in SSM Fleet Manager within ~5 min of launch
 ```
 
-> 📸 **Screenshot:** Terminal showing all outputs (API URL, ASG name, state machine ARN)
-> Save as: `blog/screenshots/01-terraform-output.png`
-
 ---
 
 ### Step 3 — Verify fleet is online (wait ~5 min after deploy)
@@ -115,17 +112,11 @@ aws ssm describe-instance-information \
   --output table --region us-east-1
 ```
 
-> 📸 **Screenshot:** AWS Console → Systems Manager → Fleet Manager → both instances showing Online
-> Save as: `blog/screenshots/02-fleet-manager-online.png`
-
-> 📸 **Screenshot:** AWS Console → Patch Manager → Compliance reporting → instances showing "Never reported" or "Not compliant" — take this BEFORE running any scan
-> Save as: `blog/screenshots/03-patch-noncompliant-before.png`
-
 ---
 
 ### Step 4 — Simulate ServiceNow patch scan request
 ```bash
-export API_URL="https://h42fgi4und.execute-api.us-east-1.amazonaws.com/dev/fleet"
+export API_URL=$(cd terraform/environments/dev && terraform output -raw api_gateway_url)
 export SECRET=$(grep webhook_secret terraform/environments/dev/terraform.tfvars | awk -F'"' '{print $2}')
 
 BODY='{"ticket_id":"RITM0030001","request_type":"patch","patch_group":"fleet-mgmt-dev-linux","operation":"Scan","team":"platform-engineering","requested_by":"jay.katta"}'
@@ -134,12 +125,6 @@ curl -X POST "$API_URL" -H "Content-Type: application/json" -H "x-servicenow-sig
 ```
 
 Wait ~2 min, then check Step Functions.
-
-> 📸 **Screenshot:** Step Functions → fleet-mgmt-dev-fleet-management → click execution `patch-RITM0030001` → Table view, all steps green
-> Save as: `blog/screenshots/04-stepfunctions-scan-succeeded.png`
-
-> 📸 **Screenshot:** Same execution → click `Done` state → Output tab showing compliance JSON
-> Save as: `blog/screenshots/05-stepfunctions-scan-output.png`
 
 ---
 
@@ -173,12 +158,6 @@ INSTANCE_ID=$(aws ec2 run-instances \
 echo "Manual instance: $INSTANCE_ID"
 ```
 
-> 📸 **Screenshot:** EC2 → Instances → click `manual-test-instance` → Tags tab — only `Name` tag visible, no `PatchGroup`, no `ManagedBy`
-> Save as: `blog/screenshots/06-manual-ec2-no-tags.png`
-
-> 📸 **Screenshot:** Patch Manager → Compliance reporting → manual-test-instance shows Patch configuration name = "-" (no baseline — not properly managed yet)
-> Save as: `blog/screenshots/07-patch-manager-2-instances.png`
-
 ---
 
 ### Step 6 — Simulate ServiceNow onboard request
@@ -193,15 +172,6 @@ curl -X POST "$API_URL" -H "Content-Type: application/json" -H "x-servicenow-sig
 
 Wait ~5 min for onboard automation to complete.
 
-> 📸 **Screenshot:** Step Functions → click execution `onboard-RITM0030002` → Table view, all steps green
-> Save as: `blog/screenshots/08-stepfunctions-onboard-succeeded.png`
-
-> 📸 **Screenshot:** EC2 → click `manual-test-instance` → Tags tab — now shows `PatchGroup`, `ManagedBy`, `OnboardedAt`
-> Save as: `blog/screenshots/09-manual-ec2-tags-after-onboard.png`
-
-> 📸 **Screenshot:** Patch Manager → Compliance reporting → manual-test-instance now has a compliance status
-> Save as: `blog/screenshots/10-patch-manager-3-instances.png`
-
 ---
 
 ### Step 7 — Simulate ServiceNow patch install request
@@ -213,12 +183,6 @@ curl -X POST "$API_URL" -H "Content-Type: application/json" -H "x-servicenow-sig
 
 Wait ~10 min for patch install to complete across all instances.
 
-> 📸 **Screenshot:** Step Functions → click execution `patch-RITM0030003` → Table view, all steps green
-> Save as: `blog/screenshots/11-stepfunctions-install-succeeded.png`
-
-> 📸 **Screenshot:** Patch Manager → Compliance reporting → all 3 instances showing Compliant, MissingCount=0
-> Save as: `blog/screenshots/12-patch-manager-all-compliant.png`
-
 ---
 
 ### Step 8 — Verify compliance and check audit evidence
@@ -229,41 +193,24 @@ MSYS_NO_PATHCONV=1 aws ssm describe-instance-patch-states-for-patch-group \
   --query "InstancePatchStates[*].[InstanceId,MissingCount,InstalledCount,FailedCount]" \
   --output table --region us-east-1
 
-# Per-instance patch detail (replace with a real instance ID)
+# Per-instance patch detail
 MSYS_NO_PATHCONV=1 aws ssm describe-instance-patches \
-  --instance-id i-0d946bbf78b7fb91b \
+  --instance-id <INSTANCE_ID> \
   --filters "Key=State,Values=Installed" \
   --query "Patches[*].[Title,State,InstalledTime]" \
   --output table --region us-east-1 | head -30
 ```
 
-> 📸 **Screenshot:** Terminal output above showing MissingCount=0 and installed patch names
-> Save as: `blog/screenshots/13-patch-detail-installed.png`
-
-> 📸 **Screenshot:** CloudWatch → Dashboards → fleet-mgmt-dev-fleet-management → all widgets with real data
-> Save as: `blog/screenshots/14-cloudwatch-dashboard-full.png`
-
-> 📸 **Screenshot:** Step Functions → Executions list showing all 3 executions SUCCEEDED with timestamps
-> Save as: `blog/screenshots/15-stepfunctions-audit-trail.png`
-
 ---
 
-### Step 9 — Start a Session Manager session (bonus — no SSH, no key pair)
+### Step 9 — Start a Session Manager session (no SSH, no key pair)
 ```bash
-aws ssm start-session --target i-0d946bbf78b7fb91b --region us-east-1
+aws ssm start-session --target <INSTANCE_ID> --region us-east-1
 # Type exit when done
-```
 
-> 📸 **Screenshot (bonus):** Terminal showing interactive shell connected via Session Manager — no port 22, no key pair
-> Save as: `blog/screenshots/18-session-manager-session.png`
-
-```bash
 # Check session logs in S3
 aws s3 ls s3://fleet-mgmt-dev-session-logs-684346483786/ --region us-east-1
 ```
-
-> 📸 **Screenshot (bonus):** S3 → fleet-mgmt-dev-session-logs bucket → showing patch-runs/, sessions/, onboarding/ folders
-> Save as: `blog/screenshots/19-s3-session-logs.png`
 
 ---
 
@@ -293,15 +240,15 @@ aws s3 ls s3://fleet-mgmt-dev-session-logs-684346483786/ --region us-east-1
 1. Catalog Builder → New Item
 2. Name: `Fleet Management Request`
 3. Set Catalogs → Service Catalog, Category → Infrastructure
-4. Add Questions:
+4. Add Questions (use Choice/Dropdown for request_type and operation, Text for the rest):
 
 | Question Label | Name | Type | Mandatory |
 |---|---|---|---|
-| Request Type | `request_type` | Choice (onboard/patch) | Yes |
-| Instance ID | `instance_id` | Text - Single-line | No |
-| Patch Group | `patch_group` | Text - Single-line | No |
-| Operation | `operation` | Choice (Scan/Install) | No |
-| Team | `team` | Text - Single-line | Yes |
+| Request Type | `request_type` | Choice — `onboard`, `patch` | Yes |
+| Instance ID | `instance_id` | Text | No |
+| Patch Group | `patch_group` | Text | No |
+| Operation | `operation` | Choice — `Scan`, `Install` | No |
+| Team | `team` | Text | Yes |
 
 **Part C — Create Business Rule**
 1. Search → Business Rules → New
@@ -327,12 +274,6 @@ aws s3 ls s3://fleet-mgmt-dev-session-logs-684346483786/ --region us-east-1
   }
 })(current, previous);
 ```
-
-> 📸 **Screenshot:** ServiceNow → submit the Fleet Management Request catalog item → RITM in Open/In Progress state
-> Save as: `blog/screenshots/16-servicenow-ticket-submitted.png`
-
-> 📸 **Screenshot:** ServiceNow → same RITM after execution completes → Closed Complete with compliance report in work notes
-> Save as: `blog/screenshots/17-servicenow-ticket-closed.png`
 
 ### Step 11 — Set up GitHub Actions secrets
 ```bash
