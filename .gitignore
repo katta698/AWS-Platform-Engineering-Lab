@@ -9,8 +9,9 @@
 # Week subdirectory .github folders (workflows live at repo root)
 week-*/.github/
 
-# Blog files (kept locally, screenshots pushed separately)
+# Blog HTML files (kept locally only)
 week-*/blog/*.html
+week-*/blog/BLOG_BLOGGER.html
 
 # Lambda build artifacts
 **/lambda_layer/
