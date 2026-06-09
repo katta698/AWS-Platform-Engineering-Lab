@@ -56,12 +56,10 @@ resource "aws_launch_template" "fleet" {
 
   user_data = base64encode(<<-EOF
     #!/bin/bash
-    # Install and start SSM agent (pre-installed on AL2023 but ensure running)
+    # Install SSM agent (not pre-installed on AL2023 — must install from repo)
+    yum install -y amazon-ssm-agent
     systemctl enable amazon-ssm-agent
     systemctl start amazon-ssm-agent
-
-    # Install CloudWatch agent
-    yum install -y amazon-cloudwatch-agent
 
     # Tag instance OS for patch group targeting
     INSTANCE_ID=$(TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" \
