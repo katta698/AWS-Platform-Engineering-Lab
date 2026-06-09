@@ -68,6 +68,7 @@ jobs:
             -detailed-exitcode
           TF_EXIT=$?
           set -e
+          echo "::notice::Terraform plan exit code: $TF_EXIT  (0=no-changes, 1=error, 2=changes-present)"
           echo "exit_code=$TF_EXIT" >> $GITHUB_OUTPUT
           # Exit 1 = terraform error — fail the step; exit 2 = changes present — pass through
           if [ $TF_EXIT -eq 1 ]; then exit 1; fi
