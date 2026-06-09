@@ -31,6 +31,9 @@ __pycache__/
 **/docs/blog-prep.md
 **/docs/commands.md
 **/docs/screenshots.md
+**/docs/screenshots-guide.md
+**/docs/readme-with-screenshots.md
+**/docs/execution-guide.md
 # Legacy paths (pre-restructure)
 **/EXPLAINER.md
 **/BLOG_PREP.md
