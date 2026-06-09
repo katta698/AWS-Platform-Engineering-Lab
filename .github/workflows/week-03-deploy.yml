@@ -114,6 +114,14 @@ jobs:
           name: tfplan-${{ github.run_id }}
           path: ${{ env.WEEK_DIR }}/terraform/environments/${{ inputs.environment }}
 
+      - name: Build Lambda packages
+        run: |
+          for func in webhook_receiver fleet_onboarder patch_orchestrator status_updater; do
+            cd ${{ env.WEEK_DIR }}/lambda/$func
+            zip function.zip handler.py
+            cd -
+          done
+
       - name: Terraform Apply
         id: apply
         working-directory: ${{ env.WEEK_DIR }}/terraform/environments/${{ inputs.environment }}
