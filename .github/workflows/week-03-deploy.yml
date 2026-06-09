@@ -57,6 +57,7 @@ jobs:
         id: plan
         working-directory: ${{ env.WEEK_DIR }}/terraform/environments/${{ inputs.environment }}
         run: |
+          set +e
           terraform plan \
             -var="alert_email=${{ secrets.ALERT_EMAIL }}" \
             -var="webhook_secret=${{ secrets.WEBHOOK_SECRET }}" \
@@ -64,8 +65,12 @@ jobs:
             -var="servicenow_username=${{ secrets.SERVICENOW_USERNAME }}" \
             -var="servicenow_password=${{ secrets.SERVICENOW_PASSWORD }}" \
             -out=tfplan \
-            -detailed-exitcode 2>&1 | tee plan_output.txt
-          echo "exit_code=${PIPESTATUS[0]}" >> $GITHUB_OUTPUT
+            -detailed-exitcode
+          TF_EXIT=$?
+          set -e
+          echo "exit_code=$TF_EXIT" >> $GITHUB_OUTPUT
+          # Exit 1 = terraform error — fail the step; exit 2 = changes present — pass through
+          if [ $TF_EXIT -eq 1 ]; then exit 1; fi
 
       - uses: actions/upload-artifact@v4
         with:
@@ -78,7 +83,7 @@ jobs:
     needs: plan
     runs-on: ubuntu-latest
     environment: ${{ needs.plan.outputs.environment }}
-    if: needs.plan.outputs.plan_exit_code != '0'
+    if: needs.plan.outputs.plan_exit_code == '2'
     permissions:
       id-token: write
       contents: read
