@@ -135,7 +135,24 @@ CloudWatch log groups
 
 ## Deploy Steps
 
-### Option A — One command (recommended)
+### Option A — GitHub Actions (recommended)
+
+1. Set these secrets in your GitHub repo (`Settings → Secrets and variables → Actions`):
+
+   | Secret | Value |
+   |--------|-------|
+   | `AWS_ROLE_ARN` | `arn:aws:iam::<account-id>:role/github-actions-dev-deploy-role` |
+   | `ALERT_EMAIL` | your email |
+   | `SERVICENOW_INSTANCE` | `dev388443` |
+   | `SERVICENOW_USERNAME` | your ServiceNow user |
+   | `SERVICENOW_PASSWORD` | your ServiceNow password |
+   | `WEBHOOK_SECRET` | value from terraform.tfvars |
+
+2. Trigger: `Actions → Week 04 — Deploy Fleet Intelligence → Run workflow → dev → Run workflow`
+
+The workflow packages Lambda zips, runs `terraform apply`, and uploads the Glue ETL script. Takes ~5 minutes. Check the job summary for API Gateway URL, crawler name, and ETL job name.
+
+### Option B — Local deploy
 
 Run from the `week-04-glue-fleet-intelligence/` folder:
 
@@ -143,40 +160,20 @@ Run from the `week-04-glue-fleet-intelligence/` folder:
 bash scripts/deploy.sh
 ```
 
-This does everything in sequence:
-1. Packages all 3 Lambda zip files
-2. Tries to upload the Glue ETL script (skips gracefully if bucket doesn't exist yet)
-3. `terraform init` + `terraform apply`
-4. Uploads the Glue ETL script again (bucket now exists)
-
-### Option B — Manual steps
-
-```bash
-# 1. Package Lambda functions
-bash scripts/build_zips.sh
-
-# 2. Deploy infrastructure
-cd terraform/environments/dev
-terraform init
-terraform apply
-
-# 3. Upload Glue ETL script (after bucket exists)
-aws s3 cp glue/scripts/fleet_etl.py \
-  s3://jay-fleet-intelligence-raw-dev/scripts/fleet_etl.py
-```
+This packages all 3 Lambda zip files, runs `terraform init` + `terraform apply`, and uploads the Glue ETL script to S3.
 
 ### After deploy (both options)
 
 ```bash
-# 4. Submit test webhook — see COMMANDS.md section 5 for the full curl command
-# 5. Monitor in Step Functions console
-# 6. Query fleet data in Athena
+# 1. Submit test webhook — see COMMANDS.md section 5 for the full curl command
+# 2. Monitor in Step Functions console
+# 3. Query fleet data in Athena
 ```
 
-> 📸 **Screenshot:** `terraform apply` complete — show resources created count
+> 📸 **Screenshot:** GitHub Actions → "Terraform Apply" step expanded — scroll to bottom showing "Apply complete! Resources: X added"
 > Save as: `blog/screenshots/01-terraform-apply.png`
 
-> 📸 **Screenshot:** GitHub Actions deploy workflow — all steps green
+> 📸 **Screenshot:** GitHub Actions workflow run overview — all steps green with checkmarks and durations
 > Save as: `blog/screenshots/02-github-actions.png`
 
 > 📸 **Screenshot:** S3 Console — all 3 buckets (raw, curated, athena-results)

@@ -64,6 +64,8 @@ Always refer to it for testing, validating, and operating without needing to rem
 
 **README backup rule:** Before removing screenshot reminders from README.md, always save a copy as `README-with-screenshots.md` in the same folder first. This lets you re-run the lab yourself by following the screenshot-annotated version.
 
+**README writing rule (Week 04 onwards):** README.md must be clean documentation only — explain what each step does, show the commands, nothing else. No screenshot reminders, no "📸 Screenshot:", no "Save as:" lines anywhere. Screenshots are handled separately via SCREENSHOTS.md (local only) and BLOG_BLOGGER.html.
+
 **Blog publishing process (Week 03 onwards — follow this exact process every week):**
 1. Take all screenshots during the lab run, save to `blog/screenshots/` with numbered filenames
 2. Force-commit screenshots to GitHub: `git add -f week-XX-*/blog/screenshots/ && git commit -m "week-XX: add blog screenshots" && git push`
