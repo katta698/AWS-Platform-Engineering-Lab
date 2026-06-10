@@ -210,11 +210,11 @@ In your ServiceNow developer instance, complete the following three parts **in o
 
 ```bash
 # Add all required secrets to your GitHub repo
-gh secret set AWS_ROLE_ARN            --body "arn:aws:iam::684346483786:role/github-actions-role"
-gh secret set AWS_ACCOUNT_ID          --body "684346483786"
+gh secret set AWS_ROLE_ARN            --body "arn:aws:iam::<YOUR_ACCOUNT_ID>:role/github-actions-role"
+gh secret set AWS_ACCOUNT_ID          --body "<YOUR_ACCOUNT_ID>"
 gh secret set AURORA_MASTER_PASSWORD  --body "your_master_password"
-gh secret set ALERT_EMAIL             --body "katta.jayant@gmail.com"
-gh secret set PG8000_LAYER_ARN        --body "arn:aws:lambda:us-east-1:684346483786:layer:pg8000-python12:1"
+gh secret set ALERT_EMAIL             --body "your-email@example.com"
+gh secret set PG8000_LAYER_ARN        --body "arn:aws:lambda:us-east-1:<YOUR_ACCOUNT_ID>:layer:pg8000-python12:1"
 gh secret set SERVICENOW_INSTANCE_URL --body "https://devXXXXX.service-now.com"
 gh secret set SERVICENOW_USERNAME     --body "admin"
 gh secret set SERVICENOW_PASSWORD     --body "your_sn_password"
@@ -330,6 +330,6 @@ sh scripts/cleanup.sh
 | Workflows not visible in Actions tab | `.github/workflows/` inside week subfolder — GitHub only reads from repo root | Move workflow files to `.github/workflows/` at repo root; rename with week prefix e.g. `week-02-deploy.yml` |
 | `Not authorized to perform sts:AssumeRoleWithWebIdentity` | IAM role trust policy has wrong repo name | Run `aws iam get-role --role-name <role> --query Role.AssumeRolePolicyDocument` to check; update `sub` condition to `repo:katta698/AWS-Platform-Engineering-Lab:*` |
 | `Not authorized to perform sts:AssumeRoleWithWebIdentity` (environment workflows) | Trust policy allows `ref:refs/heads/*` but not `environment:*` sub claims | Use `StringLike` with `repo:katta698/AWS-Platform-Engineering-Lab:*` wildcard to cover both branches and environments |
-| `AWS_ROLE_ARN` secret points to non-existent role | Secret was set to `github-actions-role` but actual role is `github-actions-dev-deploy-role` | Update secret to `arn:aws:iam::684346483786:role/github-actions-dev-deploy-role`; verify with `aws iam list-roles --query "Roles[?contains(RoleName,'github')].RoleName"` |
+| `AWS_ROLE_ARN` secret points to non-existent role | Secret was set to `github-actions-role` but actual role is `github-actions-dev-deploy-role` | Update secret to `arn:aws:iam::<YOUR_ACCOUNT_ID>:role/github-actions-dev-deploy-role`; verify with `aws iam list-roles --query "Roles[?contains(RoleName,'github')].RoleName"` |
 | `Unsupported argument: use_lockfile` in Terraform Init | `use_lockfile = true` in backend block requires Terraform >= 1.10; workflow was pinned to 1.7.5 | Upgrade `TF_VERSION` to `1.10.5` in the workflow file |
 | Deploy workflow does not build pg8000 layer | Layer build is intentionally separate — build once, reuse ARN | Run `sh scripts/build_layer.sh` once manually; store ARN in `PG8000_LAYER_ARN` GitHub secret; workflow reads from secret |

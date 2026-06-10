@@ -170,63 +170,6 @@ This packages all 3 Lambda zip files, runs `terraform init` + `terraform apply`,
 # 3. Query fleet data in Athena
 ```
 
-> 📸 **Screenshot:** GitHub Actions → "Terraform Apply" step expanded — scroll to bottom showing "Apply complete! Resources: X added"
-> Save as: `blog/screenshots/01-terraform-apply.png`
-
-> 📸 **Screenshot:** GitHub Actions workflow run overview — all steps green with checkmarks and durations
-> Save as: `blog/screenshots/02-github-actions.png`
-
-> 📸 **Screenshot:** S3 Console — all 3 buckets (raw, curated, athena-results)
-> Save as: `blog/screenshots/03-s3-buckets.png`
-
-> 📸 **Screenshot:** SSM Console → Fleet Manager → Resource Data Sync configured
-> Save as: `blog/screenshots/04-ssm-data-sync.png`
-
-> 📸 **Screenshot:** S3 raw bucket → ssm/ prefix with AccountID folders
-> Save as: `blog/screenshots/05-s3-raw-ssm-data.png`
-
-> 📸 **Screenshot:** Glue Console → Data Catalog → Database created
-> Save as: `blog/screenshots/06-glue-data-catalog.png`
-
-> 📸 **Screenshot:** Glue Crawler run complete — tables discovered count
-> Save as: `blog/screenshots/07-glue-crawler-run.png`
-
-> 📸 **Screenshot:** Glue Data Catalog → Tables (patch_compliance, inventory, applications)
-> Save as: `blog/screenshots/08-glue-tables.png`
-
-> 📸 **Screenshot:** Glue ETL job details page
-> Save as: `blog/screenshots/09-glue-etl-job.png`
-
-> 📸 **Screenshot:** Glue ETL job run — SUCCEEDED with duration
-> Save as: `blog/screenshots/10-glue-etl-run.png`
-
-> 📸 **Screenshot:** S3 curated bucket → fleet/ Parquet files
-> Save as: `blog/screenshots/11-s3-curated-data.png`
-
-> 📸 **Screenshot:** Step Functions state machine visual graph
-> Save as: `blog/screenshots/12-step-functions.png`
-
-> 📸 **Screenshot:** Step Functions execution — SUCCEEDED with timeline
-> Save as: `blog/screenshots/13-step-functions-execution.png`
-
-> 📸 **Screenshot:** ServiceNow RITM ticket — open state
-> Save as: `blog/screenshots/14-servicenow-ticket.png`
-
-> 📸 **Screenshot:** ServiceNow RITM ticket — Closed Complete with Athena URL in notes
-> Save as: `blog/screenshots/15-servicenow-closed.png`
-
-> 📸 **Screenshot:** Athena workgroup configuration page
-> Save as: `blog/screenshots/16-athena-workgroup.png`
-
-> 📸 **Screenshot:** Athena Query Editor — patch compliance query + results
-> Save as: `blog/screenshots/17-athena-patch-compliance.png`
-
-> 📸 **Screenshot:** Athena Query Editor — OS inventory query + results
-> Save as: `blog/screenshots/18-athena-os-inventory.png`
-
-> 📸 **Screenshot:** API Gateway Console — POST /webhook endpoint
-> Save as: `blog/screenshots/19-api-gateway.png`
-
 ---
 
 ## Cost If Left Running
@@ -243,6 +186,4 @@ This packages all 3 Lambda zip files, runs `terraform init` + `terraform apply`,
 
 ## Blog
 
-Blog post: `blog/week-04-blog.html` — ready for screenshots then publish.
-
-Target URL: https://blog.jayanthkatta.com/2026/06/week-4-sql-over-your-fleet.html
+Published: [Week 4 — SQL Over Your Entire EC2 Fleet](https://blog.jayanthkatta.com/2026/06/week-4-sql-over-your-fleet.html)

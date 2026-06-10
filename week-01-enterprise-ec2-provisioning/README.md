@@ -115,9 +115,8 @@ week-01-enterprise-ec2-provisioning/
 │       └── destroy.yml         # Manual teardown with approval
 ├── architecture/               # Architecture diagrams
 ├── docs/
-│   ├── interview-questions.md
-│   ├── resume-bullets.md
-│   └── blog-notes.md
+│   └── blog/
+│       └── screenshots/          # Blog post images
 ├── lambda/
 │   ├── servicenow_receiver/    # API Gateway webhook receiver
 │   │   └── handler.py
@@ -199,23 +198,6 @@ aws cloudwatch set-alarm-state \
   --state-value ALARM \
   --state-reason "Manual test"
 ```
-
----
-
-## I. Screenshots to Capture
-
-For your portfolio / LinkedIn:
-
-1. **ServiceNow catalog form** — EC2 request form with fields
-2. **ServiceNow approval flow** — Manager approval screen
-3. **Step Functions execution** — Visual workflow running
-4. **GitHub Actions run** — Plan and apply steps
-5. **Terraform output** — Resource creation log
-6. **CloudWatch dashboard** — Metrics for ALB + ASG
-7. **ServiceNow ticket closed** — With ALB DNS in work notes
-8. **AWS Console — VPC diagram** — Resource map view
-9. **EC2 instances** — Running with correct tags
-10. **SNS subscription confirmation** — Email alert setup
 
 ---
 

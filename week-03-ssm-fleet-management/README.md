@@ -209,7 +209,7 @@ aws ssm start-session --target <INSTANCE_ID> --region us-east-1
 # Type exit when done
 
 # Check session logs in S3
-aws s3 ls s3://fleet-mgmt-dev-session-logs-684346483786/ --region us-east-1
+aws s3 ls s3://fleet-mgmt-dev-session-logs-<YOUR_ACCOUNT_ID>/ --region us-east-1
 ```
 
 ---
@@ -278,12 +278,12 @@ aws s3 ls s3://fleet-mgmt-dev-session-logs-684346483786/ --region us-east-1
 ### Step 11 — Set up GitHub Actions secrets
 ```bash
 # All secrets already set from Week 2 — these are new/updated for Week 3
-gh secret set AWS_ROLE_ARN            --body "arn:aws:iam::684346483786:role/github-actions-dev-deploy-role"
+gh secret set AWS_ROLE_ARN            --body "arn:aws:iam::<YOUR_ACCOUNT_ID>:role/github-actions-dev-deploy-role"
 gh secret set WEBHOOK_SECRET          --body "your_webhook_secret"
 gh secret set SERVICENOW_INSTANCE_URL --body "https://devXXXXX.service-now.com"
 gh secret set SERVICENOW_USERNAME     --body "admin"
 gh secret set SERVICENOW_PASSWORD     --body "your_sn_password"
-gh secret set ALERT_EMAIL             --body "katta.jayant@gmail.com"
+gh secret set ALERT_EMAIL             --body "your-email@example.com"
 ```
 
 ### Cleanup
