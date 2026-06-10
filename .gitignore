@@ -46,3 +46,5 @@ __pycache__/
 # OS
 .DS_Store
 Thumbs.db
+SESSION_CONTEXT.md
+WEEK_TEMPLATE.md
