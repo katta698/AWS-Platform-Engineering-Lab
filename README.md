@@ -16,7 +16,7 @@
 | [Week 01](./week-01-enterprise-ec2-provisioning) | Enterprise EC2 Self-Service | VPC, EC2, ASG, ALB, Lambda, Step Functions, API Gateway, ServiceNow | ✅ Complete |
 | [Week 02](./week-02-aurora-self-service) | Aurora Self-Service Database Platform | Aurora Serverless v2, Secrets Manager, Lambda, Step Functions | ✅ Complete |
 | [Week 03](./week-03-ssm-fleet-management) | SSM Fleet Management + Patch Automation | SSM Fleet Manager, Patch Manager, Run Command, Inventory, Session Manager, Automation | ✅ Complete |
-| [Week 04](./week-04-glue-fleet-intelligence) | Glue Fleet Intelligence Platform | SSM Resource Data Sync, Glue Crawler, Glue ETL, Athena, S3, Lambda, Step Functions | 🔜 Next |
+| [Week 04](./week-04-glue-fleet-intelligence) | Glue Fleet Intelligence Platform | SSM Resource Data Sync, Glue Crawler, Glue ETL, Athena, S3, Lambda, Step Functions | ✅ Complete |
 | Week 05 | S3 Intelligent Storage Platform | S3 Intelligent-Tiering, Lifecycle Policies, Cost Automation | 📅 Planned |
 | Week 06 | Account Vending Machine | AWS Organizations, Control Tower, Account Factory, SCPs | 📅 Planned |
 | Week 07 | IAM Identity Center (SSO) | IAM Identity Center, Permission Sets, ServiceNow Access Requests | 📅 Planned |
@@ -182,6 +182,35 @@ Every project follows the same enterprise pattern:
 
 ---
 
+## Week 04 — Glue Fleet Intelligence Platform
+
+**The story:** Ops engineer submits a ServiceNow ticket → SSM fleet data automatically collected, transformed, and analysed. Patch compliance and OS inventory queryable in Athena. Ticket closes itself with the results URL.
+
+**What it builds:**
+- SSM Resource Data Sync → S3 raw bucket (Bronze layer) — NDJSON per instance
+- Glue Crawler — schema discovery, registers tables in Glue Data Catalog
+- Glue PySpark ETL job — boto3 S3 reader (bypasses Java URI colon bug), outputs Parquet to curated bucket (Silver layer)
+- Athena workgroup — SQL queries over Parquet (Gold layer)
+- Step Functions polling loop — Wait → Check → Choice, self-adapting to actual job duration
+- 3 Lambda functions: `webhook_receiver` (HMAC-SHA256), `glue_trigger`, `status_updater`
+- API Gateway REST endpoint for ServiceNow webhook
+- ServiceNow RITM auto-close with Athena console URL in close notes
+
+**End-to-end validated:**
+- ServiceNow ticket submitted → Step Functions triggered → Glue crawler ran → ETL job SUCCEEDED → Parquet in curated bucket → Athena query returned patch compliance results → ticket closed automatically
+- boto3 paginator workaround confirmed: `spark.read.json()` crashes on `AWS:ComplianceSummary` paths; boto3 reads them without issue
+
+**Key lessons learned:**
+- Colons in S3 folder names (`AWS:ComplianceSummary`) break Spark/Java URI parsing — use boto3 to list and read, then `spark.createDataFrame(records)`
+- API Gateway lowercases all headers — Lambda must read `x-servicenow-hmac` (lowercase), not the original casing
+- SSM Resource Data Sync has a ~30 min initial delay — plan for it, add a CloudWatch alarm on the raw S3 bucket
+- Step Functions polling loops need a max-iteration counter (`$.poll_count`) in production to prevent infinite loops
+- ServiceNow REST API PATCH requires `sys_id` (GUID), not `number` (RITM0012345) — resolve sys_id with a GET first
+
+**Resources:** 44 Terraform resources | **Blog:** https://blog.jayanthkatta.com
+
+---
+
 ## GitHub Actions Workflows
 
 All workflows live at repo root `.github/workflows/` (GitHub only reads from this location):
@@ -255,7 +284,7 @@ sh scripts/deploy.sh    # rebuilds everything in ~10 min
 | 01   | ~$65/month          | $0             |
 | 02   | ~$75/month          | $0             |
 | 03   | ~$48/month          | $0             |
-| 04   | ~$2/run             | $0             |
+| 04   | ~$0.22/run          | $0             |
 
 ---
 
