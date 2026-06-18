@@ -29,17 +29,15 @@ Lambda: webhook_receiver
 Step Functions State Machine
         ↓
   ┌─────────────────────────────────┐
-  │ 1. Enable SSM Resource Data Sync│
-  │ 2. Wait for S3 data (60s poll)  │
-  │ 3. Start Glue Crawler           │
-  │ 4. Poll crawler until READY     │
-  │ 5. Start Glue ETL Job           │
-  │ 6. Poll job until SUCCEEDED     │
-  │ 7. Update ServiceNow: CLOSED    │
+  │ 1. Start Glue Crawler           │
+  │ 2. Poll crawler until READY     │
+  │ 3. Start Glue ETL Job           │
+  │ 4. Poll job until SUCCEEDED     │
+  │ 5. Update ServiceNow: CLOSED    │
   └─────────────────────────────────┘
         ↓
-S3 Raw:     s3://jay-fleet-intelligence/raw/ssm/
-S3 Curated: s3://jay-fleet-intelligence/curated/fleet/
+S3 Raw:     s3://jay-fleet-intelligence-raw-dev/ssm/
+S3 Curated: s3://jay-fleet-intelligence-curated-dev/fleet/
         ↓
 Athena (query curated zone)
 ```
@@ -53,30 +51,30 @@ Once the pipeline runs, Athena gives you SQL over your entire EC2 fleet:
 ```sql
 -- Patch compliance summary by environment
 SELECT environment, compliance_status, COUNT(*) as instance_count
-FROM fleet_curated.patch_compliance
+FROM jay-fleet-intelligence_fleet_dev.patch_compliance
 GROUP BY environment, compliance_status;
 
 -- Instances missing critical patches
 SELECT instance_id, instance_name, missing_patch_count, last_seen
-FROM fleet_curated.patch_compliance
+FROM jay-fleet-intelligence_fleet_dev.patch_compliance
 WHERE compliance_status = 'NON_COMPLIANT'
   AND severity = 'Critical'
 ORDER BY missing_patch_count DESC;
 
 -- Instances not patched in 30+ days
 SELECT instance_id, instance_name, last_patch_time, platform_name
-FROM fleet_curated.patch_compliance
+FROM jay-fleet-intelligence_fleet_dev.patch_compliance
 WHERE last_patch_time < NOW() - INTERVAL '30' DAY;
 
 -- OS version inventory across fleet
 SELECT platform_name, platform_version, COUNT(*) as count
-FROM fleet_curated.inventory
+FROM jay-fleet-intelligence_fleet_dev.inventory
 GROUP BY platform_name, platform_version
 ORDER BY count DESC;
 
 -- Software installed on all instances
 SELECT instance_id, name, version
-FROM fleet_curated.applications
+FROM jay-fleet-intelligence_fleet_dev.applications
 WHERE name LIKE '%python%';
 ```
 
@@ -109,7 +107,7 @@ Week 03 automates patching. Week 04 answers: **did it work?**
 
 ---
 
-## Terraform Resources (~55 resources)
+## Terraform Resources (~50 resources)
 
 ```
 S3 buckets (raw + curated + athena results) with versioning + lifecycle
@@ -176,8 +174,8 @@ This packages all 3 Lambda zip files, runs `terraform init` + `terraform apply`,
 
 | Resource | Cost |
 |----------|------|
-| Glue crawler (per run) | ~$0.44 |
-| Glue ETL job (per run) | ~$0.88 |
+| Glue crawler (per run, 2 DPU × 10 min) | ~$0.15 |
+| Glue ETL job (per run, 2 × G.1X × 5 min) | ~$0.07 |
 | Athena (per query) | ~$0.005 per GB scanned |
 | S3 storage | ~$0.023/GB/month |
 | **Destroyed** | **$0** |
