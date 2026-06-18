@@ -186,4 +186,4 @@ This packages all 3 Lambda zip files, runs `terraform init` + `terraform apply`,
 
 ## Blog
 
-Published: [Week 4 — SQL Over Your Entire EC2 Fleet](https://blog.jayanthkatta.com/2026/06/week-4-sql-over-your-fleet.html)
+Published: [Week 4 — SQL Over Your Entire EC2 Fleet](https://blog.jayanthkatta.com/2026/06/building-fleet-intelligence-platform.html?m=1)
