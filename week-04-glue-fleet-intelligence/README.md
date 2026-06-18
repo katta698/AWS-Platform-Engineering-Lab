@@ -186,4 +186,4 @@ This packages all 3 Lambda zip files, runs `terraform init` + `terraform apply`,
 
 ## Blog
 
-Published: [Week 4 — SQL Over Your Entire EC2 Fleet](https://blog.jayanthkatta.com/2026/06/building-fleet-intelligence-platform.html?m=1)
+Published: [Week 4 — Building a Fleet Intelligence Platform with AWS Glue, Step Functions & ServiceNow](https://blog.jayanthkatta.com/2026/06/building-fleet-intelligence-platform.html?m=1)
