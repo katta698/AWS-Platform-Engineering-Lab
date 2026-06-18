@@ -143,7 +143,6 @@
       "Resource": "${status_updater_arn}",
       "Parameters": {
         "ticket_id.$": "$.ticket_id",
-        "job_run_id.$": "$.etl_result.job_run_id",
         "pipeline_succeeded": false,
         "environment.$": "$.environment"
       },
