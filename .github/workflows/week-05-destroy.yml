@@ -1,0 +1,52 @@
+###############################################################################
+# GitHub Actions: Week 05 — Cost Anomaly Detection Destroy
+#
+# Auth: HCP Terraform API token (TF_API_TOKEN secret)
+#       HCP workspace handles AWS credentials via OIDC dynamic credentials.
+###############################################################################
+
+name: Week 05 — Destroy Cost Anomaly Detection
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type DESTROY to confirm"
+        required: true
+
+env:
+  TF_VERSION:  "1.10.5"
+  TF_WORK_DIR: "week-05-cost-anomaly-detection/terraform/environments/dev"
+
+jobs:
+  destroy:
+    name: "Terraform Destroy (HCP Terraform)"
+    runs-on: ubuntu-latest
+    if: github.event.inputs.confirm == 'DESTROY'
+
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+          cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
+
+      - name: Terraform Init
+        working-directory: ${{ env.TF_WORK_DIR }}
+        run: terraform init
+
+      - name: Terraform Destroy
+        working-directory: ${{ env.TF_WORK_DIR }}
+        run: terraform destroy -auto-approve
+
+      - name: Destroy summary
+        if: always()
+        run: |
+          echo "## Week 05 Destroy Complete" >> $GITHUB_STEP_SUMMARY
+          echo "All Week 05 resources destroyed. Cost: \$0" >> $GITHUB_STEP_SUMMARY

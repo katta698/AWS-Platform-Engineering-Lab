@@ -1,0 +1,9 @@
+# Copy this file to terraform.tfvars and fill in your values.
+# terraform.tfvars is gitignored — never commit real values.
+
+project            = "week05"
+environment        = "dev"
+aws_region         = "us-east-1"
+alert_email        = "your-email@example.com"   # must confirm SNS subscription
+anomaly_threshold  = 10                          # alert when $10+ above expected
+log_retention_days = 14

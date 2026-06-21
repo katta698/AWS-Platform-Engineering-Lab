@@ -17,10 +17,10 @@
 | [Week 02](./week-02-aurora-self-service) | Aurora Self-Service Database Platform | Aurora Serverless v2, Secrets Manager, Lambda, Step Functions | ✅ Complete |
 | [Week 03](./week-03-ssm-fleet-management) | SSM Fleet Management + Patch Automation | SSM Fleet Manager, Patch Manager, Run Command, Inventory, Session Manager, Automation | ✅ Complete |
 | [Week 04](./week-04-glue-fleet-intelligence) | Glue Fleet Intelligence Platform | SSM Resource Data Sync, Glue Crawler, Glue ETL, Athena, S3, Lambda, Step Functions | ✅ Complete |
-| Week 05 | S3 Intelligent Storage Platform | S3 Intelligent-Tiering, Lifecycle Policies, Cost Automation | 📅 Planned |
+| [Week 05](./week-05-cost-anomaly-detection) | Cost Anomaly Detection | Cost Explorer ML, SNS ×2, Lambda, CloudWatch, HCP Terraform | 🔜 In Progress |
 | Week 06 | Account Vending Machine | AWS Organizations, Control Tower, Account Factory, SCPs | 📅 Planned |
 | Week 07 | IAM Identity Center (SSO) | IAM Identity Center, Permission Sets, ServiceNow Access Requests | 📅 Planned |
-| Week 08 | Cost Anomaly Detection + Auto-Remediation | Cost Explorer, Anomaly Detection, EventBridge, Lambda | 📅 Planned |
+| Week 08 | S3 Intelligent Storage Platform | S3 Intelligent-Tiering, Lifecycle Policies, Cost Automation | 📅 Planned |
 | Week 09 | ECS Fargate Self-Service | ECS Fargate, ECR, ALB, Task Definitions, ServiceNow | 📅 Planned |
 
 ### Phase 2 — Observability & Security (Weeks 10–17)
@@ -211,6 +211,23 @@ Every project follows the same enterprise pattern:
 
 ---
 
+## Week 05 — Cost Anomaly Detection
+
+**The story:** AWS bill spikes unexpectedly. A fixed budget alert would have missed it — the threshold wasn't crossed, but spending is 125% above what the ML model predicted. Cost Anomaly Detection fires the moment any service exceeds its ML baseline by $10+, Lambda formats the raw payload into a readable email, and the alert lands in your inbox within minutes.
+
+**What it builds:**
+- Cost Anomaly Monitor (DIMENSIONAL/SERVICE) — ML-based baseline across all AWS services
+- SNS Topic (raw) — `costalerts.amazonaws.com` publishes the raw JSON payload here
+- Lambda (`cost-alerter`) — parses the payload and formats a human-readable email
+- SNS Topic (formatted alert) — Lambda publishes here; email subscriber receives the final alert
+- IAM least-privilege role for Lambda (SNS:Publish + CloudWatch only)
+- CloudWatch Log Group (14-day retention)
+- Deployed via **HCP Terraform** (VCS-driven, org: Katta, workspace: week-05-dev) — no GitHub Actions workflow
+
+**Resources:** 8 Terraform resources | **Blog:** https://blog.jayanthkatta.com
+
+---
+
 ## GitHub Actions Workflows
 
 All workflows live at repo root `.github/workflows/` (GitHub only reads from this location):
@@ -225,6 +242,8 @@ All workflows live at repo root `.github/workflows/` (GitHub only reads from thi
 | `week-03-destroy.yml` | `workflow_dispatch` (manual only) | Destroy Week 3 — requires typing `DESTROY` |
 | `week-04-deploy.yml` | `workflow_dispatch` | Deploy Week 4 Glue Fleet Intelligence infrastructure |
 | `week-04-destroy.yml` | `workflow_dispatch` (manual only) | Destroy Week 4 — requires typing `DESTROY` |
+| `week-05-deploy.yml` | `workflow_dispatch` | Deploy Week 5 Cost Anomaly Detection (via HCP Terraform) |
+| `week-05-destroy.yml` | `workflow_dispatch` (manual only) | Destroy Week 5 — requires typing `DESTROY` |
 
 All workflows use OIDC federation — no static AWS credentials stored in GitHub. IAM role: `github-actions-dev-deploy-role`.
 
