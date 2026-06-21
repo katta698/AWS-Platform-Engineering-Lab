@@ -3,6 +3,7 @@
 Automated AWS cost anomaly detection using Cost Explorer ML, SNS, and Lambda.
 Deployed and managed via **HCP Terraform** (VCS-driven, org: Katta).
 
+
 ## The Story
 
 Your AWS bill spikes unexpectedly. A fixed budget alert would have missed it — the threshold wasn't crossed, but spending is 125% above what the ML model predicted. This week automates that detection: Cost Anomaly Detection fires immediately when any service exceeds its ML baseline by $10+, Lambda formats the raw payload into a readable email, and the alert lands in your inbox within minutes.
