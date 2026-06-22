@@ -118,7 +118,7 @@ Every project follows the same enterprise pattern:
 - GitHub Actions CI/CD with OIDC federation
 - CloudWatch dashboard + 4 metric alarms
 
-**Resources:** 74 Terraform resources | **Blog:** https://blog.jayanthkatta.com/2026/05/week-1-from-ticket-to-ec2-in-6-minutes.html
+**Resources:** 74 Terraform resources | **Blog:** https://jayanthkatta.com/blog/week-1-from-ticket-to-ec2-in-6-minutes-enterprise-self-servi/
 
 ---
 
@@ -134,7 +134,7 @@ Every project follows the same enterprise pattern:
 - Step Functions orchestration
 - CloudWatch dashboard with Performance Insights
 
-**Resources:** 67 Terraform resources | **Blog:** https://blog.jayanthkatta.com/2026/05/week-2-automating-postgresql.html
+**Resources:** 67 Terraform resources | **Blog:** https://jayanthkatta.com/blog/week-2-automating-postgresql-provisioning-with-servicenow-an/
 
 **End-to-end validated:**
 - ServiceNow RITM submitted → Step Functions execution → database provisioned → ticket closed in **8.7 seconds**
@@ -178,7 +178,7 @@ Every project follows the same enterprise pattern:
 - AL2023 AMI snapshot requires minimum 30GB volume (not 20GB)
 - Step Functions CloudWatch logging needs full set of log delivery permissions
 
-**Resources:** 80+ Terraform resources | **Blog:** https://blog.jayanthkatta.com
+**Resources:** 80+ Terraform resources | **Blog:** https://jayanthkatta.com/blog/week-3-self-service-ec2-fleet-patching-with-aws-ssm/
 
 ---
 
@@ -207,7 +207,7 @@ Every project follows the same enterprise pattern:
 - Step Functions polling loops need a max-iteration counter (`$.poll_count`) in production to prevent infinite loops
 - ServiceNow REST API PATCH requires `sys_id` (GUID), not `number` (RITM0012345) — resolve sys_id with a GET first
 
-**Resources:** 44 Terraform resources | **Blog:** https://blog.jayanthkatta.com
+**Resources:** 44 Terraform resources | **Blog:** https://jayanthkatta.com/blog/week-4-building-a-fleet-intelligence-platform-with-aws-glue-/
 
 ---
 
@@ -224,7 +224,7 @@ Every project follows the same enterprise pattern:
 - CloudWatch Log Group (14-day retention)
 - Deployed via **HCP Terraform** (VCS-driven, org: Katta, workspace: week-05-dev) — no GitHub Actions workflow
 
-**Resources:** 12 Terraform resources | **Blog:** https://blog.jayanthkatta.com/2026/06/week-5-cost-anomaly-detection-with-aws.html
+**Resources:** 12 Terraform resources | **Blog:** https://jayanthkatta.com/blog/week-5-cost-anomaly-detection-with-aws-cost-explorer-sns-and/
 
 ---
 
@@ -304,6 +304,7 @@ sh scripts/deploy.sh    # rebuilds everything in ~10 min
 | 02   | ~$75/month          | $0             |
 | 03   | ~$48/month          | $0             |
 | 04   | ~$0.22/run          | $0             |
+| 05   | ~$0/month (free tier) | $0           |
 
 ---
 
@@ -313,4 +314,4 @@ Jay Katta — 14 years as a DBA, transitioning to Cloud Architecture.
 Building one production-grade AWS pattern every week for 52 weeks.
 
 - GitHub: [@katta698](https://github.com/katta698)
-- Blog: https://blog.jayanthkatta.com
+- Blog: https://jayanthkatta.com/blog/
