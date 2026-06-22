@@ -17,7 +17,7 @@
 | [Week 02](./week-02-aurora-self-service) | Aurora Self-Service Database Platform | Aurora Serverless v2, Secrets Manager, Lambda, Step Functions | ✅ Complete |
 | [Week 03](./week-03-ssm-fleet-management) | SSM Fleet Management + Patch Automation | SSM Fleet Manager, Patch Manager, Run Command, Inventory, Session Manager, Automation | ✅ Complete |
 | [Week 04](./week-04-glue-fleet-intelligence) | Glue Fleet Intelligence Platform | SSM Resource Data Sync, Glue Crawler, Glue ETL, Athena, S3, Lambda, Step Functions | ✅ Complete |
-| [Week 05](./week-05-cost-anomaly-detection) | Cost Anomaly Detection | Cost Explorer ML, SNS ×2, Lambda, CloudWatch, HCP Terraform | 🔜 In Progress |
+| [Week 05](./week-05-cost-anomaly-detection) | Cost Anomaly Detection | Cost Explorer ML, SNS ×2, Lambda, CloudWatch, HCP Terraform | ✅ Complete |
 | Week 06 | Account Vending Machine | AWS Organizations, Control Tower, Account Factory, SCPs | 📅 Planned |
 | Week 07 | IAM Identity Center (SSO) | IAM Identity Center, Permission Sets, ServiceNow Access Requests | 📅 Planned |
 | Week 08 | S3 Intelligent Storage Platform | S3 Intelligent-Tiering, Lifecycle Policies, Cost Automation | 📅 Planned |
@@ -224,7 +224,7 @@ Every project follows the same enterprise pattern:
 - CloudWatch Log Group (14-day retention)
 - Deployed via **HCP Terraform** (VCS-driven, org: Katta, workspace: week-05-dev) — no GitHub Actions workflow
 
-**Resources:** 8 Terraform resources | **Blog:** https://blog.jayanthkatta.com
+**Resources:** 12 Terraform resources | **Blog:** https://blog.jayanthkatta.com/2026/06/week-5-cost-anomaly-detection-with-aws.html
 
 ---
 
