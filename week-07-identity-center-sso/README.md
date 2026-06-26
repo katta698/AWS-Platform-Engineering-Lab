@@ -136,4 +136,4 @@ A destroy run removes the permission sets, groups, users, and account assignment
 
 ## Blog
 
-Deployed and validated end-to-end (see deviations above) — write-up pending.
+Published: [Week 7 — IAM Identity Center SSO: Multi-Account Permission Sets](https://jayanthkatta.com/blog/week-7-iam-identity-center-sso-multi-account-permission-sets/)
