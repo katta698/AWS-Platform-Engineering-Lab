@@ -18,7 +18,7 @@
 | [Week 03](./week-03-ssm-fleet-management) | SSM Fleet Management + Patch Automation | SSM Fleet Manager, Patch Manager, Run Command, Inventory, Session Manager, Automation | ✅ Complete |
 | [Week 04](./week-04-glue-fleet-intelligence) | Glue Fleet Intelligence Platform | SSM Resource Data Sync, Glue Crawler, Glue ETL, Athena, S3, Lambda, Step Functions | ✅ Complete |
 | [Week 05](./week-05-cost-anomaly-detection) | Cost Anomaly Detection | Cost Explorer ML, SNS ×2, Lambda, CloudWatch, HCP Terraform | ✅ Complete |
-| Week 06 | Account Vending Machine | AWS Organizations, Control Tower, Account Factory, SCPs | 📅 Planned |
+| [Week 06](./week-06-account-vending-machine) | Account Vending Machine (simulated, no Control Tower) | AWS Organizations, SCPs, Step Functions, Lambda, API Gateway, HCP Terraform | ✅ Complete |
 | Week 07 | IAM Identity Center (SSO) | IAM Identity Center, Permission Sets, ServiceNow Access Requests | 📅 Planned |
 | Week 08 | S3 Intelligent Storage Platform | S3 Intelligent-Tiering, Lifecycle Policies, Cost Automation | 📅 Planned |
 | Week 09 | ECS Fargate Self-Service | ECS Fargate, ECR, ALB, Task Definitions, ServiceNow | 📅 Planned |
@@ -225,6 +225,23 @@ Every project follows the same enterprise pattern:
 - Deployed via **HCP Terraform** (VCS-driven, org: Katta, workspace: week-05-dev) — no GitHub Actions workflow
 
 **Resources:** 12 Terraform resources | **Blog:** https://jayanthkatta.com/blog/week-5-cost-anomaly-detection-with-aws-cost-explorer-sns-and/
+
+---
+
+## Week 06 — Account Vending Machine (simulated, no Control Tower)
+
+**The story:** A team needs a new AWS account. Manually, that means a human creating the account, remembering to attach the right guardrails, and placing it in the right part of the org. A ServiceNow ticket now does all three: it creates a real AWS account, moves it into the right Organizational Unit, and the Service Control Policy attached to that OU applies the moment it lands there — no per-account setup, no follow-up ticket.
+
+**What it builds:**
+- Organizational Units (`Sandbox`, `Production`) nested under the existing `Workloads-OU`
+- Service Control Policy on the `Sandbox` OU — denies large/expensive EC2 instance types and restricts activity to allowed regions
+- Step Functions — orchestrates `CreateAccount` → poll → `MoveAccount` → notify ServiceNow
+- Lambda (`webhook_receiver`, `account_creator`, `account_mover`, `status_notifier`) — HMAC-validated webhook, account creation/polling, OU move + tagging, ServiceNow ticket closure
+- API Gateway — HTTPS endpoint for the ServiceNow webhook
+- Deployed via **HCP Terraform** (VCS-driven, org: Katta, workspace: week-06-dev) — no GitHub Actions workflow
+- Deliberately skips AWS Control Tower — a real managed Landing Zone is heavy and largely irreversible, not a fit for a lab account meant to be built and torn down weekly
+
+**Resources:** 39 Terraform resources | **Blog:** https://jayanthkatta.com/blog/week-6-account-vending-machine-with-aws-organizations-and-scps/
 
 ---
 

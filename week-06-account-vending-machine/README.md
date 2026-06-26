@@ -136,3 +136,9 @@ A destroy run removes the OUs, SCP, Lambda, Step Functions, and API Gateway — 
 | API Gateway | Free tier covers low request volume |
 | Vended AWS accounts | No direct cost, but each account is real and persists — not destroyed by `terraform destroy` |
 | **Pipeline infra destroyed** | **$0** (vended accounts are a separate, manual cleanup) |
+
+---
+
+## Blog
+
+Published: [Week 6 — Building an Account Vending Machine with AWS Organizations, SCPs & Step Functions (No Control Tower)](https://jayanthkatta.com/blog/week-6-account-vending-machine-with-aws-organizations-and-scps/)
