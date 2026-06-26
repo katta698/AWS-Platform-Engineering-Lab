@@ -19,7 +19,7 @@
 | [Week 04](./week-04-glue-fleet-intelligence) | Glue Fleet Intelligence Platform | SSM Resource Data Sync, Glue Crawler, Glue ETL, Athena, S3, Lambda, Step Functions | ✅ Complete |
 | [Week 05](./week-05-cost-anomaly-detection) | Cost Anomaly Detection | Cost Explorer ML, SNS ×2, Lambda, CloudWatch, HCP Terraform | ✅ Complete |
 | [Week 06](./week-06-account-vending-machine) | Account Vending Machine (simulated, no Control Tower) | AWS Organizations, SCPs, Step Functions, Lambda, API Gateway, HCP Terraform | ✅ Complete |
-| Week 07 | IAM Identity Center (SSO) | IAM Identity Center, Permission Sets, ServiceNow Access Requests | 📅 Planned |
+| [Week 07](./week-07-identity-center-sso) | IAM Identity Center SSO (multi-account permission sets) | IAM Identity Center, Identity Store, Permission Sets, AWS Organizations, HCP Terraform | 🚧 In Progress |
 | Week 08 | S3 Intelligent Storage Platform | S3 Intelligent-Tiering, Lifecycle Policies, Cost Automation | 📅 Planned |
 | Week 09 | ECS Fargate Self-Service | ECS Fargate, ECR, ALB, Task Definitions, ServiceNow | 📅 Planned |
 

@@ -1,0 +1,30 @@
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+terraform.tfvars
+*.auto.tfvars
+.terraform.lock.hcl
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+
+# Secrets
+*.pem
+*.key
+.env
+.env.*
+
+# Local study and working docs — kept locally only
+docs/explainer.md
+docs/blog-prep.md
+docs/commands.md
+docs/screenshots.md
+docs/screenshots-guide.md
+docs/readme-with-screenshots.md
+docs/execution-guide.md

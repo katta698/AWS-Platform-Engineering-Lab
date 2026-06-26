@@ -1,0 +1,23 @@
+#!/bin/bash
+set -euo pipefail
+
+echo "=== Week 07 — IAM Identity Center SSO Cleanup ==="
+echo ""
+echo "This workspace (week-07-dev) is VCS-connected in HCP Terraform, so"
+echo "'terraform destroy' from local CLI will fail the same way local 'apply'"
+echo "does. Destroy must be confirmed from the HCP UI run page instead:"
+echo "  HCP Terraform -> week-07-dev -> Actions -> Start new run -> Plan and"
+echo "  apply (destroy)  -- or 'Queue destroy plan' under workspace settings."
+echo ""
+echo "A destroy run removes the permission sets, groups, users, group"
+echo "memberships, and account assignments created by this module. It does"
+echo "NOT disable IAM Identity Center itself — that was a manual, one-time"
+echo "console step and must be disabled (if desired) the same way, manually."
+echo ""
+echo "AWS will refuse to delete a permission set that still has live account"
+echo "assignments anywhere, including accounts outside var.target_account_ids"
+echo "if anyone added assignments by hand in the console — check the"
+echo "Identity Center console first if destroy fails on the permission set."
+echo ""
+read -rp "Press Enter once you've confirmed the destroy run in the HCP UI (or Ctrl-C to abort): "
+echo "=== Reminder acknowledged — go confirm the destroy run in HCP if you haven't ==="

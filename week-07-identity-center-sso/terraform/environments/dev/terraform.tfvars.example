@@ -1,0 +1,23 @@
+aws_region      = "us-east-1"
+environment     = "dev"
+project_name    = "jay-identity-center-sso"
+parent_ou_name  = "Workloads-OU"
+target_ou_names = ["Sandbox", "Production"]
+
+# Test users to create in Identity Center and add to a group.
+# Replace with real, distinct email addresses you control before applying —
+# IAM Identity Center requires a unique, valid email per user.
+users = {
+  "jane.engineer" = {
+    given_name  = "Jane"
+    family_name = "Engineer"
+    email       = "your-email+engineer@example.com"
+    group       = "Engineers"
+  }
+  "alex.auditor" = {
+    given_name  = "Alex"
+    family_name = "Auditor"
+    email       = "your-email+auditor@example.com"
+    group       = "ReadOnlyAuditors"
+  }
+}
