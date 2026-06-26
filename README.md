@@ -242,7 +242,6 @@ All workflows live at repo root `.github/workflows/` (GitHub only reads from thi
 | `week-03-destroy.yml` | `workflow_dispatch` (manual only) | Destroy Week 3 — requires typing `DESTROY` |
 | `week-04-deploy.yml` | `workflow_dispatch` | Deploy Week 4 Glue Fleet Intelligence infrastructure |
 | `week-04-destroy.yml` | `workflow_dispatch` (manual only) | Destroy Week 4 — requires typing `DESTROY` |
-| `week-05-deploy.yml` | `workflow_dispatch` | ⚠️ Likely non-functional — see note below |
 
 All workflows use OIDC federation — no static AWS credentials stored in GitHub. IAM role: `github-actions-dev-deploy-role`.
 
