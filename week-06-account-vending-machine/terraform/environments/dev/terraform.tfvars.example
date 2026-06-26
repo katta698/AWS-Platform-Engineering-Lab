@@ -1,0 +1,18 @@
+# Copy this file to terraform.tfvars and fill in real values.
+# terraform.tfvars is gitignored — never commit secrets.
+
+aws_region   = "us-east-1"
+environment  = "dev"
+project_name = "jay-account-vending"
+
+# ServiceNow developer instance (https://developer.servicenow.com)
+servicenow_instance = "devXXXXXX"   # instance name only, no .service-now.com
+servicenow_username = "admin"
+servicenow_password = "your-snow-password"
+
+# Generate: openssl rand -hex 32
+webhook_secret = "your-hmac-secret-here"
+
+parent_ou_name  = "Workloads-OU"   # existing OU to nest under, not the Org root
+ou_names        = ["Sandbox", "Production"]
+allowed_regions = ["us-east-1"]

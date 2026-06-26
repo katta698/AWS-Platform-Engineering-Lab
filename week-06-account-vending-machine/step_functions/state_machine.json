@@ -1,0 +1,132 @@
+{
+  "Comment": "Account Vending Machine — Organizations CreateAccount -> poll -> MoveAccount -> notify",
+  "StartAt": "CreateAccount",
+  "States": {
+
+    "CreateAccount": {
+      "Type": "Task",
+      "Resource": "${account_creator_arn}",
+      "Parameters": {
+        "action": "create_account",
+        "ticket_id.$": "$.ticket_id",
+        "account_name.$": "$.account_name",
+        "account_email.$": "$.account_email",
+        "target_ou.$": "$.target_ou",
+        "environment.$": "$.environment"
+      },
+      "ResultPath": "$.create_result",
+      "Next": "WaitForAccount",
+      "Retry": [{
+        "ErrorEquals": ["States.TaskFailed"],
+        "IntervalSeconds": 5,
+        "MaxAttempts": 2,
+        "BackoffRate": 2
+      }],
+      "Catch": [{
+        "ErrorEquals": ["States.ALL"],
+        "Next": "VendingFailed",
+        "ResultPath": "$.error"
+      }]
+    },
+
+    "WaitForAccount": {
+      "Type": "Wait",
+      "Seconds": 30,
+      "Next": "CheckAccountStatus"
+    },
+
+    "CheckAccountStatus": {
+      "Type": "Task",
+      "Resource": "${account_creator_arn}",
+      "Parameters": {
+        "action": "get_account_status",
+        "ticket_id.$": "$.ticket_id",
+        "create_account_request_id.$": "$.create_result.create_account_request_id"
+      },
+      "ResultPath": "$.status_result",
+      "Next": "IsAccountReady",
+      "Retry": [{
+        "ErrorEquals": ["States.TaskFailed"],
+        "IntervalSeconds": 10,
+        "MaxAttempts": 3,
+        "BackoffRate": 1.5
+      }]
+    },
+
+    "IsAccountReady": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.status_result.succeeded",
+          "BooleanEquals": true,
+          "Next": "MoveAccount"
+        },
+        {
+          "Variable": "$.status_result.failed",
+          "BooleanEquals": true,
+          "Next": "VendingFailed"
+        }
+      ],
+      "Default": "WaitForAccount"
+    },
+
+    "MoveAccount": {
+      "Type": "Task",
+      "Resource": "${account_mover_arn}",
+      "Parameters": {
+        "ticket_id.$": "$.ticket_id",
+        "account_id.$": "$.status_result.account_id",
+        "account_name.$": "$.account_name",
+        "target_ou.$": "$.target_ou",
+        "ou_ids.$": "$.ou_ids",
+        "environment.$": "$.environment"
+      },
+      "ResultPath": "$.move_result",
+      "Next": "VendingSucceeded",
+      "Retry": [{
+        "ErrorEquals": ["States.TaskFailed"],
+        "IntervalSeconds": 5,
+        "MaxAttempts": 2,
+        "BackoffRate": 2
+      }],
+      "Catch": [{
+        "ErrorEquals": ["States.ALL"],
+        "Next": "VendingFailed",
+        "ResultPath": "$.error"
+      }]
+    },
+
+    "VendingSucceeded": {
+      "Type": "Task",
+      "Resource": "${status_notifier_arn}",
+      "Parameters": {
+        "ticket_id.$": "$.ticket_id",
+        "account_id.$": "$.status_result.account_id",
+        "account_name.$": "$.account_name",
+        "target_ou.$": "$.target_ou",
+        "succeeded": true,
+        "environment.$": "$.environment"
+      },
+      "End": true
+    },
+
+    "VendingFailed": {
+      "Type": "Task",
+      "Resource": "${status_notifier_arn}",
+      "Parameters": {
+        "ticket_id.$": "$.ticket_id",
+        "account_name.$": "$.account_name",
+        "succeeded": false,
+        "failure_reason.$": "$.status_result.failure_reason",
+        "environment.$": "$.environment"
+      },
+      "Next": "Fail"
+    },
+
+    "Fail": {
+      "Type": "Fail",
+      "Error": "AccountVendingFailed",
+      "Cause": "Account creation or OU move failed — check CloudWatch logs"
+    }
+  }
+}
