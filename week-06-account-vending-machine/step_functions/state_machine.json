@@ -24,7 +24,7 @@
       }],
       "Catch": [{
         "ErrorEquals": ["States.ALL"],
-        "Next": "VendingFailed",
+        "Next": "NormalizeFailure",
         "ResultPath": "$.error"
       }]
     },
@@ -91,9 +91,19 @@
       }],
       "Catch": [{
         "ErrorEquals": ["States.ALL"],
-        "Next": "VendingFailed",
+        "Next": "NormalizeFailure",
         "ResultPath": "$.error"
       }]
+    },
+
+    "NormalizeFailure": {
+      "Type": "Pass",
+      "Comment": "CreateAccount/MoveAccount Catch only sets $.error, not $.status_result.failure_reason — normalize so VendingFailed's Parameters always resolve regardless of which branch failed",
+      "Parameters": {
+        "failure_reason.$": "$.error.Cause"
+      },
+      "ResultPath": "$.status_result",
+      "Next": "VendingFailed"
     },
 
     "VendingSucceeded": {
