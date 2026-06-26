@@ -76,20 +76,18 @@ AWS Control Tower is the managed product version of this pattern — it provisio
 
 ## Deploy Steps
 
-```bash
-cd terraform/environments/dev
-cp terraform.tfvars.example terraform.tfvars
-# Edit terraform.tfvars: ServiceNow creds, webhook_secret, parent_ou_name
-terraform login
-```
-
-Then run from the `week-06-account-vending-machine/` folder:
+`week-06-dev` is a **VCS-connected HCP Terraform workspace** (same pattern as Week 5) — Terraform runs remotely from this GitHub repo, not from local CLI. ServiceNow creds, the webhook secret, and AWS auth (dynamic OIDC via `hcp-terraform-role`) are configured as HCP workspace variables, not a local `terraform.tfvars`.
 
 ```bash
-bash scripts/deploy.sh
+bash scripts/deploy.sh   # rebuilds the 4 Lambda zips
+git add lambda/*/*.zip
+git commit -m "Update Lambda packages"
+git push
 ```
 
-This packages all 4 Lambda zip files and runs `terraform init` + `terraform apply`. It creates the OUs, SCP, and vending pipeline — **it does not vend any accounts on its own.**
+Then in the HCP UI: **week-06-dev → Start new plan**, review, and confirm **Apply**. This creates the OUs, SCP, and vending pipeline — **it does not vend any accounts on its own.**
+
+Note: local `terraform apply`/`destroy` against this workspace will fail with `Saved plans not allowed for workspaces with a VCS connection` — that's expected; all applies/destroys go through the HCP UI.
 
 ### Triggering an account-vend (read this first)
 
@@ -113,11 +111,9 @@ curl -X POST "$API_GATEWAY_URL" \
 
 ## Cleanup
 
-```bash
-bash scripts/cleanup.sh
-```
+Destroy must be confirmed from the **HCP UI** (same VCS-connection restriction as deploy) — `bash scripts/cleanup.sh` just walks through the pre-destroy checklist and waits for confirmation; it does not call `terraform destroy` itself. Trigger the actual destroy from **week-06-dev → Settings → Destruction and Deletion → Queue destroy plan**, then confirm Apply.
 
-`terraform destroy` removes the OUs, SCP, Lambda, Step Functions, and API Gateway — it does **not** touch any account actually vended through the pipeline, since that account was created dynamically via boto3 and is never in Terraform state. AWS also refuses to delete a non-empty OU, so any vended test accounts must be moved out (or closed) via the Organizations console before destroying.
+A destroy run removes the OUs, SCP, Lambda, Step Functions, and API Gateway — it does **not** touch any account actually vended through the pipeline, since that account was created dynamically via boto3 and is never in Terraform state. AWS also refuses to delete a non-empty OU, so any vended test accounts must be moved out (or closed) via the Organizations console before destroying.
 
 ---
 

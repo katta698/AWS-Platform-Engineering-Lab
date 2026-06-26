@@ -21,6 +21,11 @@ week-*/blog/BLOG_BLOGGER.html
 **/lambda_layer/
 **/*.zip
 
+# Exception: Week 6 is HCP/VCS-driven (not local CLI apply), so its Lambda
+# zips must be committed for the remote run to find them — see
+# week-06-account-vending-machine/.gitignore for the rationale.
+!week-06-account-vending-machine/lambda/*/*.zip
+
 # Python
 __pycache__/
 *.pyc
