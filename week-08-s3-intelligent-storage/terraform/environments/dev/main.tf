@@ -64,6 +64,10 @@ module "s3_storage" {
 
   sqs_queue_arn = local.sqs_queue_arn
 
+  # S3 bucket notification validation requires the SQS queue policy to exist first.
+  # Without this, AWS rejects PutBucketNotificationConfiguration with InvalidArgument.
+  depends_on = [module.cost_automation]
+
   intelligent_tiering_archive_days      = var.intelligent_tiering_archive_days
   intelligent_tiering_deep_archive_days = var.intelligent_tiering_deep_archive_days
   logs_ia_transition_days               = var.logs_ia_transition_days
