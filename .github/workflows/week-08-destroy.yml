@@ -1,0 +1,69 @@
+name: Week 08 — S3 Intelligent Storage — Destroy
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  TF_VERSION: "1.10.5"
+  AWS_REGION: "us-east-1"
+  TF_WORKING_DIR: week-08-s3-intelligent-storage/terraform/environments/dev
+
+jobs:
+  destroy:
+    name: Terraform Destroy
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-dev-deploy-role
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Init
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform init
+
+      - name: Empty S3 bucket before destroy
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+          BUCKET=$(terraform output -raw bucket_name 2>/dev/null || echo "")
+          if [ -n "$BUCKET" ]; then
+            echo "Emptying versioned bucket: $BUCKET"
+            aws s3api list-object-versions --bucket "$BUCKET" \
+              --query 'Versions[].{Key:Key,VersionId:VersionId}' \
+              --output json | \
+              jq -r '.[]? | "\(.Key) \(.VersionId)"' | \
+              while read -r key vid; do
+                aws s3api delete-object --bucket "$BUCKET" --key "$key" --version-id "$vid" > /dev/null
+              done || true
+            aws s3api list-object-versions --bucket "$BUCKET" \
+              --query 'DeleteMarkers[].{Key:Key,VersionId:VersionId}' \
+              --output json | \
+              jq -r '.[]? | "\(.Key) \(.VersionId)"' | \
+              while read -r key vid; do
+                aws s3api delete-object --bucket "$BUCKET" --key "$key" --version-id "$vid" > /dev/null
+              done || true
+            echo "Bucket emptied."
+          fi
+
+      - name: Terraform Destroy
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+          terraform destroy -auto-approve \
+            -var="project=week-08-s3-storage" \
+            -var="environment=dev" \
+            -var="aws_region=${{ env.AWS_REGION }}" \
+            -var="sns_email=${{ secrets.SNS_EMAIL }}"

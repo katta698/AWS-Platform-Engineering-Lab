@@ -1,0 +1,51 @@
+name: Week 08 — S3 Intelligent Storage — Deploy
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  TF_VERSION: "1.10.5"
+  AWS_REGION: "us-east-1"
+  TF_WORKING_DIR: week-08-s3-intelligent-storage/terraform/environments/dev
+
+jobs:
+  deploy:
+    name: Terraform Apply
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-dev-deploy-role
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Init
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform init
+
+      - name: Terraform Plan
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+          terraform plan \
+            -var="project=week-08-s3-storage" \
+            -var="environment=dev" \
+            -var="aws_region=${{ env.AWS_REGION }}" \
+            -var="sns_email=${{ secrets.SNS_EMAIL }}" \
+            -out=tfplan
+
+      - name: Terraform Apply
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform apply tfplan
