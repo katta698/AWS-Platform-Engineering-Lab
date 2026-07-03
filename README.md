@@ -20,7 +20,7 @@
 | [Week 05](./week-05-cost-anomaly-detection) | Cost Anomaly Detection | Cost Explorer ML, SNS ×2, Lambda, CloudWatch, HCP Terraform | ✅ Complete |
 | [Week 06](./week-06-account-vending-machine) | Account Vending Machine (simulated, no Control Tower) | AWS Organizations, SCPs, Step Functions, Lambda, API Gateway, HCP Terraform | ✅ Complete |
 | [Week 07](./week-07-identity-center-sso) | IAM Identity Center SSO (multi-account permission sets) | IAM Identity Center, Identity Store, Permission Sets, AWS Organizations, HCP Terraform | ✅ Complete |
-| Week 08 | S3 Intelligent Storage Platform | S3 Intelligent-Tiering, Lifecycle Policies, Cost Automation | 📅 Planned |
+| [Week 08](./week-08-s3-intelligent-storage) | S3 Intelligent Storage Platform | S3 Intelligent-Tiering, Lifecycle Policies, Cost Automation | ✅ Complete |
 | Week 09 | ECS Fargate Self-Service | ECS Fargate, ECR, ALB, Task Definitions, ServiceNow | 📅 Planned |
 
 ### Phase 2 — Observability & Security (Weeks 10–17)
