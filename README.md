@@ -14,7 +14,7 @@
 | Week | Project | Key AWS Services | Status |
 |------|---------|-----------------|--------|
 | [Week 01](./week-01-enterprise-ec2-provisioning) | Enterprise EC2 Self-Service | VPC, EC2, ASG, ALB, Lambda, Step Functions, API Gateway, ServiceNow | ✅ Complete |
-| [Week 02](./week-02-aurora-self-service) | Aurora Self-Service Database Platform | Aurora Serverless v2, Secrets Manager, Lambda, Step Functions | ✅ Complete |
+| [Week 02](./week-02-aurora-self-service) | Aurora Self-Service Database Platform | Aurora Serverless, Secrets Manager, Lambda, Step Functions | ✅ Complete |
 | [Week 03](./week-03-ssm-fleet-management) | SSM Fleet Management + Patch Automation | SSM Fleet Manager, Patch Manager, Run Command, Inventory, Session Manager, Automation | ✅ Complete |
 | [Week 04](./week-04-glue-fleet-intelligence) | Glue Fleet Intelligence Platform | SSM Resource Data Sync, Glue Crawler, Glue ETL, Athena, S3, Lambda, Step Functions | ✅ Complete |
 | [Week 05](./week-05-cost-anomaly-detection) | Cost Anomaly Detection | Cost Explorer ML, SNS ×2, Lambda, CloudWatch, HCP Terraform | ✅ Complete |
@@ -127,7 +127,7 @@ Every project follows the same enterprise pattern:
 **The story:** Developer submits a ServiceNow ticket → isolated PostgreSQL database with auto-rotating credentials in 12 seconds. Zero DBA involvement.
 
 **What it builds:**
-- Aurora Serverless v2 (PostgreSQL 16) — scales 0.5 → 16 ACUs
+- Aurora Serverless (PostgreSQL 16) — scales 0 → 16 ACUs (scale-to-zero available April 2026)
 - Database-per-tenant isolation — unlimited databases on shared cluster
 - Secrets Manager with 4-step zero-downtime rotation per tenant
 - Lambda db_provisioner — CREATE DATABASE + user + secret in one execution
@@ -242,6 +242,56 @@ Every project follows the same enterprise pattern:
 - Deliberately skips AWS Control Tower — a real managed Landing Zone is heavy and largely irreversible, not a fit for a lab account meant to be built and torn down weekly
 
 **Resources:** 39 Terraform resources | **Blog:** https://jayanthkatta.com/blog/week-6-account-vending-machine-with-aws-organizations-and-scps/
+
+---
+
+## Week 07 — IAM Identity Center SSO (Multi-Account Permission Sets)
+
+**The story:** A new engineer joins. Instead of an ops engineer manually creating IAM users in 3 accounts, they're added to a group in IAM Identity Center — and automatically get the right access to every account their group is assigned to. No per-account IAM users, no shared credentials, one place to audit.
+
+**What it builds:**
+- IAM Identity Center permission sets (`PlatformEngineer`, `ReadOnly`, `SecurityAuditor`) with managed + inline policies
+- Identity Store groups (`Engineers`, `Auditors`) and users (`jane.engineer`) — all in Terraform
+- Cross-account assignments: groups → permission sets → target accounts
+- AWS auto-provisions `AWSReservedSSO_*` IAM roles in each target account
+- Deployed via **HCP Terraform** (VCS-driven, org: Katta, workspace: week-07-dev)
+
+**End-to-end validated:**
+- Signed in as `jane.engineer` via the SSO portal — only saw the `PlatformEngineer` role for the assigned account (correct scoping)
+- Federated session confirmed in CloudTrail — identity traced back to the Identity Center user, not an IAM user
+
+**Resources:** Terraform-managed Identity Center resources + 3 auto-provisioned IAM roles per target account | **Blog:** https://jayanthkatta.com/blog/week-7-iam-identity-center-sso-multi-account-permission-sets/
+
+---
+
+## Week 08 — S3 Intelligent Storage Platform
+
+**The story:** S3 buckets accumulate objects at Standard rates indefinitely. Nobody moves them. This platform automates tiering, enforces lifecycle rules, and emails a daily savings report showing exactly what the automation saved — with real dollar figures.
+
+**What it builds:**
+- S3 bucket with Intelligent-Tiering configuration — objects auto-move to Frequent/Infrequent/Archive Access tiers based on actual access patterns
+- Lifecycle rules — multipart upload cleanup, version expiration, transition to Glacier
+- SQS queue + Lambda (`storage-reporter`) — triggered daily by EventBridge, queries S3 Storage Lens metrics, publishes savings report to SNS
+- SNS topic — formatted cost savings email to subscriber
+- DLQ on SQS for failed Lambda invocations
+- Deployed via **HCP Terraform** (VCS-driven, org: Katta, workspace: week-08-dev)
+
+**Key lessons learned:**
+- S3 Intelligent-Tiering + lifecycle rules on the same bucket requires careful rule ordering — IT handles access-pattern tiering, lifecycle handles age-based expiration; they coexist on non-overlapping prefixes
+- Circular dependency (Lambda needs bucket ARN, bucket notification needs Lambda ARN) — resolved via deterministic locals using account ID
+- S3 bucket notification `depends_on` Lambda permission or the notification silently fails
+
+**Resources:** 18 Terraform resources | **Blog:** https://jayanthkatta.com/blog/week-8-s3-intelligent-storage-platform/
+
+---
+
+## Standalone Posts
+
+Technical deep-dives and guides published outside the weekly series.
+
+| Post | Topic | Blog |
+|------|-------|------|
+| EBS Savings Dashboard — Phase 1 | EBS volume cost analysis, rightsizing, unattached volume detection | https://jayanthkatta.com/blog/ebs-savings-dashboard-phase1/ |
 
 ---
 
