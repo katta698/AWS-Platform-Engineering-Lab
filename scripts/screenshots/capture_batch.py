@@ -62,7 +62,9 @@ def main(cookies_path: str, pairs: list[str]):
             output_path.parent.mkdir(parents=True, exist_ok=True)
             page.goto(url, wait_until="load", timeout=30000)
             page.wait_for_timeout(6000)
-            page.screenshot(path=str(output_path), full_page=True)
+            # Viewport-only, not full_page - see capture.py for why (avoids
+            # capturing a long tail of empty space below stuck-loading widgets).
+            page.screenshot(path=str(output_path), full_page=False)
             print(f"Saved: {output_path}")
 
         context.close()
