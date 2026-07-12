@@ -1,0 +1,18 @@
+# Copy this file to terraform.tfvars and fill in your values.
+# terraform.tfvars is gitignored — never commit it.
+
+project_name = "fargate-selfservice"
+environment  = "dev"
+aws_region   = "us-east-1"
+
+availability_zones = ["us-east-1a", "us-east-1b"]
+
+# ServiceNow instance (without .service-now.com) + a service account with
+# REST API access to create/update RITM records.
+servicenow_instance = "devXXXXXX"
+servicenow_username = "your-servicenow-user"
+servicenow_password = "your-servicenow-password"
+
+# Shared secret used to HMAC-sign the ServiceNow -> API Gateway webhook.
+# Generate with: openssl rand -hex 32
+webhook_secret = "your-hmac-secret"

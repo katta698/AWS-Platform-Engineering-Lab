@@ -1,0 +1,77 @@
+{
+  "Comment": "ECS Fargate Self-Service — provision (ECR repo, task def, service, target group, path rule, auto-scaling) -> notify ServiceNow",
+  "StartAt": "ProvisionService",
+  "States": {
+
+    "ProvisionService": {
+      "Type": "Task",
+      "Resource": "${fargate_provisioner_arn}",
+      "Parameters": {
+        "action": "provision",
+        "ticket_id.$": "$.ticket_id",
+        "service_name.$": "$.service_name",
+        "image_uri.$": "$.image_uri",
+        "container_port.$": "$.container_port",
+        "cpu.$": "$.cpu",
+        "memory.$": "$.memory",
+        "desired_count.$": "$.desired_count",
+        "environment.$": "$.environment"
+      },
+      "ResultPath": "$.provision_result",
+      "Next": "NotifySuccess",
+      "Retry": [{
+        "ErrorEquals": ["States.TaskFailed"],
+        "IntervalSeconds": 5,
+        "MaxAttempts": 2,
+        "BackoffRate": 2
+      }],
+      "Catch": [{
+        "ErrorEquals": ["States.ALL"],
+        "Next": "NormalizeFailure",
+        "ResultPath": "$.error"
+      }]
+    },
+
+    "NormalizeFailure": {
+      "Type": "Pass",
+      "Comment": "Catch only sets $.error — normalize so NotifyFailure's Parameters always resolve",
+      "Parameters": {
+        "failure_reason.$": "$.error.Cause"
+      },
+      "ResultPath": "$.provision_result",
+      "Next": "NotifyFailure"
+    },
+
+    "NotifySuccess": {
+      "Type": "Task",
+      "Resource": "${status_notifier_arn}",
+      "Parameters": {
+        "ticket_id.$": "$.ticket_id",
+        "service_name.$": "$.service_name",
+        "service_url.$": "$.provision_result.service_url",
+        "succeeded": true,
+        "environment.$": "$.environment"
+      },
+      "End": true
+    },
+
+    "NotifyFailure": {
+      "Type": "Task",
+      "Resource": "${status_notifier_arn}",
+      "Parameters": {
+        "ticket_id.$": "$.ticket_id",
+        "service_name.$": "$.service_name",
+        "succeeded": false,
+        "failure_reason.$": "$.provision_result.failure_reason",
+        "environment.$": "$.environment"
+      },
+      "Next": "Fail"
+    },
+
+    "Fail": {
+      "Type": "Fail",
+      "Error": "FargateProvisioningFailed",
+      "Cause": "ECS service provisioning failed — check CloudWatch logs for fargate_provisioner"
+    }
+  }
+}

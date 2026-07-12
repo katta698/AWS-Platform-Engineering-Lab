@@ -136,16 +136,18 @@ In your ServiceNow developer instance, complete the following three parts **in o
 5. Under HTTP Methods → New
 6. Name: `provision`, HTTP Method: `POST`
 7. Content-Type header: `application/json`
-8. HTTP Request Body:
-```json
-{
-  "ticket_id": "${ticket_number}",
-  "db_name": "${db_name}",
-  "team": "${team}",
-  "requested_by": "${requested_by}"
-}
-```
+8. Leave the request body empty here — the Business Rule in Part C builds it
+   dynamically and sets it via `setRequestBody()`, because the HMAC signature
+   (added below, fixed 2026-07-12) must be computed over the *exact* bytes
+   sent. A statically templated body here could serialize slightly
+   differently than the script-computed HMAC expects, breaking signature
+   validation on the Lambda side.
 9. Save
+10. Search → "System Properties" → New. Name: `x_aurora.webhook_secret`,
+    Type: `password (2 way encrypted)`, Value: the same secret you set as
+    `webhook_secret` in this week's deploy config (GitHub secret
+    `WEBHOOK_SECRET`). The Business Rule in Part C reads this via
+    `gs.getProperty()` — never hardcode the secret directly in the script.
 
 ---
 
@@ -179,9 +181,15 @@ In your ServiceNow developer instance, complete the following three parts **in o
 
 **Part C — Create Business Rule** *(fires automatically when catalog item is submitted)*
 
-> The Business Rule reads the catalog variables (`db_name`, `team`) and calls
-> the Outbound REST Message you created in Part A. It runs server-side after
-> the RITM record is inserted — no user action required.
+> The Business Rule reads the catalog variables (`db_name`, `team`), signs
+> the request with HMAC-SHA256, and calls the Outbound REST Message you
+> created in Part A. It runs server-side after the RITM record is inserted
+> — no user action required.
+>
+> **Fixed 2026-07-12**: this script previously sent the request unsigned —
+> `webhook_receiver`'s HMAC validation would have rejected every real
+> submission with `401 Unauthorized`. The version below computes and sends
+> the `x-servicenow-hmac` header the Lambda actually requires.
 
 1. Search → "Business Rules" → New
 2. Name: `Trigger DB Provisioning`
@@ -192,11 +200,25 @@ In your ServiceNow developer instance, complete the following three parts **in o
 ```javascript
 (function executeRule(current, previous) {
   try {
+    var body = JSON.stringify({
+      ticket_id:    current.number.toString(),
+      db_name:      current.variables.db_name.toString(),
+      team:         current.variables.team.toString(),
+      requested_by: current.opened_by.user_name.toString()
+    });
+
+    var secret = gs.getProperty('x_aurora.webhook_secret');
+
+    var mac = new GlideCertificateEncryption();
+    var keyBase64 = GlideStringUtil.base64Encode(secret);
+    var macBase64 = mac.generateMac(keyBase64, 'HmacSHA256', body);
+    var macBytes  = GlideStringUtil.base64DecodeAsBytes(macBase64);
+    var macHex    = HexUtil.convertByteArrayToHex(macBytes).toLowerCase();
+    var signature = 'sha256=' + macHex;
+
     var r = new sn_ws.RESTMessageV2('AWS DB Provisioning', 'provision');
-    r.setStringParameterNoEscape('ticket_number', current.number);
-    r.setStringParameterNoEscape('db_name', current.variables.db_name.toString());
-    r.setStringParameterNoEscape('team', current.variables.team.toString());
-    r.setStringParameterNoEscape('requested_by', current.opened_by.user_name);
+    r.setRequestBody(body);
+    r.setRequestHeader('x-servicenow-hmac', signature);
     var response = r.execute();
     gs.info('DB provisioning triggered: ' + response.getStatusCode());
   } catch(ex) {

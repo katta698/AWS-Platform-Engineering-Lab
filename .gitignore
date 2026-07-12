@@ -54,3 +54,6 @@ Thumbs.db
 SESSION_CONTEXT.md
 WEEK_TEMPLATE.md
 BRIEFINGS.md
+
+# ServiceNow credentials — local only, read by scripts/servicenow/*.py, never committed
+.servicenow.env
