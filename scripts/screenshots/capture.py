@@ -25,12 +25,46 @@ Examples:
     python capture.py "https://app.terraform.io/app/katta/workspaces/week-09-dev/runs" out.png
 """
 import argparse
+import subprocess
 from pathlib import Path
 
 from playwright.sync_api import sync_playwright
 
 REPO_ROOT = Path(__file__).resolve().parents[2]  # .../AWS-Platform-Engineering-Lab
 PROFILE_DIR = REPO_ROOT / "playwright_profile"
+
+
+def get_aws_account_id() -> str | None:
+    try:
+        result = subprocess.run(
+            ["aws", "sts", "get-caller-identity", "--query", "Account", "--output", "text"],
+            capture_output=True, text=True, timeout=10,
+        )
+        account_id = result.stdout.strip()
+        return account_id if account_id else None
+    except Exception:
+        return None
+
+
+def redact_account_id(page, account_id: str) -> None:
+    # AWS Console shows the account ID in the top-right account badge on
+    # every page. Blog posts are public - same rule as READMEs never
+    # including the account ID. Found exposed on 3 real screenshots,
+    # 2026-07-12 (03-ecs-cluster, 07-step-functions-execution,
+    # 08-ecs-service-running) before this redaction existed.
+    # DOM text replacement (not pixel-coordinate cropping) so this works
+    # regardless of which console page or layout is being captured.
+    page.evaluate(f"""
+        () => {{
+            const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+            let node;
+            while (node = walker.nextNode()) {{
+                if (node.textContent.includes('{account_id}')) {{
+                    node.textContent = node.textContent.replaceAll('{account_id}', '<account-id>');
+                }}
+            }}
+        }}
+    """)
 
 
 def capture(url: str, output_path: Path, wait_selector: str | None, wait_ms: int | None,
@@ -70,6 +104,14 @@ def capture(url: str, output_path: Path, wait_selector: str | None, wait_ms: int
             page.wait_for_selector(wait_selector, timeout=15000)
         if wait_ms:
             page.wait_for_timeout(wait_ms)
+
+        if "console.aws.amazon.com" in url or "signin.aws.amazon.com" in url:
+            account_id = get_aws_account_id()
+            if account_id:
+                redact_account_id(page, account_id)
+                print(f"Redacted account ID from page text before capture")
+            else:
+                print("WARNING: could not resolve AWS account ID to redact - check manually before publishing")
 
         # full_page=False (viewport-only, 1400x900) is the deliberate choice
         # here, not full_page=True - SPA pages (AWS Console especially) often
