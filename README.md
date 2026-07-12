@@ -21,7 +21,7 @@
 | [Week 06](./week-06-account-vending-machine) | Account Vending Machine (simulated, no Control Tower) | AWS Organizations, SCPs, Step Functions, Lambda, API Gateway, HCP Terraform | ✅ Complete |
 | [Week 07](./week-07-identity-center-sso) | IAM Identity Center SSO (multi-account permission sets) | IAM Identity Center, Identity Store, Permission Sets, AWS Organizations, HCP Terraform | ✅ Complete |
 | [Week 08](./week-08-s3-intelligent-storage) | S3 Intelligent Storage Platform | S3 Intelligent-Tiering, Lifecycle Policies, Cost Automation | ✅ Complete |
-| Week 09 | ECS Fargate Self-Service | ECS Fargate, ECR, ALB, Task Definitions, ServiceNow | 📅 Planned |
+| [Week 09](./week-09-ecs-fargate-self-service) | ECS Fargate Self-Service | ECS Fargate, ECR, ALB, Task Definitions, ServiceNow | ✅ Complete |
 
 ### Phase 2 — Observability & Security (Weeks 10–17)
 
@@ -282,6 +282,27 @@ Every project follows the same enterprise pattern:
 - S3 bucket notification `depends_on` Lambda permission or the notification silently fails
 
 **Resources:** 18 Terraform resources | **Blog:** https://jayanthkatta.com/blog/week-8-s3-intelligent-storage-platform/
+
+---
+
+## Week 09 — ECS Fargate Self-Service
+
+**The story:** Deploying a containerized service today means someone hand-builds an ECS cluster, task definition, ALB target group, listener rule, security groups, and auto-scaling policy — an hour of work, repeated inconsistently every time. This platform turns a ServiceNow ticket into a running, load-balanced, auto-scaling Fargate service in minutes, no server management, no manual ALB wiring.
+
+**What it builds:**
+- VPC with no NAT Gateway — private-subnet AWS API access via VPC Endpoints (ECR api + dkr, CloudWatch Logs, S3 gateway) instead
+- Shared ECS cluster (`FARGATE` + `FARGATE_SPOT`) and shared Application Load Balancer — every self-service ticket adds a path-based routing rule (`/<service-name>/*`) to the same ALB rather than standing up a new one
+- Lambda `webhook_receiver` (HMAC validation) → Step Functions `ProvisionService` → Lambda `fargate_provisioner` (creates ECR repo, task definition, target group, listener rule, ECS service, and auto-scaling target per ticket via boto3) → Lambda `status_notifier` (closes the ServiceNow ticket)
+- Deployed via **HCP Terraform** (VCS-driven, org: Katta, workspace: week-09-dev)
+
+**Key lessons learned:**
+- No NAT Gateway rules out AWS's Public ECR Gallery (`public.ecr.aws`) — confirmed via a real `CannotPullContainerError` timeout; every ticket's image must already live in private ECR
+- ALB has no path-rewrite action — the health check path must match the app's own `/<service>/` prefix exactly, or a genuinely healthy task gets killed
+- Any Lambda behind a Step Functions `Retry` block must be idempotent — a retry re-invoked `fargate_provisioner` after a partial success and hit `InvalidParameterException: ... was not idempotent` until every creation call became check-before-create
+- Application Auto Scaling needs its own one-time `iam:CreateServiceLinkedRole` per account — easy to miss until the first real ticket in a fresh account
+- ServiceNow's Table API close call needs the ticket's `sys_id`, not its display number (`RITM...`) — a repeat of Week 4's own documented lesson, re-learned the hard way because it wasn't cross-checked before building this pipeline
+
+**Resources:** 50 Terraform resources | **Blog:** https://jayanthkatta.com/blog/week-9-ecs-fargate-self-service/
 
 ---
 
