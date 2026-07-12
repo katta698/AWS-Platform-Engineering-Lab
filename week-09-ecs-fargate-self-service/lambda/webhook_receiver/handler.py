@@ -62,11 +62,12 @@ def lambda_handler(event, context):
     memory         = int(payload.get("memory", 512))
     desired_count  = int(payload.get("desired_count", 1))
 
-    if not ticket_sys_id:
-        # Week 4's lesson: the ServiceNow Table API PATCH endpoint needs the
-        # record's sys_id (GUID), not its display number (e.g. RITM0010023)
-        # — status_notifier needs this to actually close the ticket.
-        return {"statusCode": 400, "body": json.dumps({"error": "ticket_sys_id is required"})}
+    # ticket_sys_id is optional, not required: real ServiceNow submissions
+    # always send it (needed for status_notifier to close the ticket - see
+    # Week 4's sys_id-vs-number lesson), but scripts/test_webhook.sh
+    # exercises the AWS-side pipeline directly with no ServiceNow ticket to
+    # close at all. status_notifier skips the ServiceNow update gracefully
+    # if this is empty, rather than failing the whole execution.
 
     if not service_name or not SERVICE_NAME_RE.match(service_name):
         return {"statusCode": 400, "body": json.dumps({

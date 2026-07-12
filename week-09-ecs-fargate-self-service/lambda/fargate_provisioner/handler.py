@@ -94,13 +94,20 @@ def create_target_group(service_name: str, container_port: int) -> str:
         if e.response["Error"]["Code"] != "TargetGroupNotFoundException":
             raise
 
+    # Health check path must match the service's own path prefix, not a
+    # hardcoded "/" -- ALB forwards the full path (no rewriting), so apps
+    # behind this platform are expected to serve under /<service_name>/,
+    # and a bare "/" will 404 exactly like the real traffic path would.
+    # Found via a real failed deployment on Week 9 (2026-07-12): ECS killed
+    # a genuinely-working task because its health check hit "/" while the
+    # app only served content under "/demo-nginx/".
     resp = elbv2.create_target_group(
         Name=tg_name,
         Port=container_port,
         Protocol="HTTP",
         VpcId=VPC_ID,
         TargetType="ip",
-        HealthCheckPath="/",
+        HealthCheckPath=f"/{service_name}/",
         HealthCheckIntervalSeconds=30,
         HealthyThresholdCount=2,
         UnhealthyThresholdCount=3,

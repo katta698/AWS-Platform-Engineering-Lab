@@ -54,7 +54,7 @@ def lambda_handler(event, context):
     logger.info("Event: %s", json.dumps(event))
 
     ticket_id     = event.get("ticket_id", "UNKNOWN")
-    ticket_sys_id = event.get("ticket_sys_id", "")
+    ticket_sys_id = event.get("ticket_sys_id") or ""
     succeeded     = event.get("succeeded", False)
     service_name  = event.get("service_name", "unknown")
 
@@ -73,6 +73,12 @@ def lambda_handler(event, context):
         failure_reason = event.get("failure_reason", "UNKNOWN")
         notes  = f"ECS Fargate self-service provisioning FAILED. Reason: {failure_reason}"
         status = "Provisioning FAILED"
+
+    if not ticket_sys_id:
+        # No real ServiceNow ticket to close - e.g. a manual test_webhook.sh
+        # run exercising the AWS-side pipeline directly. Not an error.
+        logger.info("No ticket_sys_id provided, skipping ServiceNow update (manual/test invocation)")
+        return {**event, "snow_updated": False, "status": status}
 
     try:
         snow_instance = get_param(SNOW_INSTANCE_PARAM)
