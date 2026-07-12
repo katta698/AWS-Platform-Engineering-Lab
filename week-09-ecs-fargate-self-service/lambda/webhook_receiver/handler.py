@@ -54,12 +54,19 @@ def lambda_handler(event, context):
 
     payload = json.loads(body)
     ticket_id      = payload.get("ticket_id", "UNKNOWN")
+    ticket_sys_id  = payload.get("ticket_sys_id")
     service_name   = payload.get("service_name")
     image_uri      = payload.get("image_uri")
     container_port = payload.get("container_port")
     cpu            = int(payload.get("cpu", 256))
     memory         = int(payload.get("memory", 512))
     desired_count  = int(payload.get("desired_count", 1))
+
+    if not ticket_sys_id:
+        # Week 4's lesson: the ServiceNow Table API PATCH endpoint needs the
+        # record's sys_id (GUID), not its display number (e.g. RITM0010023)
+        # — status_notifier needs this to actually close the ticket.
+        return {"statusCode": 400, "body": json.dumps({"error": "ticket_sys_id is required"})}
 
     if not service_name or not SERVICE_NAME_RE.match(service_name):
         return {"statusCode": 400, "body": json.dumps({
@@ -80,6 +87,7 @@ def lambda_handler(event, context):
 
     execution_input = {
         "ticket_id":      ticket_id,
+        "ticket_sys_id":  ticket_sys_id,
         "service_name":   service_name,
         "image_uri":      image_uri,
         "container_port": int(container_port),

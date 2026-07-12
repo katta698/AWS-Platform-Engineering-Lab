@@ -83,7 +83,17 @@ def register_task_definition(service_name: str, image_uri: str, container_port: 
 
 
 def create_target_group(service_name: str, container_port: int) -> str:
+    # Idempotent: Step Functions retries the whole Lambda on failure. If an
+    # earlier attempt already created this target group before a later step
+    # failed, reuse it instead of erroring on a duplicate name.
     tg_name = f"{service_name}-tg"[:32]
+    try:
+        existing = elbv2.describe_target_groups(Names=[tg_name])
+        return existing["TargetGroups"][0]["TargetGroupArn"]
+    except ClientError as e:
+        if e.response["Error"]["Code"] != "TargetGroupNotFoundException":
+            raise
+
     resp = elbv2.create_target_group(
         Name=tg_name,
         Port=container_port,
@@ -105,19 +115,44 @@ def next_rule_priority() -> int:
 
 
 def create_path_rule(service_name: str, target_group_arn: str) -> None:
+    # Idempotent: skip if a rule with this exact path pattern already exists
+    # (e.g. from an earlier retry attempt) rather than adding a duplicate.
+    path_values = [f"/{service_name}/*", f"/{service_name}"]
+    existing_rules = elbv2.describe_rules(ListenerArn=ALB_LISTENER_ARN)["Rules"]
+    for rule in existing_rules:
+        for cond in rule.get("Conditions", []):
+            if cond.get("Field") == "path-pattern" and set(cond.get("Values", [])) == set(path_values):
+                logger.info("Path rule for %s already exists, reusing", service_name)
+                return
+
     elbv2.create_rule(
         ListenerArn=ALB_LISTENER_ARN,
         Priority=next_rule_priority(),
-        Conditions=[{"Field": "path-pattern", "Values": [f"/{service_name}/*", f"/{service_name}"]}],
+        Conditions=[{"Field": "path-pattern", "Values": path_values}],
         Actions=[{"Type": "forward", "TargetGroupArn": target_group_arn}],
     )
 
 
 def create_ecs_service(service_name: str, task_definition_arn: str, target_group_arn: str,
                         container_port: int, desired_count: int) -> None:
+    full_name = f"{PROJECT_NAME}-{service_name}"
+
+    # Idempotent: ecs.create_service is NOT idempotent on its own — calling
+    # it again for a service that already exists raises
+    # "Creation of service was not idempotent", which is exactly what
+    # happened on Step Functions' retry after enable_autoscaling failed on
+    # attempt 1 (the service had already been created by then). Check first;
+    # update the existing service's task definition instead of re-creating.
+    existing = ecs.describe_services(cluster=CLUSTER_NAME, services=[full_name])
+    active = [s for s in existing.get("services", []) if s["status"] == "ACTIVE"]
+    if active:
+        logger.info("Service %s already exists (ACTIVE), updating task definition instead of creating", full_name)
+        ecs.update_service(cluster=CLUSTER_NAME, service=full_name, taskDefinition=task_definition_arn, desiredCount=desired_count)
+        return
+
     ecs.create_service(
         cluster=CLUSTER_NAME,
-        serviceName=f"{PROJECT_NAME}-{service_name}",
+        serviceName=full_name,
         taskDefinition=task_definition_arn,
         desiredCount=desired_count,
         launchType="FARGATE",

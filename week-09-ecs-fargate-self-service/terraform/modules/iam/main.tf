@@ -149,6 +149,21 @@ resource "aws_iam_role_policy" "fargate_provisioner_permissions" {
         Resource = "*"
       },
       {
+        # Application Auto Scaling needs to create its ECS service-linked
+        # role the first time it's ever used against ECS in this account.
+        # Without this, RegisterScalableTarget fails with "User is missing
+        # the following permissions: iam:CreateServiceLinkedRole" — found via
+        # a real failed Step Functions execution on Week 9 (2026-07-12), not
+        # anticipated in the original design.
+        Sid      = "CreateAutoScalingServiceLinkedRole"
+        Effect   = "Allow"
+        Action   = ["iam:CreateServiceLinkedRole"]
+        Resource = "arn:aws:iam::*:role/aws-service-role/ecs.application-autoscaling.amazonaws.com/AWSServiceRoleForApplicationAutoScaling_ECSService"
+        Condition = {
+          StringLike = { "iam:AWSServiceName" = "ecs.application-autoscaling.amazonaws.com" }
+        }
+      },
+      {
         Sid      = "PassExecutionRoleToEcs"
         Effect   = "Allow"
         Action   = ["iam:PassRole"]

@@ -21,14 +21,20 @@ from pathlib import Path
 
 import requests
 
-REPO_ROOT = Path(__file__).resolve().parents[2]  # .../AWS-Platform-Engineering-Lab
+REPO_ROOT = Path(__file__).resolve().parents[3]  # .../AWS-Platform-Engineering-Lab
 ENV_FILE = REPO_ROOT / ".servicenow.env"
 
 PROJECT_LABEL = "ECS Fargate Self-Service"
 CAT_ITEM_NAME = "ECS Fargate Self-Service"
 REST_MESSAGE_NAME = "AWS Fargate Self-Service"
 BUSINESS_RULE_NAME = "Trigger Fargate Provisioning"
-WEBHOOK_SECRET_PROPERTY = "x_fargate.webhook_secret"
+# Shared across every ServiceNow-driven week (webhook_secret is already
+# shared in the HCP variable set) — set this system property's value ONCE,
+# ever. Do not namespace this per-week; every future week's script should
+# reuse this exact same name so the manual "set the secret" step in
+# ServiceNow only ever has to happen one time.
+WEBHOOK_SECRET_PROPERTY = "x_platform_lab.webhook_secret"
+DEFAULT_CATALOG_NAME = "Service Catalog"
 
 CATALOG_VARIABLES = [
     ("service_name", "Service Name (lowercase, hyphens only)", True),
@@ -54,8 +60,9 @@ def load_env(path: Path) -> dict:
             continue
         key, _, val = line.partition("=")
         values[key.strip()] = val.strip()
+    placeholders = {"SNOW_INSTANCE": "devXXXXXX", "SNOW_USERNAME": "your-servicenow-admin-or-service-account", "SNOW_PASSWORD": "your-servicenow-password"}
     for required in ("SNOW_INSTANCE", "SNOW_USERNAME", "SNOW_PASSWORD"):
-        if required not in values or not values[required] or values[required].startswith("your-") or values[required].startswith("dev"):
+        if required not in values or not values[required] or values[required] == placeholders[required]:
             sys.exit(f"{required} looks unset/placeholder in {path} — fill in a real value.")
     return values
 
@@ -73,6 +80,13 @@ class ServiceNowClient:
             raise RuntimeError(f"POST {table} failed [{resp.status_code}]: {resp.text}")
         return resp.json()["result"]
 
+    def find_one(self, table: str, query: str) -> dict | None:
+        resp = self.session.get(f"{self.base_url}/{table}", params={"sysparm_query": query, "sysparm_limit": "1"})
+        if resp.status_code != 200:
+            raise RuntimeError(f"GET {table} failed [{resp.status_code}]: {resp.text}")
+        results = resp.json()["result"]
+        return results[0] if results else None
+
 
 def main():
     if len(sys.argv) != 2:
@@ -83,16 +97,22 @@ def main():
     sn = ServiceNowClient(env["SNOW_INSTANCE"], env["SNOW_USERNAME"], env["SNOW_PASSWORD"])
 
     print("=== 1. Webhook secret as a password-type system property ===")
-    print(f"NOTE: this creates the PROPERTY only — you still set its value")
-    print(f"      yourself in ServiceNow (System Properties UI), same rule as")
-    print(f"      every other secret in this project: never entered by the script.")
-    prop = sn.create("sys_properties", {
-        "name": WEBHOOK_SECRET_PROPERTY,
-        "type": "password2",
-        "value": "REPLACE_ME_IN_SERVICENOW_UI",
-        "description": "HMAC-SHA256 secret shared with the AWS webhook_receiver Lambda for Week 9",
-    })
-    print(f"  Created sys_properties: {prop['name']} (sys_id {prop['sys_id']})")
+    print(f"      Shared across every ServiceNow-driven week — only created")
+    print(f"      once, ever. If it already exists this step is skipped.")
+    existing_prop = sn.find_one("sys_properties", f"name={WEBHOOK_SECRET_PROPERTY}")
+    if existing_prop:
+        print(f"  Already exists: {WEBHOOK_SECRET_PROPERTY} (sys_id {existing_prop['sys_id']}) — skipping creation")
+    else:
+        print(f"NOTE: this creates the PROPERTY only — you still set its value")
+        print(f"      yourself in ServiceNow (System Properties UI), same rule as")
+        print(f"      every other secret in this project: never entered by the script.")
+        prop = sn.create("sys_properties", {
+            "name": WEBHOOK_SECRET_PROPERTY,
+            "type": "password2",
+            "value": "REPLACE_ME_IN_SERVICENOW_UI",
+            "description": "HMAC-SHA256 secret shared with every AWS webhook_receiver Lambda across all weeks",
+        })
+        print(f"  Created sys_properties: {prop['name']} (sys_id {prop['sys_id']})")
 
     print("\n=== 2. Outbound REST Message ===")
     rest_message = sn.create("sys_rest_message", {
@@ -102,25 +122,43 @@ def main():
     })
     print(f"  Created sys_rest_message: {rest_message['name']} (sys_id {rest_message['sys_id']})")
 
+    # The method's identifying field is `function_name`, NOT `name` — using
+    # `name` here silently no-ops (Table API ignores unknown field keys
+    # rather than erroring), leaving function_name blank. Confirmed via a
+    # real "REST message/method ... not found" error on Week 9 (2026-07-12):
+    # sn_ws.RESTMessageV2(message_name, method_name) looks up by
+    # function_name, so a blank one makes the method unfindable at runtime.
     rest_fn = sn.create("sys_rest_message_fn", {
         "rest_message": rest_message["sys_id"],
-        "name": "provision",
+        "function_name": "provision",
         "http_method": "POST",
         "content_type": "application/json",
     })
     print(f"  Created sys_rest_message_fn: provision (sys_id {rest_fn['sys_id']})")
 
     print("\n=== 3. Service Catalog Item ===")
+    catalog = sn.find_one("sc_catalog", f"title={DEFAULT_CATALOG_NAME}")
+    catalog_fields = {"sc_catalogs": catalog["sys_id"]} if catalog else {}
+    if not catalog:
+        print(f"  WARNING: catalog '{DEFAULT_CATALOG_NAME}' not found — creating item without "
+              f"a Catalogs assignment. Set it manually in Catalog Builder or it won't appear "
+              f"in the portal (same gotcha Week 2's manual setup hit).")
+
     cat_item = sn.create("sc_cat_item", {
         "name": CAT_ITEM_NAME,
         "short_description": "Deploy a containerized service on ECS Fargate — self-service, no manual AWS console work",
         "active": "true",
+        **catalog_fields,
     })
     print(f"  Created sc_cat_item: {cat_item['name']} (sys_id {cat_item['sys_id']})")
-    print("  NOTE: 'Catalogs' field (which catalog it appears in) isn't set by "
-          "this script — Week 2's manual setup found this defaults to empty and "
-          "the item won't appear in the portal until it's set. Set it yourself "
-          "in Catalog Builder after this runs.")
+    if catalog:
+        print(f"  Set Catalogs = '{DEFAULT_CATALOG_NAME}' directly ({catalog['sys_id']}) at "
+              f"creation time. NOT YET CONFIRMED whether setting this field via the API on "
+              f"create produces the same sc_cat_item_catalog join-table sync that saving it "
+              f"through the UI form does (only the UI path has been observed so far). Check "
+              f"the portal after this runs — if the item isn't visible, open it in Catalog "
+              f"Builder and re-save the Catalogs field manually once, then report back so "
+              f"this note can be corrected either way.")
 
     for order, (name, label, mandatory) in enumerate(CATALOG_VARIABLES, start=1):
         var = sn.create("item_option_new", {
@@ -138,6 +176,7 @@ def main():
   try {{
     var body = JSON.stringify({{
       ticket_id:      current.number.toString(),
+      ticket_sys_id:  current.sys_id.toString(),
       service_name:   current.variables.service_name.toString(),
       image_uri:      current.variables.image_uri.toString(),
       container_port: parseInt(current.variables.container_port.toString()),
@@ -152,7 +191,16 @@ def main():
     var keyBase64 = GlideStringUtil.base64Encode(secret);
     var macBase64 = mac.generateMac(keyBase64, 'HmacSHA256', body);
     var macBytes  = GlideStringUtil.base64DecodeAsBytes(macBase64);
-    var macHex    = HexUtil.convertByteArrayToHex(macBytes).toLowerCase();
+
+    // HexUtil.convertByteArrayToHex() is NOT available in this scripting
+    // context despite being documented that way in ServiceNow community
+    // posts — confirmed via a real "HexUtil is not defined" error on Week 9
+    // (2026-07-12). Plain-JS conversion instead, no platform-specific class.
+    var macHex = '';
+    for (var i = 0; i < macBytes.length; i++) {{
+      var b = macBytes[i] & 0xFF;
+      macHex += (b < 16 ? '0' : '') + b.toString(16);
+    }}
     var signature = 'sha256=' + macHex;
 
     var r = new sn_ws.RESTMessageV2('{REST_MESSAGE_NAME}', 'provision');

@@ -143,7 +143,9 @@ In your ServiceNow developer instance, complete the following three parts **in o
    differently than the script-computed HMAC expects, breaking signature
    validation on the Lambda side.
 9. Save
-10. Search → "System Properties" → New. Name: `x_aurora.webhook_secret`,
+10. Search → "System Properties" → New. Name: `x_platform_lab.webhook_secret`
+    (shared across every ServiceNow-driven week — only set this once, ever;
+    skip this step if it already exists from another week),
     Type: `password (2 way encrypted)`, Value: the same secret you set as
     `webhook_secret` in this week's deploy config (GitHub secret
     `WEBHOOK_SECRET`). The Business Rule in Part C reads this via
@@ -188,8 +190,14 @@ In your ServiceNow developer instance, complete the following three parts **in o
 >
 > **Fixed 2026-07-12**: this script previously sent the request unsigned —
 > `webhook_receiver`'s HMAC validation would have rejected every real
-> submission with `401 Unauthorized`. The version below computes and sends
-> the `x-servicenow-hmac` header the Lambda actually requires.
+> submission with `401 Unauthorized`. **Fixed again same day**: the first fix
+> used `HexUtil.convertByteArrayToHex()`, which turned out not to actually
+> exist in this scripting context — confirmed via a real `"HexUtil" is not
+> defined` error hit while testing Week 9's identical script against a live
+> instance. Replaced with a plain-JavaScript byte-to-hex loop that doesn't
+> depend on any ServiceNow-specific class. Also updated to the shared
+> `x_platform_lab.webhook_secret` system property (see Week 9's
+> `SESSION_CONTEXT.md` note) instead of a per-week-namespaced one.
 
 1. Search → "Business Rules" → New
 2. Name: `Trigger DB Provisioning`
@@ -207,13 +215,18 @@ In your ServiceNow developer instance, complete the following three parts **in o
       requested_by: current.opened_by.user_name.toString()
     });
 
-    var secret = gs.getProperty('x_aurora.webhook_secret');
+    var secret = gs.getProperty('x_platform_lab.webhook_secret');
 
     var mac = new GlideCertificateEncryption();
     var keyBase64 = GlideStringUtil.base64Encode(secret);
     var macBase64 = mac.generateMac(keyBase64, 'HmacSHA256', body);
     var macBytes  = GlideStringUtil.base64DecodeAsBytes(macBase64);
-    var macHex    = HexUtil.convertByteArrayToHex(macBytes).toLowerCase();
+
+    var macHex = '';
+    for (var i = 0; i < macBytes.length; i++) {
+      var b = macBytes[i] & 0xFF;
+      macHex += (b < 16 ? '0' : '') + b.toString(16);
+    }
     var signature = 'sha256=' + macHex;
 
     var r = new sn_ws.RESTMessageV2('AWS DB Provisioning', 'provision');

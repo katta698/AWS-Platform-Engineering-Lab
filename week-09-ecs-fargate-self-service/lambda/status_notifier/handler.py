@@ -24,8 +24,11 @@ def get_param(name: str) -> str:
     return ssm.get_parameter(Name=name, WithDecryption=True)["Parameter"]["Value"]
 
 
-def update_snow_ticket(instance: str, user: str, password: str, ticket_id: str, status: str, notes: str):
-    url = f"https://{instance}.service-now.com/api/now/table/sc_req_item/{ticket_id}"
+def update_snow_ticket(instance: str, user: str, password: str, ticket_sys_id: str, status: str, notes: str):
+    # Must be the record's sys_id (GUID), not its display number (RITM0010023)
+    # — Week 4's documented lesson, re-learned the hard way here on 2026-07-12
+    # via a real 404 from a live end-to-end test that used the number instead.
+    url = f"https://{instance}.service-now.com/api/now/table/sc_req_item/{ticket_sys_id}"
     payload = json.dumps({
         "state":       "3",  # Closed Complete
         "close_notes": notes,
@@ -50,9 +53,10 @@ def update_snow_ticket(instance: str, user: str, password: str, ticket_id: str, 
 def lambda_handler(event, context):
     logger.info("Event: %s", json.dumps(event))
 
-    ticket_id    = event.get("ticket_id", "UNKNOWN")
-    succeeded    = event.get("succeeded", False)
-    service_name = event.get("service_name", "unknown")
+    ticket_id     = event.get("ticket_id", "UNKNOWN")
+    ticket_sys_id = event.get("ticket_sys_id", "")
+    succeeded     = event.get("succeeded", False)
+    service_name  = event.get("service_name", "unknown")
 
     if succeeded:
         service_url = event.get("service_url", "unknown")
@@ -74,7 +78,7 @@ def lambda_handler(event, context):
         snow_instance = get_param(SNOW_INSTANCE_PARAM)
         snow_user     = get_param(SNOW_USER_PARAM)
         snow_password = get_param(SNOW_PASSWORD_PARAM)
-        update_snow_ticket(snow_instance, snow_user, snow_password, ticket_id, status, notes)
+        update_snow_ticket(snow_instance, snow_user, snow_password, ticket_sys_id, status, notes)
         logger.info("ServiceNow ticket %s updated", ticket_id)
     except Exception as e:
         logger.error("Failed to update ServiceNow: %s", e)

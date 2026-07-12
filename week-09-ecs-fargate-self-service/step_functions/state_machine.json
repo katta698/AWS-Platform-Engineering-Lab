@@ -47,6 +47,7 @@
       "Resource": "${status_notifier_arn}",
       "Parameters": {
         "ticket_id.$": "$.ticket_id",
+        "ticket_sys_id.$": "$.ticket_sys_id",
         "service_name.$": "$.service_name",
         "service_url.$": "$.provision_result.service_url",
         "succeeded": true,
@@ -60,6 +61,7 @@
       "Resource": "${status_notifier_arn}",
       "Parameters": {
         "ticket_id.$": "$.ticket_id",
+        "ticket_sys_id.$": "$.ticket_sys_id",
         "service_name.$": "$.service_name",
         "succeeded": false,
         "failure_reason.$": "$.provision_result.failure_reason",
