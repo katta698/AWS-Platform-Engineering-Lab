@@ -24,6 +24,9 @@ from pathlib import Path
 
 from playwright.sync_api import sync_playwright
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from capture import get_aws_account_id, redact_account_id  # noqa: E402 - shared redaction logic, not duplicated
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PROFILE_DIR = REPO_ROOT / "playwright_profile_batch"  # separate from the persistent one - this is throwaway per run
 
@@ -62,6 +65,15 @@ def main(cookies_path: str, pairs: list[str]):
             output_path.parent.mkdir(parents=True, exist_ok=True)
             page.goto(url, wait_until="load", timeout=30000)
             page.wait_for_timeout(6000)
+
+            if "console.aws.amazon.com" in url or "signin.aws.amazon.com" in url:
+                account_id = get_aws_account_id()
+                if account_id:
+                    redact_account_id(page, account_id)
+                    print("Redacted account ID from page text before capture")
+                else:
+                    print("WARNING: could not resolve AWS account ID to redact - check manually before publishing")
+
             # Viewport-only, not full_page - see capture.py for why (avoids
             # capturing a long tail of empty space below stuck-loading widgets).
             page.screenshot(path=str(output_path), full_page=False)
