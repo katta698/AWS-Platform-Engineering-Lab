@@ -57,3 +57,7 @@ BRIEFINGS.md
 
 # ServiceNow credentials — local only, read by scripts/servicenow/*.py, never committed
 .servicenow.env
+
+# Playwright persistent browser profile — contains AWS Console/HCP/ServiceNow
+# login session cookies, local only, read by scripts/screenshots/capture.py
+playwright_profile/
