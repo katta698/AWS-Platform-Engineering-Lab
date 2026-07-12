@@ -61,3 +61,7 @@ BRIEFINGS.md
 # Playwright persistent browser profile — contains AWS Console/HCP/ServiceNow
 # login session cookies, local only, read by scripts/screenshots/capture.py
 playwright_profile/
+
+# Exported browser cookies (Cookie-Editor JSON, etc.) — local only, read once
+# by scripts/screenshots/import_cookies.py, delete after import if desired
+*cookies*.json
