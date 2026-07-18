@@ -1,0 +1,7 @@
+# Copy to terraform.tfvars (gitignored) for local plans, or set these as
+# HCP Terraform workspace variables (the deploy path this week actually uses).
+
+aws_region        = "us-east-1"
+source_account_id = "<SOURCE_ACCOUNT_ID>" # member account that produces logs
+source_role_name  = "OrganizationAccountAccessRole"
+alert_email       = "your-email@example.com"
