@@ -72,6 +72,11 @@ module "oam_spoke" {
     aws = aws.source
   }
   sink_arn = module.oam_hub.sink_arn
+
+  # sink_arn only orders this after the sink itself — CreateLink must also wait
+  # for the sink POLICY, or it races propagation and gets a 403 (hit for real
+  # on the first apply).
+  depends_on = [module.oam_hub]
 }
 
 # Scheduled Lambda in the source account emitting structured multi-level logs.
