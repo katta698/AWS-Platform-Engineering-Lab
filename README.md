@@ -27,7 +27,7 @@
 
 | Week | Project | Key AWS Services | Status |
 |------|---------|-----------------|--------|
-| Week 10 | Centralised Logging Platform | CloudWatch cross-account, OpenSearch, Log Aggregation | 📅 Planned |
+| [Week 10](./week-10-centralized-logging) | Centralised Logging Platform | CloudWatch OAM, Logs Centralization, Logs Insights, Lambda, EventBridge, SNS | ✅ Complete |
 | Week 11 | Security Hub + GuardDuty Automation | Security Hub, GuardDuty, EventBridge, Lambda auto-remediation | 📅 Planned |
 | Week 12 | AWS Config Compliance Automation | Config Rules, Auto-Remediation, Compliance Dashboard | 📅 Planned |
 | Week 13 | WAF + Shield Standard | WAF Web ACL, Rate Limiting, DDoS Protection, Managed Rules | 📅 Planned |
@@ -303,6 +303,29 @@ Every project follows the same enterprise pattern:
 - ServiceNow's Table API close call needs the ticket's `sys_id`, not its display number (`RITM...`) — a repeat of Week 4's own documented lesson, re-learned the hard way because it wasn't cross-checked before building this pipeline
 
 **Resources:** 50 Terraform resources | **Blog:** https://jayanthkatta.com/blog/week-9-ecs-fargate-self-service/
+
+---
+
+## Week 10 — Centralised Logging Platform
+
+**The story:** Every account in an organization hoards its own CloudWatch log groups — "show me every error across the platform in the last hour" means logging into N accounts and running the same query N times, and log evidence dies with the account that produced it. This platform fixes both with CloudWatch's 2025-era native primitives — no OpenSearch cluster, no Firehose pipeline, first centralized copy free.
+
+**What it builds:**
+- CloudWatch OAM sink + org-scoped sink policy in the monitoring account; OAM link in the source account — cross-account query-in-place for logs and metrics at $0, future vended accounts join automatically
+- Organization-wide Logs Centralization rule (`aws_observabilityadmin_centralization_rule_for_organization`, provider ≥ 6.21) physically copying `/platform-lab/*` log groups into the management account
+- Scheduled log-generator Lambda in the source account (structured JSON at weighted INFO/WARN/ERROR) so every layer has live multi-account traffic
+- Metric filter → alarm → SNS email on the centralized stream, plus a cross-account dashboard
+- Deployed via **HCP Terraform** (VCS-driven, org: Katta, workspace: week-10-dev); one manual org prerequisite (Organizations trusted access for CloudWatch — no Terraform resource exists)
+
+**Key lessons learned:**
+- The classic subscription-filter → Firehose → OpenSearch pattern is the architecture AWS itself is retiring (December 2026) — OAM + centralization rules replace it at near-zero cost
+- OAM *shares* (query in place, free, dies with the source account); centralization *copies* (durable, new-data-only) — run both, each covers the other's gap
+- An OAM link races the sink *policy*, not just the sink — `depends_on` the whole hub module or the first apply 403s
+- The CLI trusted-access path silently skips the required service-linked role the console would auto-create — pair `enable-aws-service-access` with an explicit `create-service-linked-role`
+- The org's one-time centralization onboarding can take a very long time ("Centralization is currently initializing") — never put an org-wide enablement with unbounded activation time on your critical path, and never add a `depends_on` that isn't structurally required
+- Infrequent Access log class halves ingestion cost but permanently disables metric filters — an irreversible per-log-group choice that must be made with the alerting design in view
+
+**Resources:** 17 Terraform resources | **Blog:** https://jayanthkatta.com/blog/week-10-centralized-logging/
 
 ---
 
