@@ -356,6 +356,8 @@ All workflows live at repo root `.github/workflows/` (GitHub only reads from thi
 
 All workflows use OIDC federation — no static AWS credentials stored in GitHub. IAM role: `github-actions-dev-deploy-role`.
 
+> **Why the table stops at Week 04:** from Week 05 onward, every week deploys through a **VCS-connected HCP Terraform workspace** (`week-XX-dev`, org `Katta`) instead of GitHub Actions — VCS-connected workspaces don't accept `terraform apply`/`destroy` from CI, so per-week workflow files would be dead code (Week 5 shipped them, discovered exactly that, and deleted them). For those weeks: push to `main` triggers a remote plan in HCP, applies are confirmed in the HCP UI, and destroys run from the workspace's Destruction settings. HCP authenticates to AWS via its own OIDC role (`hcp-terraform-role`) — still no static credentials anywhere.
+
 ---
 
 ## Common Patterns Across All Weeks
@@ -397,7 +399,9 @@ python --version       # Python 3.x
 
 ## Cost Philosophy
 
-All labs are designed to cost **$0 between sessions**:
+All labs are designed to cost **$0 between sessions**.
+
+For Weeks 01–04 (local Terraform / GitHub Actions):
 
 ```bash
 # Done for the day
@@ -407,6 +411,10 @@ sh scripts/cleanup.sh   # destroys everything in ~5 min
 sh scripts/deploy.sh    # rebuilds everything in ~10 min
 ```
 
+For Weeks 05+ (VCS-driven HCP Terraform workspaces), destroy and rebuild run in
+HCP instead: **workspace → Settings → Destruction and Deletion → Queue destroy
+plan**, and a git push (or "Start new plan") to rebuild.
+
 | Week | Cost if left running | Cost destroyed |
 |------|---------------------|----------------|
 | 01   | ~$65/month          | $0             |
@@ -414,6 +422,11 @@ sh scripts/deploy.sh    # rebuilds everything in ~10 min
 | 03   | ~$48/month          | $0             |
 | 04   | ~$0.22/run          | $0             |
 | 05   | ~$0/month (free tier) | $0           |
+| 06   | ~$0/month (Organizations/SCPs free; pennies per pipeline run) | $0 — but vended accounts are real and persist (separate manual cleanup) |
+| 07   | $0/month (IAM Identity Center is free) | $0 |
+| 08   | ~$1/month at lab data volumes | $0 |
+| 09   | ~$65/month (shared ALB ~$24 + VPC endpoints ~$22 + ~$18/running task) | $0 |
+| 10   | < $2/month (OAM free; first centralized copy free; bounded log storage) | $0 |
 
 ---
 
