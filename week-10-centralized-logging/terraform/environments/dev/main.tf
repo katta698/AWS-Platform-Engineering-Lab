@@ -102,7 +102,10 @@ module "log_centralization" {
 }
 
 # Metric filter -> alarm -> SNS email on the centralized copy, plus the
-# cross-account dashboard.
+# cross-account dashboard. Deliberately NOT ordered after the centralization
+# rule: this module pre-creates its own destination log group, so nothing here
+# needs the rule to exist — and an unnecessary depends_on kept this whole
+# module hostage to the rule's multi-day "initializing" outage.
 module "alerting" {
   source                     = "../../modules/alerting"
   project                    = var.project
@@ -111,6 +114,4 @@ module "alerting" {
   source_account_id          = var.source_account_id
   generator_function_name    = "${var.project}-log-generator"
   aws_region                 = var.aws_region
-
-  depends_on = [module.log_centralization]
 }
