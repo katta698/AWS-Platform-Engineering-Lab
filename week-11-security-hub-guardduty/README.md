@@ -79,6 +79,25 @@ it in the console for comparison.
 Anything **not** tagged for opt-in is left untouched and a notification is sent
 instead, so a human still sees it.
 
+## Prerequisite: AWS Config must be recording
+
+Security Hub's FSBP controls that this stack remediates (EC2.13/14/19, S3.2/3/8) are
+**backed by AWS Config**. Without a Config configuration recorder actively recording
+security groups and S3 buckets, those controls report `NO_DATA`, **no findings are
+generated, and nothing is remediated** — the pipeline deploys cleanly but does nothing.
+
+This stack does **not** provision Config (an account typically has one centrally-managed
+recorder; adding another conflicts). Confirm one is recording before deploying:
+
+```bash
+aws configservice describe-configuration-recorder-status \
+  --query 'ConfigurationRecordersStatus[].[name,recording,lastStatus]' --output text
+# want: <name>  True  SUCCESS
+```
+
+If nothing is recording, enable Config (all supported resource types) first — via your
+org's Config setup, or a minimal recorder + delivery channel in this account.
+
 ## Quick start
 
 This deploys via **HCP Terraform** (workspace `week-11-dev`, VCS-driven). HCP runs

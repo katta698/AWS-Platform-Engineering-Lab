@@ -25,6 +25,8 @@ Examples:
     python capture.py "https://app.terraform.io/app/katta/workspaces/week-09-dev/runs" out.png
 """
 import argparse
+import json
+import os
 import subprocess
 from pathlib import Path
 
@@ -46,6 +48,72 @@ def get_aws_account_id() -> str | None:
         return None
 
 
+def redact_strings(page, replacements: list) -> None:
+    # Generic redactor for arbitrary secrets that capture.py can't resolve
+    # itself (e.g. the subscriber email shown in an SNS subscriptions list).
+    # Pass values via the REDACT_EXTRA env var (comma-separated) so nothing
+    # sensitive is ever hardcoded into this committed script. Same
+    # MutationObserver approach as the account-id redactor so late/re-rendered
+    # nodes and value/title/aria-label attributes are all covered.
+    if not replacements:
+        return
+    page.evaluate(
+        """
+        (pairs) => {
+            const redactDoc = (doc) => {
+                const body = doc.body || doc.documentElement;
+                if (!body) return;
+                pairs.forEach(([find, repl]) => {
+                    if (!find) return;
+                    const walker = doc.createTreeWalker(body, NodeFilter.SHOW_TEXT);
+                    const hits = [];
+                    let node;
+                    while (node = walker.nextNode()) {
+                        if (node.textContent.includes(find)) hits.push(node);
+                    }
+                    hits.forEach(n => n.textContent = n.textContent.split(find).join(repl));
+                    body.querySelectorAll('[value],[title],[aria-label]').forEach(el => {
+                        ['value', 'title', 'aria-label'].forEach(a => {
+                            const v = el.getAttribute(a);
+                            if (v && v.includes(find)) el.setAttribute(a, v.split(find).join(repl));
+                        });
+                        if (el.value && el.value.includes && el.value.includes(find)) {
+                            el.value = el.value.split(find).join(repl);
+                        }
+                    });
+                });
+            };
+            const runAll = () => {
+                redactDoc(document);
+                document.querySelectorAll('iframe').forEach(f => {
+                    try {
+                        const d = f.contentDocument;
+                        if (d) {
+                            redactDoc(d);
+                            if (!f.__extraObs) {
+                                f.__extraObs = true;
+                                new MutationObserver(() => redactDoc(d)).observe(
+                                    d.body || d.documentElement,
+                                    {subtree: true, childList: true, characterData: true}
+                                );
+                            }
+                        }
+                    } catch (e) {}
+                });
+            };
+            runAll();
+            if (!window.__extraRedactorInstalled) {
+                window.__extraRedactorInstalled = true;
+                new MutationObserver(runAll).observe(
+                    document.documentElement, {subtree: true, childList: true, characterData: true}
+                );
+            }
+        }
+        """,
+        replacements,
+    )
+
+
 def redact_account_id(page, account_id: str) -> None:
     # AWS Console shows the account ID in the top-right account badge on
     # every page, AND in per-resource fields (e.g. EC2 SG "Owner"), ARNs,
@@ -62,29 +130,52 @@ def redact_account_id(page, account_id: str) -> None:
     page.evaluate(f"""
         () => {{
             const ACCT = '{account_id}';
-            const run = () => {{
-                const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+            const redactDoc = (doc) => {{
+                const body = doc.body || doc.documentElement;
+                if (!body) return;
+                const walker = doc.createTreeWalker(body, NodeFilter.SHOW_TEXT);
                 const hits = [];
                 let node;
                 while (node = walker.nextNode()) {{
                     if (node.textContent.includes(ACCT)) hits.push(node);
                 }}
-                hits.forEach(n => n.textContent = n.textContent.replaceAll(ACCT, '<account-id>'));
-                document.querySelectorAll('[value],[title],[aria-label]').forEach(el => {{
+                hits.forEach(n => n.textContent = n.textContent.split(ACCT).join('<account-id>'));
+                body.querySelectorAll('[value],[title],[aria-label]').forEach(el => {{
                     ['value', 'title', 'aria-label'].forEach(a => {{
                         const v = el.getAttribute(a);
-                        if (v && v.includes(ACCT)) el.setAttribute(a, v.replaceAll(ACCT, '<account-id>'));
+                        if (v && v.includes(ACCT)) el.setAttribute(a, v.split(ACCT).join('<account-id>'));
                     }});
                     if (el.value && el.value.includes && el.value.includes(ACCT)) {{
-                        el.value = el.value.replaceAll(ACCT, '<account-id>');
+                        el.value = el.value.split(ACCT).join('<account-id>');
                     }}
                 }});
             }};
-            run();
+            // AWS console renders many resource-detail panels inside same-origin
+            // iframes; the top-document-only walk missed the EC2 SG "Owner"
+            // field (2026-07-21). Descend into every reachable iframe too.
+            const runAll = () => {{
+                redactDoc(document);
+                document.querySelectorAll('iframe').forEach(f => {{
+                    try {{
+                        const d = f.contentDocument;
+                        if (d) {{
+                            redactDoc(d);
+                            if (!f.__acctObs) {{
+                                f.__acctObs = true;
+                                new MutationObserver(() => redactDoc(d)).observe(
+                                    d.body || d.documentElement,
+                                    {{subtree: true, childList: true, characterData: true}}
+                                );
+                            }}
+                        }}
+                    }} catch (e) {{}}
+                }});
+            }};
+            runAll();
             if (!window.__acctRedactorInstalled) {{
                 window.__acctRedactorInstalled = true;
-                new MutationObserver(run).observe(
-                    document.body, {{subtree: true, childList: true, characterData: true}}
+                new MutationObserver(runAll).observe(
+                    document.documentElement, {{subtree: true, childList: true, characterData: true}}
                 );
             }}
         }}
@@ -126,8 +217,28 @@ def capture(url: str, output_path: Path, wait_selector: str | None, wait_ms: int
         # that render after the initial pass.
         is_aws = "console.aws.amazon.com" in url or "signin.aws.amazon.com" in url
         account_id = get_aws_account_id() if is_aws else None
+        # Fail LOUD, don't save, if we can't resolve the account id on an AWS
+        # console page — a transient CLI hiccup returning None used to skip
+        # redaction with only a WARNING and silently leak the account id into a
+        # committed screenshot (caught on 05-eventbridge 2026-07-21). Refusing
+        # to save is the safe default; re-run once creds are healthy.
+        if is_aws and not account_id:
+            context.close()
+            raise SystemExit(
+                "ERROR: could not resolve AWS account ID on an AWS console page — "
+                "refusing to capture (would leak the account ID). Check AWS creds/SSO and retry."
+            )
+        # Extra secrets to redact (e.g. subscriber email) supplied out-of-band
+        # via REDACT_EXTRA=comma,separated so nothing sensitive is committed.
+        extras = [
+            [s.strip(), "<redacted>"]
+            for s in os.environ.get("REDACT_EXTRA", "").split(",")
+            if s.strip()
+        ]
         if account_id:
             redact_account_id(page, account_id)
+        if extras:
+            redact_strings(page, extras)
 
         if headed:
             print(f"Browser window open on this machine - log in within {login_wait_seconds}s...")
@@ -141,8 +252,9 @@ def capture(url: str, output_path: Path, wait_selector: str | None, wait_ms: int
         if account_id:
             redact_account_id(page, account_id)  # final pass; observer covers the rest
             print("Redacted account ID from page text before capture")
-        elif is_aws:
-            print("WARNING: could not resolve AWS account ID to redact - check manually before publishing")
+        if extras:
+            redact_strings(page, extras)  # final pass
+            print(f"Redacted {len(extras)} extra string(s) from REDACT_EXTRA")
 
         # full_page=False (viewport-only, 1400x900) is the deliberate choice
         # here, not full_page=True - SPA pages (AWS Console especially) often
