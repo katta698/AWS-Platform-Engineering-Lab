@@ -26,6 +26,12 @@ resource "aws_securityhub_account" "this" {
 resource "aws_securityhub_standards_subscription" "fsbp" {
   standards_arn = "arn:${data.aws_partition.current.partition}:securityhub:${data.aws_region.current.region}::standards/aws-foundational-security-best-practices/v/1.0.0"
   depends_on    = [aws_securityhub_account.this]
+
+  # FSBP has ~300 controls; on first enablement the subscription sits in PENDING
+  # longer than the provider's 3m default before reaching READY/INCOMPLETE.
+  timeouts {
+    create = "15m"
+  }
 }
 
 # One place to see findings across regions — matches a real multi-region posture
