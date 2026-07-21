@@ -1,0 +1,26 @@
+# Copy to terraform.tfvars (gitignored) for local runs, OR set these as
+# workspace variables in HCP Terraform (week-11-dev). alert_email is sensitive.
+
+aws_region  = "us-east-1"
+name_prefix = "week11-secrem"
+
+# Email that receives remediation results + GuardDuty threat alerts.
+# Set this as a SENSITIVE workspace variable in HCP, not in a committed file.
+alert_email = "your-email@example.com"
+
+# Guardrail: only resources carrying this tag are auto-remediated.
+remediation_tag_key   = "auto-remediate"
+remediation_tag_value = "true"
+
+# Ports the SG remediator closes to 0.0.0.0/0 (SSH, RDP by default).
+high_risk_ports = "22,3389"
+
+# GuardDuty findings below this severity are not paged (Medium+ by default).
+guardduty_min_severity = "4.0"
+
+# Failed controls on resources tagged environment=production escalate to CRITICAL.
+production_tag_key   = "environment"
+production_tag_value = "production"
+
+finding_publishing_frequency = "FIFTEEN_MINUTES"
+log_retention_days           = 30
