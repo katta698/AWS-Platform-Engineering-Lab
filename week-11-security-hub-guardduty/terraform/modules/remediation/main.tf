@@ -36,7 +36,12 @@ locals {
           findings = {
             Compliance  = { SecurityControlId = ["EC2.13", "EC2.14", "EC2.19"] }
             RecordState = ["ACTIVE"]
-            Workflow    = { Status = ["NEW", "NOTIFIED"] }
+            # NEW only — matching NOTIFIED too would re-trigger this rule off
+            # the Lambda's own BatchUpdateFindings->NOTIFIED writeback (an
+            # infinite feedback loop; found live 2026-07-21). Security Hub
+            # resets Workflow to NEW if a resolved finding later recurs, so
+            # recurrences are still caught.
+            Workflow = { Status = ["NEW"] }
           }
         }
       })
@@ -83,7 +88,12 @@ locals {
           findings = {
             Compliance  = { SecurityControlId = ["S3.2", "S3.3", "S3.8"] }
             RecordState = ["ACTIVE"]
-            Workflow    = { Status = ["NEW", "NOTIFIED"] }
+            # NEW only — matching NOTIFIED too would re-trigger this rule off
+            # the Lambda's own BatchUpdateFindings->NOTIFIED writeback (an
+            # infinite feedback loop; found live 2026-07-21). Security Hub
+            # resets Workflow to NEW if a resolved finding later recurs, so
+            # recurrences are still caught.
+            Workflow = { Status = ["NEW"] }
           }
         }
       })

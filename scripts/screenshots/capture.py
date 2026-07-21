@@ -48,20 +48,44 @@ def get_aws_account_id() -> str | None:
 
 def redact_account_id(page, account_id: str) -> None:
     # AWS Console shows the account ID in the top-right account badge on
-    # every page. Blog posts are public - same rule as READMEs never
-    # including the account ID. Found exposed on 3 real screenshots,
-    # 2026-07-12 (03-ecs-cluster, 07-step-functions-execution,
-    # 08-ecs-service-running) before this redaction existed.
-    # DOM text replacement (not pixel-coordinate cropping) so this works
+    # every page, AND in per-resource fields (e.g. EC2 SG "Owner"), ARNs,
+    # and copy-button attributes. Blog posts are public - same rule as
+    # READMEs never including the account ID. Found exposed on 3 real
+    # screenshots, 2026-07-12 (03-ecs-cluster, 07-step-functions-execution,
+    # 08-ecs-service-running) before this redaction existed; the "Owner"
+    # field slipped through a one-shot text-walk on 2026-07-21 because it
+    # loads async AFTER the redaction pass. Fix: run the replacement AND
+    # install a MutationObserver so any late-rendered/re-rendered node is
+    # caught too, plus cover common attributes (value/title/aria-label).
+    # DOM replacement (not pixel-coordinate cropping) so this works
     # regardless of which console page or layout is being captured.
     page.evaluate(f"""
         () => {{
-            const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
-            let node;
-            while (node = walker.nextNode()) {{
-                if (node.textContent.includes('{account_id}')) {{
-                    node.textContent = node.textContent.replaceAll('{account_id}', '<account-id>');
+            const ACCT = '{account_id}';
+            const run = () => {{
+                const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+                const hits = [];
+                let node;
+                while (node = walker.nextNode()) {{
+                    if (node.textContent.includes(ACCT)) hits.push(node);
                 }}
+                hits.forEach(n => n.textContent = n.textContent.replaceAll(ACCT, '<account-id>'));
+                document.querySelectorAll('[value],[title],[aria-label]').forEach(el => {{
+                    ['value', 'title', 'aria-label'].forEach(a => {{
+                        const v = el.getAttribute(a);
+                        if (v && v.includes(ACCT)) el.setAttribute(a, v.replaceAll(ACCT, '<account-id>'));
+                    }});
+                    if (el.value && el.value.includes && el.value.includes(ACCT)) {{
+                        el.value = el.value.replaceAll(ACCT, '<account-id>');
+                    }}
+                }});
+            }};
+            run();
+            if (!window.__acctRedactorInstalled) {{
+                window.__acctRedactorInstalled = true;
+                new MutationObserver(run).observe(
+                    document.body, {{subtree: true, childList: true, characterData: true}}
+                );
             }}
         }}
     """)
@@ -96,6 +120,15 @@ def capture(url: str, output_path: Path, wait_selector: str | None, wait_ms: int
         # "load" + an explicit wait is the reliable choice for these.
         page.goto(url, wait_until="load", timeout=30000)
 
+        # Resolve the account id up front (for AWS pages) and install the
+        # redactor EARLY - its MutationObserver then runs through the whole
+        # wait window, catching async-loaded fields (e.g. the EC2 SG "Owner")
+        # that render after the initial pass.
+        is_aws = "console.aws.amazon.com" in url or "signin.aws.amazon.com" in url
+        account_id = get_aws_account_id() if is_aws else None
+        if account_id:
+            redact_account_id(page, account_id)
+
         if headed:
             print(f"Browser window open on this machine - log in within {login_wait_seconds}s...")
             page.wait_for_timeout(login_wait_seconds * 1000)
@@ -105,13 +138,11 @@ def capture(url: str, output_path: Path, wait_selector: str | None, wait_ms: int
         if wait_ms:
             page.wait_for_timeout(wait_ms)
 
-        if "console.aws.amazon.com" in url or "signin.aws.amazon.com" in url:
-            account_id = get_aws_account_id()
-            if account_id:
-                redact_account_id(page, account_id)
-                print(f"Redacted account ID from page text before capture")
-            else:
-                print("WARNING: could not resolve AWS account ID to redact - check manually before publishing")
+        if account_id:
+            redact_account_id(page, account_id)  # final pass; observer covers the rest
+            print("Redacted account ID from page text before capture")
+        elif is_aws:
+            print("WARNING: could not resolve AWS account ID to redact - check manually before publishing")
 
         # full_page=False (viewport-only, 1400x900) is the deliberate choice
         # here, not full_page=True - SPA pages (AWS Console especially) often

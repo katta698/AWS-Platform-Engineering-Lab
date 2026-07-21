@@ -20,7 +20,7 @@ VPC_ID="${1:-$(aws ec2 describe-vpcs --region "$REGION" \
 echo "== Creating an open-to-world security group in $VPC_ID =="
 SG_ID=$(aws ec2 create-security-group --region "$REGION" \
   --group-name "week11-open-ssh-$SUFFIX" \
-  --description "INTENTIONALLY INSECURE — Week 11 remediation test" \
+  --description "INTENTIONALLY INSECURE - Week 11 remediation test" \
   --vpc-id "$VPC_ID" \
   --tag-specifications "ResourceType=security-group,Tags=[{Key=$TAG_KEY,Value=$TAG_VALUE},{Key=Name,Value=week11-open-ssh}]" \
   --query GroupId --output text)
