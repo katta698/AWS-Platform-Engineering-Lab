@@ -21,6 +21,13 @@ doesn't load that CSS).
 | `vpc.svg` | Networking & Content Delivery — `#8C4FFF` |
 | `elb.svg` | Networking & Content Delivery — `#8C4FFF` |
 | `step-functions.svg` | Application Integration — `#E7157B` |
+| `cloudwatch.svg` | Management Tools — `#E7157B` (added Week 10) |
+| `organizations.svg` | Management Tools — `#E7157B` (added Week 10) |
+| `eventbridge.svg` | Application Integration — `#E7157B` (added Week 10) |
+| `sns.svg` | Application Integration — `#E7157B` (added Week 10) |
+| `securityhub.svg` | Security, Identity & Compliance — `#DD344C` (added Week 11) |
+| `guardduty.svg` | Security, Identity & Compliance — `#DD344C` (added Week 11) |
+| `sqs.svg` | Application Integration — `#E7157B` (added Week 11) |
 
 **Adding a new service icon for a future week:** don't re-download the full
 14MB package if you still have it locally. If not, re-download from the URL

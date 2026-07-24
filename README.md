@@ -28,7 +28,7 @@
 | Week | Project | Key AWS Services | Status |
 |------|---------|-----------------|--------|
 | [Week 10](./week-10-centralized-logging) | Centralised Logging Platform | CloudWatch OAM, Logs Centralization, Logs Insights, Lambda, EventBridge, SNS | ✅ Complete |
-| Week 11 | Security Hub + GuardDuty Automation | Security Hub, GuardDuty, EventBridge, Lambda auto-remediation | 📅 Planned |
+| [Week 11](./week-11-security-hub-guardduty) | Security Hub + GuardDuty Automation | Security Hub, GuardDuty, EventBridge, Lambda auto-remediation | ✅ Complete |
 | Week 12 | AWS Config Compliance Automation | Config Rules, Auto-Remediation, Compliance Dashboard | 📅 Planned |
 | Week 13 | WAF + Shield Standard | WAF Web ACL, Rate Limiting, DDoS Protection, Managed Rules | 📅 Planned |
 | Week 14 | VPC Flow Logs + Network Intelligence | Flow Logs, Athena, traffic analysis, anomaly detection | 📅 Planned |
@@ -329,6 +329,27 @@ Every project follows the same enterprise pattern:
 
 ---
 
+## Week 11 — Security Hub + GuardDuty Auto-Remediation
+
+**The story:** A security finding is worthless if it sits in a console nobody watches. GuardDuty and Security Hub are very good at *finding* misconfigurations — an open management port, a public S3 bucket — but mean-time-to-remediate for the boring, mechanical ones is measured in hours or days, exactly the window an attacker needs. This platform closes the loop: clear-cut findings get fixed automatically in seconds, while active-threat findings that need human judgement are escalated instead of touched.
+
+**What it builds:**
+- Security Hub CSPM (classic, not the Dec-2025 unified v2 — the Terraform provider doesn't stably support v2 yet) with the AWS Foundational Security Best Practices standard subscribed, plus a finding aggregator and an automation rule that escalates production-tagged failures to CRITICAL before anything routes
+- GuardDuty foundational detector (Extended Threat Detection auto-enabled, no extra cost)
+- EventBridge rules matching `Workflow.Status = NEW` routing findings by control ID to three Lambdas: two tag-gated auto-remediators (revoke world-open security-group ingress, apply S3 Block Public Access) and one notify-only threat handler for GuardDuty findings
+- Every automated action writes back to the finding via `BatchUpdateFindings`; a shared SNS topic delivers results and alerts; a 14-day SQS DLQ + CloudWatch alarm catch any failed remediation
+- Deployed via **HCP Terraform** (VCS-driven, org: Katta, workspace: week-11-dev)
+
+**Key lessons learned:**
+- The `aws_securityhub_standards_subscription` resource's 3-minute default create timeout is too short for FSBP's ~300 controls on first enablement — needs `timeouts { create = "15m" }`
+- An HCP run created via the API pins to the *already-ingressed* configuration version, not necessarily your latest commit — queuing a run and deploying your latest code are not automatically the same thing
+- **The critical one:** an EventBridge rule matching both `Workflow.Status = NEW` and `NOTIFIED` created an infinite feedback loop — the Lambda's own `BatchUpdateFindings` write-back re-emitted an event that re-matched the rule and re-invoked itself, firing ~8×/minute against a real bucket until caught. A handler that writes back to the same finding store it's triggered by must keep its writeback status outside its own trigger pattern
+- Security Hub's FSBP controls are backed by AWS Config — no configuration recorder, no findings, silently
+
+**Resources:** 30 Terraform resources | **Blog:** https://jayanthkatta.com/blog/week-11-security-hub-guardduty/
+
+---
+
 ## Standalone Posts
 
 Technical deep-dives and guides published outside the weekly series.
@@ -427,6 +448,7 @@ plan**, and a git push (or "Start new plan") to rebuild.
 | 08   | ~$1/month at lab data volumes | $0 |
 | 09   | ~$65/month (shared ALB ~$24 + VPC endpoints ~$22 + ~$18/running task) | $0 |
 | 10   | < $2/month (OAM free; first centralized copy free; bounded log storage) | $0 |
+| 11   | ~$5-20/month (GuardDuty + Security Hub CSPM checks; 30-day free trial covers the lab window) | $0 |
 
 ---
 
