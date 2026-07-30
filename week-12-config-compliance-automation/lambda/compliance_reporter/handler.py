@@ -3,7 +3,7 @@ import os
 
 import boto3
 
-config_client = boto3.client("configservice")
+config_client = boto3.client("config")
 sns_client = boto3.client("sns")
 
 SNS_TOPIC_ARN = os.environ["SNS_TOPIC_ARN"]
