@@ -28,6 +28,9 @@ doesn't load that CSS).
 | `securityhub.svg` | Security, Identity & Compliance — `#DD344C` (added Week 11) |
 | `guardduty.svg` | Security, Identity & Compliance — `#DD344C` (added Week 11) |
 | `sqs.svg` | Application Integration — `#E7157B` (added Week 11) |
+| `config.svg` | Management Tools — `#E7157B` (added Week 12) |
+| `systems-manager.svg` | Management Tools — `#E7157B` (added Week 12) |
+| `s3.svg` | Storage — `#7AA116` (added Week 12) |
 
 **Adding a new service icon for a future week:** don't re-download the full
 14MB package if you still have it locally. If not, re-download from the URL
