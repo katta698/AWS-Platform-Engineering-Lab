@@ -89,6 +89,14 @@ tagging-governance concept at all.
 | `week12-s3-bucket-versioning-enabled` | S3 buckets tagged `auto-remediate=true` | `AWS-ConfigureS3BucketVersioning` enables versioning | Config `Scope.TagKey/TagValue` **and** IAM `aws:ResourceTag` condition both restrict to opted-in buckets |
 | `week12-s3-bucket-sse-enabled` | S3 buckets tagged `auto-remediate=true` | `AWS-EnableS3BucketEncryption` enables AES256 default encryption | Same double guardrail as above |
 
+Names above are the base names declared in the conformance pack template. AWS
+Config appends its own generated suffix to the actual deployed rule (e.g.
+`week12-required-tags-conformance-pack-<id>`) — found live on the first
+apply. Use `aws configservice describe-conformance-pack-compliance
+--conformance-pack-name week12-cfgcompliance-pack` to see the real names;
+the `compliance_reporter` Lambda discovers them the same way rather than
+hardcoding them.
+
 ## Prerequisite: AWS Config must already be recording
 
 Same prerequisite as Week 11: without an active Config recorder, these rules

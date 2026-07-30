@@ -9,9 +9,9 @@ variable "alert_email" {
   sensitive   = true
 }
 
-variable "config_rule_names" {
-  description = "Config rule names the reporter Lambda summarizes -- deliberately just this week's 3, not the account's ~300 securityhub-* rules."
-  type        = list(string)
+variable "conformance_pack_name" {
+  description = "Conformance pack the reporter Lambda discovers rules from -- deliberately just this week's own pack, not the account's ~300 securityhub-* rules."
+  type        = string
 }
 
 variable "log_retention_days" {

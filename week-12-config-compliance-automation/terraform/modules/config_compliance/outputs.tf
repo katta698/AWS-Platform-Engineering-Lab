@@ -13,8 +13,8 @@ output "ssm_automation_role_arn" {
   value       = aws_iam_role.ssm_automation.arn
 }
 
-output "config_rule_names" {
-  description = "Names of the 3 Config rules defined inside the conformance pack template (not standalone resources -- see main.tf)."
+output "config_rule_base_names" {
+  description = "Base names the conformance pack template declares for its 3 rules. AWS Config appends its own generated suffix to the real deployed rule names (e.g. \"week12-required-tags-conformance-pack-<id>\") -- these base names are NOT directly usable with GetComplianceDetailsByConfigRule. See the reporter module, which discovers the real names via DescribeConformancePackCompliance instead."
   value = {
     required_tags = "week12-required-tags"
     s3_versioning = "week12-s3-bucket-versioning-enabled"

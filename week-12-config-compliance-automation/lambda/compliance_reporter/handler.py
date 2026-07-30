@@ -2,13 +2,12 @@ import json
 import os
 
 import boto3
-from botocore.exceptions import ClientError
 
 config_client = boto3.client("configservice")
 sns_client = boto3.client("sns")
 
 SNS_TOPIC_ARN = os.environ["SNS_TOPIC_ARN"]
-CONFIG_RULE_NAMES = [name.strip() for name in os.environ["CONFIG_RULE_NAMES"].split(",")]
+CONFORMANCE_PACK_NAME = os.environ["CONFORMANCE_PACK_NAME"]
 MAX_RESOURCES_LISTED = 10
 
 
@@ -22,17 +21,13 @@ def _non_compliant_resources(rule_name):
     return resources
 
 
-def _rule_summary(rule_name):
-    try:
-        non_compliant = _non_compliant_resources(rule_name)
-    except ClientError as err:
-        if err.response["Error"]["Code"] == "NoSuchConfigRuleException":
-            return f"{rule_name}: rule not found yet (conformance pack may still be deploying)"
-        raise
+def _rule_summary(rule_name, compliance_type):
+    if compliance_type == "COMPLIANT":
+        return f"{rule_name}: COMPLIANT"
+    if compliance_type != "NON_COMPLIANT":
+        return f"{rule_name}: {compliance_type} (no evaluations recorded yet)"
 
-    if not non_compliant:
-        return f"{rule_name}: COMPLIANT (0 non-compliant resources)"
-
+    non_compliant = _non_compliant_resources(rule_name)
     lines = [f"{rule_name}: {len(non_compliant)} non-compliant resource(s)"]
     for resource in non_compliant[:MAX_RESOURCES_LISTED]:
         lines.append(f"  - {resource}")
@@ -42,8 +37,16 @@ def _rule_summary(rule_name):
 
 
 def lambda_handler(event, context):
+    # Rule names inside a conformance pack get AWS's own generated suffix
+    # (e.g. "week12-required-tags-conformance-pack-<id>") -- discovering them
+    # here instead of hardcoding avoids the reporter silently going stale if
+    # that suffix ever changes.
+    rules = config_client.describe_conformance_pack_compliance(
+        ConformancePackName=CONFORMANCE_PACK_NAME
+    )["ConformancePackRuleComplianceList"]
+
     lines = ["Week 12 Config Compliance Digest", ""]
-    lines.extend(_rule_summary(rule_name) for rule_name in CONFIG_RULE_NAMES)
+    lines.extend(_rule_summary(rule["ConfigRuleName"], rule["ComplianceType"]) for rule in rules)
     message = "\n".join(lines)
 
     sns_client.publish(
@@ -52,4 +55,4 @@ def lambda_handler(event, context):
         Message=message,
     )
 
-    return {"statusCode": 200, "body": json.dumps({"rules_checked": len(CONFIG_RULE_NAMES)})}
+    return {"statusCode": 200, "body": json.dumps({"rules_checked": len(rules)})}

@@ -1,11 +1,17 @@
 ###############################################################################
 # Reporter module -- daily compliance digest.
 #
-# One scheduled Lambda reads GetComplianceDetailsByConfigRule for just this
-# week's 3 rules (never the account's ~300 securityhub-* rules -- that scoping
-# is a deliberate design decision, not an oversight) and publishes a plain-text
-# summary to SNS. Short, scheduled, stateless, a few API calls -- same
-# Lambda-shape justification as every prior week.
+# One scheduled Lambda discovers this week's rules via
+# DescribeConformancePackCompliance (never the account's ~300 securityhub-*
+# rules -- that scoping is a deliberate design decision, not an oversight) and
+# publishes a plain-text summary to SNS. Short, scheduled, stateless, a few
+# API calls -- same Lambda-shape justification as every prior week.
+#
+# Discovering rule names via the conformance pack, rather than hardcoding
+# them, matters because AWS Config appends its own generated suffix to every
+# rule inside a pack (e.g. "week12-required-tags-conformance-pack-<id>") --
+# confirmed live on the first apply, when a hardcoded CONFIG_RULE_NAMES list
+# silently found nothing.
 ###############################################################################
 
 resource "aws_sns_topic" "digest" {
@@ -63,7 +69,7 @@ resource "aws_iam_role_policy" "lambda" {
       {
         Sid      = "ReadCompliance"
         Effect   = "Allow"
-        Action   = ["config:GetComplianceDetailsByConfigRule"]
+        Action   = ["config:DescribeConformancePackCompliance", "config:GetComplianceDetailsByConfigRule"]
         Resource = "*"
       },
       {
@@ -96,8 +102,8 @@ resource "aws_lambda_function" "compliance_reporter" {
 
   environment {
     variables = {
-      SNS_TOPIC_ARN     = aws_sns_topic.digest.arn
-      CONFIG_RULE_NAMES = join(",", var.config_rule_names)
+      SNS_TOPIC_ARN         = aws_sns_topic.digest.arn
+      CONFORMANCE_PACK_NAME = var.conformance_pack_name
     }
   }
 

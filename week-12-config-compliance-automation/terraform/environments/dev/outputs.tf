@@ -3,9 +3,9 @@ output "conformance_pack_name" {
   value       = module.config_compliance.conformance_pack_name
 }
 
-output "config_rule_names" {
-  description = "Names of the 3 Config rules this week adds, defined inside the conformance pack."
-  value       = module.config_compliance.config_rule_names
+output "config_rule_base_names" {
+  description = "Base names declared in the conformance pack template. The real deployed rule names carry an extra AWS-generated suffix -- run 'aws configservice describe-conformance-pack-compliance --conformance-pack-name <conformance_pack_name>' to see the actual names."
+  value       = module.config_compliance.config_rule_base_names
 }
 
 output "ssm_automation_role_arn" {

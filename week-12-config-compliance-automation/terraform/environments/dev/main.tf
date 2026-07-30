@@ -59,10 +59,10 @@ module "config_compliance" {
 # Daily compliance digest, scoped only to this week's 3 rules -- not the 300
 # securityhub-* ones already in the account.
 module "reporter" {
-  source             = "../../modules/reporter"
-  name_prefix        = var.name_prefix
-  alert_email        = var.alert_email
-  config_rule_names  = values(module.config_compliance.config_rule_names)
-  log_retention_days = var.log_retention_days
-  tags               = local.common_tags
+  source                = "../../modules/reporter"
+  name_prefix           = var.name_prefix
+  alert_email           = var.alert_email
+  conformance_pack_name = module.config_compliance.conformance_pack_name
+  log_retention_days    = var.log_retention_days
+  tags                  = local.common_tags
 }
