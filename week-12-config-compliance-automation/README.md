@@ -160,10 +160,14 @@ All knobs are workspace/`tfvars` variables (see `terraform.tfvars.example`):
 
 ## Security patterns
 
-- **Tag-scoped opt-in, enforced twice.** The two S3 rules only evaluate
-  tagged buckets (Config's native `Scope.TagKey`/`TagValue`), and the SSM
-  automation role's IAM policy adds the same `aws:ResourceTag` condition —
-  the API refuses the call even if a rule were ever mis-scoped.
+- **Tag-scoped opt-in, enforced by Config's Scope alone.** The two S3 rules
+  only evaluate tagged buckets (Config's native `Scope.TagKey`/`TagValue`) —
+  an untagged bucket is never flagged non-compliant, so remediation never
+  fires for it. Unlike Week 11's EC2 remediator IAM, this can't *also* be
+  enforced via an `aws:ResourceTag` IAM condition: confirmed live (a real
+  `AccessDenied` on the first remediation attempt) that S3 only supports
+  tag-based IAM conditions on object-level actions, never bucket-level admin
+  actions like `PutBucketVersioning`/`PutBucketEncryption`.
 - **Native remediation substrate, not custom code.** Both fixes use
   AWS-managed SSM Automation documents (verified live against this account),
   not a bespoke Lambda — a single documented API call needs nothing more.

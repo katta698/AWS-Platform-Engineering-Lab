@@ -35,10 +35,16 @@ resource "aws_iam_role_policy" "ssm_automation" {
   name = "${var.name_prefix}-ssm-automation-policy"
   role = aws_iam_role.ssm_automation.id
 
-  # Scoped to only the opted-in resources -- same defense-in-depth pattern as
-  # Week 11's remediator IAM (Config's own tag Scope already limits which
-  # buckets get evaluated/remediated; this condition means IAM refuses the
-  # call on anything untagged too).
+  # No aws:ResourceTag condition here, unlike Week 11's remediator IAM --
+  # confirmed live (a real AccessDenied on the first remediation attempt) that
+  # Amazon S3 only supports tag-based IAM conditions for OBJECT-level actions,
+  # never bucket-level admin actions like PutBucketVersioning/PutBucketEncryption.
+  # The condition silently never matched, so the statement never actually
+  # granted anything. The tag-scoped guardrail is enforced entirely by
+  # Config's own Scope.TagKey/TagValue on each rule (see the conformance pack
+  # template) -- an untagged bucket is never flagged non-compliant in the
+  # first place, so remediation never fires for it regardless of this role's
+  # IAM permissions.
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -47,11 +53,6 @@ resource "aws_iam_role_policy" "ssm_automation" {
         Effect   = "Allow"
         Action   = ["s3:PutBucketVersioning", "s3:PutBucketEncryption"]
         Resource = "arn:${data.aws_partition.current.partition}:s3:::*"
-        Condition = {
-          StringEquals = {
-            "aws:ResourceTag/${var.remediation_tag_key}" = var.remediation_tag_value
-          }
-        }
       },
     ]
   })
