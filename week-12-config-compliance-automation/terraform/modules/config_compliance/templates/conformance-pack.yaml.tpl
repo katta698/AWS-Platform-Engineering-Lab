@@ -30,8 +30,10 @@ Resources:
         have versioning enabled. Not covered by Security Hub FSBP, which only
         checks S3 public-access and SSL-in-transit.
       Scope:
-        ComplianceResourceTypes:
-          - "AWS::S3::Bucket"
+        # Tag-only -- AWS Config's Scope object rejects combining
+        # ComplianceResourceTypes with TagKey/TagValue ("Scope cannot be
+        # applied to both resource and tag", confirmed live on first apply).
+        # The underlying managed rule only ever evaluates S3 buckets anyway.
         TagKey: "${remediation_tag_key}"
         TagValue: "${remediation_tag_value}"
       Source:
@@ -77,8 +79,7 @@ Resources:
         Hub FSBP, which only checks S3 public-access and SSL-in-transit, not
         at-rest SSE.
       Scope:
-        ComplianceResourceTypes:
-          - "AWS::S3::Bucket"
+        # Tag-only -- see the note on S3BucketVersioningEnabled's Scope above.
         TagKey: "${remediation_tag_key}"
         TagValue: "${remediation_tag_value}"
       Source:
