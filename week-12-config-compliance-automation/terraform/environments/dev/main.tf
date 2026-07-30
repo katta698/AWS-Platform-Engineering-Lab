@@ -10,6 +10,13 @@
 # required-tags is notify-only: a missing tag value can't be safely invented. A
 # scheduled Lambda summarizes compliance for just these 3 rules into a daily
 # SNS digest.
+#
+# This week also provisions its own Config recorder (module.config_recorder) --
+# the account's previous recorder belonged to an unrelated project and was
+# deleted as part of that project's own cleanup on 2026-07-29 (confirmed via
+# CloudTrail, not this project's doing). This Lab now owns its recorder going
+# forward, which incidentally also restores Week 11's Security Hub FSBP
+# dependency -- no changes needed in Week 11's own Terraform.
 ###############################################################################
 
 terraform {
@@ -44,9 +51,15 @@ locals {
   }
 }
 
-# Config rules + remediation + conformance pack. Reuses the account's existing
-# Config recorder (telemetry-dashboard-recorder, confirmed live before this
-# week was scaffolded) -- this module creates no recorder of its own.
+# This Lab's own Config recorder -- see the header note above for why this
+# exists now (it didn't when this week was first scaffolded).
+module "config_recorder" {
+  source      = "../../modules/config_recorder"
+  name_prefix = var.name_prefix
+  tags        = local.common_tags
+}
+
+# Config rules + remediation + conformance pack.
 module "config_compliance" {
   source                = "../../modules/config_compliance"
   name_prefix           = var.name_prefix
@@ -54,6 +67,9 @@ module "config_compliance" {
   remediation_tag_value = var.remediation_tag_value
   required_tag_keys     = var.required_tag_keys
   tags                  = local.common_tags
+
+  # Rules can't evaluate anything without an active recorder.
+  depends_on = [module.config_recorder]
 }
 
 # Daily compliance digest, scoped only to this week's 3 rules -- not the 300

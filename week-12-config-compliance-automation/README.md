@@ -45,8 +45,16 @@ because a tag value can't be safely invented by automation.
         failed reporter invoke ─▶ SQS DLQ (14-day) ─▶ CloudWatch alarm ─▶ SNS
 ```
 
-Reuses the account's existing, centrally-managed Config recorder
-(`telemetry-dashboard-recorder`) — this stack provisions no recorder of its own.
+This stack provisions its own Config recorder (`module.config_recorder`) —
+a delivery-channel S3 bucket, an IAM role, and the recorder itself, recording
+`ALL_SUPPORTED_RESOURCE_TYPES` continuously. This wasn't the original plan:
+the account initially had a centrally-managed recorder from an unrelated
+project, which this week reused. That recorder was deleted 2026-07-29 as
+part of that other project's own cleanup — confirmed via CloudTrail, not
+caused by this stack. Losing it also silently broke Week 11's Security Hub
+FSBP controls (which are backed by Config), since without an active recorder
+those controls sit at `NO_DATA`. This Lab now owns its recorder going
+forward; Week 11 needed no changes of its own to benefit from it.
 
 ## Why a conformance pack, not standalone `aws_config_config_rule` resources
 
@@ -72,6 +80,7 @@ tagging-governance concept at all.
 
 | Service | Role in this build |
 |---|---|
+| AWS Config (recorder) | Records configuration changes for every supported resource type, account-wide — this Lab's own, since the account's previous (unrelated-project) recorder was deleted |
 | AWS Config (conformance pack) | Defines the 3 rules + 2 remediation configs as one deployable unit |
 | AWS Systems Manager Automation | Runs the actual fix — `AWS-ConfigureS3BucketVersioning` / `AWS-EnableS3BucketEncryption`, both AWS-managed documents |
 | AWS IAM | Role SSM Automation assumes to call `s3:PutBucketVersioning` / `s3:PutBucketEncryption`, scoped by `aws:ResourceTag` |
@@ -97,19 +106,23 @@ apply. Use `aws configservice describe-conformance-pack-compliance
 the `compliance_reporter` Lambda discovers them the same way rather than
 hardcoding them.
 
-## Prerequisite: AWS Config must already be recording
+## Recorder ownership — check before deploying elsewhere
 
-Same prerequisite as Week 11: without an active Config recorder, these rules
-report `NO_DATA` and nothing evaluates. Confirm before deploying:
+Without an active Config recorder, these rules (and Week 11's Security Hub
+FSBP controls) report `NO_DATA` and nothing evaluates. This stack provisions
+its own recorder (see Architecture above), so no external prerequisite is
+needed here — but if this Lab is ever deployed into an account that already
+has a recorder from another project, **do not apply this stack as-is**: AWS
+allows only one recorder per account/region, so a second `aws_config_configuration_recorder`
+resource will fail. Check first:
 
 ```bash
 aws configservice describe-configuration-recorder-status \
   --query 'ConfigurationRecordersStatus[].[name,recording,lastStatus]' --output text
-# want: <name>  True  SUCCESS
 ```
 
-This stack does **not** provision a recorder — reuses whichever one already
-exists in the account.
+If one already exists, remove `module.config_recorder` from `main.tf` and
+point the other modules at the existing recorder instead.
 
 ## Quick start
 
@@ -169,8 +182,9 @@ Single low-traffic account, us-east-1. Prices as of July 2026 — verify at
 | Config rule evaluations (3 rules, $0.001/eval, well under the 100k tier) | pennies / month |
 | Conformance pack evaluations ($0.001/eval) | pennies / month |
 | Lambda + EventBridge + SNS + SQS | pennies (well within free tier) |
-| Config recorder / configuration items | **$0 incremental** — reuses the account's existing recorder |
-| **Destroyed** | **$0** |
+| Config recorder — configuration items ($0.003/item, continuous, `ALL_SUPPORTED_RESOURCE_TYPES`, account-wide) | not free — this Lab now owns the account's only recorder, replacing the deleted one, so it bills for the whole account's resource inventory, not just this week's own resources. Rough estimate a few dollars/month depending on total resource count and change frequency across every week's deployed infra; monitor actual usage after a few days |
+| S3 delivery bucket (config history, 90-day lifecycle expiry) | pennies |
+| **Destroyed** | **$0** for this week's own resources; destroying `module.config_recorder` also removes the account's only recorder — re-check before destroying if other weeks still depend on it |
 
 ## Troubleshooting
 
@@ -184,10 +198,14 @@ Single low-traffic account, us-east-1. Prices as of July 2026 — verify at
 
 ## Cleanup
 
-Queue a destroy plan on `week-12-dev` in the HCP UI (removes the conformance
-pack, reporter Lambda/schedule/SNS/DLQ, and the SSM automation role — leaves
-the account's pre-existing Config recorder untouched). Remove any leftover
-test buckets with `./scripts/cleanup.sh <remediate-bucket> <untagged-bucket>`.
+Queue a destroy plan on `week-12-dev` in the HCP UI. **This removes the
+account's only Config recorder along with everything else** (conformance
+pack, reporter Lambda/schedule/SNS/DLQ, SSM automation role, the recorder
+itself and its delivery bucket) — check first whether Week 11's Security Hub
+FSBP controls (or any other future week) still needs a recorder before
+destroying this stack; if so, keep `module.config_recorder` and only remove
+`module.config_compliance`/`module.reporter`. Remove any leftover test
+buckets with `./scripts/cleanup.sh <remediate-bucket> <untagged-bucket>`.
 
 ## Blog
 
