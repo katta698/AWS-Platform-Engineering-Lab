@@ -29,7 +29,7 @@
 |------|---------|-----------------|--------|
 | [Week 10](./week-10-centralized-logging) | Centralised Logging Platform | CloudWatch OAM, Logs Centralization, Logs Insights, Lambda, EventBridge, SNS | ✅ Complete |
 | [Week 11](./week-11-security-hub-guardduty) | Security Hub + GuardDuty Automation | Security Hub, GuardDuty, EventBridge, Lambda auto-remediation | ✅ Complete |
-| Week 12 | AWS Config Compliance Automation | Config Rules, Auto-Remediation, Compliance Dashboard | 📅 Planned |
+| [Week 12](./week-12-config-compliance-automation) | AWS Config Compliance Automation | Config Rules, Auto-Remediation, Compliance Dashboard | ✅ Complete |
 | Week 13 | WAF + Shield Standard | WAF Web ACL, Rate Limiting, DDoS Protection, Managed Rules | 📅 Planned |
 | Week 14 | VPC Flow Logs + Network Intelligence | Flow Logs, Athena, traffic analysis, anomaly detection | 📅 Planned |
 | Week 15 | CloudTrail Lake + Audit Automation | CloudTrail Lake, SIEM integration, Query Editor | 📅 Planned |
@@ -449,6 +449,7 @@ plan**, and a git push (or "Start new plan") to rebuild.
 | 09   | ~$65/month (shared ALB ~$24 + VPC endpoints ~$22 + ~$18/running task) | $0 |
 | 10   | < $2/month (OAM free; first centralized copy free; bounded log storage) | $0 |
 | 11   | ~$5-20/month (GuardDuty + Security Hub CSPM checks; 30-day free trial covers the lab window) | $0 |
+| 12   | ~$1-5/month (Config recorder now bills account-wide; rule/conformance-pack evaluations are pennies) | $0 — but also removes the account's only Config recorder, check Week 11 dependency first |
 
 ---
 
