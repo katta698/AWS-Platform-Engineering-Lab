@@ -10,15 +10,20 @@ variable "web_acl_name" {
 
 variable "metric_region_dimension" {
   description = <<-EOT
-    Value of the `Region` dimension on AWS/WAFV2 metrics.
+    Value of the `Region` dimension on AWS/WAFV2 metrics, or null to omit the
+    dimension entirely.
 
-    For a REGIONAL web ACL this is the region name (e.g. us-east-1). For a
-    CLOUDFRONT web ACL, metrics are published in us-east-1 with this dimension
-    set to the literal string "Global". Getting this wrong produces an alarm
-    stuck in INSUFFICIENT_DATA forever rather than an error -- verify against
-    `aws cloudwatch list-metrics --namespace AWS/WAFV2` after the first apply.
+    For a REGIONAL web ACL this is the region name (e.g. us-east-1).
+
+    For a CLOUDFRONT web ACL it must be **null**. CloudFront-scope metrics carry
+    NO Region dimension at all -- they are published in us-east-1 with only
+    WebACL and Rule. Passing the literal "Global" (a plausible-looking guess,
+    and what this module originally did) matches no metric series, so the alarm
+    sits in INSUFFICIENT_DATA forever instead of erroring. Confirmed live on
+    2026-08-05 via `aws cloudwatch list-metrics --namespace AWS/WAFV2`.
   EOT
   type        = string
+  default     = null
 }
 
 variable "alert_email" {

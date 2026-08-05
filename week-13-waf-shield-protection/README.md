@@ -159,7 +159,9 @@ Prices as of August 2026 — verify at [aws.amazon.com/waf/pricing](https://aws.
 |---|---|
 | `terraform plan` fails with "No valid credential sources found" | New HCP workspace missing `TFC_AWS_PROVIDER_AUTH` and `TFC_AWS_RUN_ROLE_ARN` |
 | Logging config rejected | Log group name must start with `aws-waf-logs-`, and live in the web ACL's region and account |
-| Alarm stuck in `INSUFFICIENT_DATA` | Wrong `Region` metric dimension — `Global` for CLOUDFRONT scope, the region name for REGIONAL |
+| Alarm stuck in `INSUFFICIENT_DATA` | Wrong `Region` metric dimension. CLOUDFRONT-scope metrics have **no `Region` dimension at all** — omit it. Only REGIONAL metrics carry the region name. `Global` looks plausible and matches nothing |
+| Metric query returns nothing for a rule | The `Rule` dimension uses the rule's **`visibility_config.metric_name`**, not its `name` |
+| WAF logs empty right after a test | Delivery lags by a few minutes; the metrics land sooner |
 | Web ACL healthy but inspects nothing | Regional resources need `aws_wafv2_web_acl_association`; only CloudFront takes the ACL as an attribute |
 | `GET /` returns 403 "Missing Authentication Token" | Not a WAF block — REST APIs need the root path defined separately from `{proxy+}` |
 | WAF can't be associated with the API | It must be a REST API; **HTTP APIs are not supported by WAF at all** |

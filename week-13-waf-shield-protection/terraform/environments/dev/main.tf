@@ -168,8 +168,10 @@ module "monitoring_edge" {
   name_prefix  = "${local.project}-edge"
   web_acl_name = module.waf_edge.web_acl_name
 
-  # CLOUDFRONT-scope metrics carry the literal dimension value "Global".
-  metric_region_dimension = "Global"
+  # null, not "Global": CloudFront-scope metrics carry no Region dimension at
+  # all. Verified live against `aws cloudwatch list-metrics` -- a "Global"
+  # value matches nothing and leaves the alarm permanently INSUFFICIENT_DATA.
+  metric_region_dimension = null
 
   alert_email                = var.alert_email
   blocked_requests_threshold = var.blocked_requests_threshold

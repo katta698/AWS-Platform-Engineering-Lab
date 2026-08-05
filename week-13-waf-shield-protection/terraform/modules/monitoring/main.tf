@@ -10,6 +10,19 @@
 # different regions.
 ###############################################################################
 
+locals {
+  # CLOUDFRONT-scope metrics carry no Region dimension at all. Merging it in
+  # conditionally is what keeps one module usable for both scopes -- a
+  # hardcoded Region would silently break every edge alarm.
+  metric_dimensions = merge(
+    {
+      WebACL = var.web_acl_name
+      Rule   = "ALL"
+    },
+    var.metric_region_dimension == null ? {} : { Region = var.metric_region_dimension },
+  )
+}
+
 resource "aws_sns_topic" "alerts" {
   name = "${var.name_prefix}-waf-alerts"
   tags = var.tags
@@ -41,11 +54,7 @@ resource "aws_cloudwatch_metric_alarm" "blocked_requests" {
   threshold           = var.blocked_requests_threshold
   evaluation_periods  = 1
 
-  dimensions = {
-    WebACL = var.web_acl_name
-    Region = var.metric_region_dimension
-    Rule   = "ALL"
-  }
+  dimensions = local.metric_dimensions
 
   # WAF publishes no datapoint when nothing is blocked, rather than a zero.
   # Without this, the alarm would sit in INSUFFICIENT_DATA during exactly the
@@ -74,11 +83,7 @@ resource "aws_cloudwatch_metric_alarm" "counted_requests" {
   threshold           = var.counted_requests_threshold
   evaluation_periods  = 1
 
-  dimensions = {
-    WebACL = var.web_acl_name
-    Region = var.metric_region_dimension
-    Rule   = "ALL"
-  }
+  dimensions = local.metric_dimensions
 
   treat_missing_data = "notBreaching"
 
