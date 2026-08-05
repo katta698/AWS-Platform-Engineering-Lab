@@ -47,6 +47,16 @@ variable "blocked_ip_cidrs" {
   default     = []
 }
 
+variable "anti_ddos_challenge_exempt_uri_regexes" {
+  description = <<-EOT
+    URI patterns exempt from the Anti-DDoS silent browser challenge, for callers
+    that cannot run JavaScript. Must contain at least one entry -- AWS rejects the
+    web ACL otherwise, despite the provider documenting the field as optional.
+  EOT
+  type        = list(string)
+  default     = ["^/health$"]
+}
+
 variable "log_retention_days" {
   description = "Retention for WAF and Lambda log groups. WAF logs one record per inspected request, so keep this short."
   type        = number

@@ -98,6 +98,8 @@ module "waf_edge" {
   blocked_ip_cidrs           = var.blocked_ip_cidrs
   log_retention_days         = var.log_retention_days
 
+  anti_ddos_challenge_exempt_uri_regexes = var.anti_ddos_challenge_exempt_uri_regexes
+
   tags = local.common_tags
 }
 
@@ -116,6 +118,8 @@ module "waf_regional" {
   rate_evaluation_window_sec = var.rate_evaluation_window_sec
   blocked_ip_cidrs           = var.blocked_ip_cidrs
   log_retention_days         = var.log_retention_days
+
+  anti_ddos_challenge_exempt_uri_regexes = var.anti_ddos_challenge_exempt_uri_regexes
 
   tags = local.common_tags
 }

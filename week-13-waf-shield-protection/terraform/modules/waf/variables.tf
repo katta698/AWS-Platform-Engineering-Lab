@@ -71,9 +71,19 @@ variable "anti_ddos_challenge_exempt_uri_regexes" {
     endpoints, webhooks, health checks. A non-browser client cannot execute the
     JavaScript challenge, so without an exemption a DDoS event would fail those
     callers outright rather than protecting them.
+
+    MUST be non-empty. AWS rejects CreateWebACL with WAFInvalidParameterException
+    when the Anti-DDoS challenge action is ENABLED and this list is empty, even
+    though the Terraform provider documents the field as optional. Confirmed by a
+    real apply failure on 2026-08-05 -- terraform validate and plan both pass.
   EOT
   type        = list(string)
-  default     = []
+  default     = ["^/health$"]
+
+  validation {
+    condition     = length(var.anti_ddos_challenge_exempt_uri_regexes) > 0
+    error_message = "At least one exempt URI regex is required: AWS rejects the web ACL if the Anti-DDoS challenge action is ENABLED with an empty exemption list."
+  }
 }
 
 variable "log_retention_days" {
