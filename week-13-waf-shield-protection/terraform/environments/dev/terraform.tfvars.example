@@ -1,0 +1,27 @@
+# Copy to terraform.tfvars for local runs. terraform.tfvars is gitignored.
+#
+# On HCP Terraform (workspace week-13-dev) none of this is needed:
+# alert_email arrives from the global variable set `shared-alert-email`, and
+# every other variable has a working default.
+
+aws_region  = "us-east-1"
+environment = "dev"
+stage_name  = "prod"
+
+# Start true. Flip to false only after reviewing what the rules counted.
+count_mode = true
+
+# Low on purpose -- the attack simulation floods from a single machine.
+rate_limit                 = 100
+rate_evaluation_window_sec = 60
+
+# Break-glass deny list, e.g. ["203.0.113.42/32"]
+blocked_ip_cidrs = []
+
+log_retention_days = 7
+
+blocked_requests_threshold = 50
+counted_requests_threshold = 50
+
+# Do NOT set alert_email here -- it is sensitive and comes from HCP.
+# alert_email = "your-email@example.com"
