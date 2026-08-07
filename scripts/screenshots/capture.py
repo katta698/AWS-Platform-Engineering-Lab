@@ -183,7 +183,8 @@ def redact_account_id(page, account_id: str) -> None:
 
 
 def capture(url: str, output_path: Path, wait_selector: str | None, wait_ms: int | None,
-            headed: bool, login_wait_seconds: int, height: int):
+            headed: bool, login_wait_seconds: int, height: int,
+            click_text: str | None = None, click_wait_ms: int = 5000):
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -249,6 +250,38 @@ def capture(url: str, output_path: Path, wait_selector: str | None, wait_ms: int
         if wait_ms:
             page.wait_for_timeout(wait_ms)
 
+        # Some consoles render their tabs as client-side routes with no
+        # addressable URL (AWS WAF's web ACL detail tabs use hash routing and
+        # rewrite in place), so the only way to reach a tab is to click it.
+        # Added 2026-08-05 for Week 13 after guessing tab slugs silently landed
+        # on the default tab and produced convincingly-wrong screenshots.
+        if click_text:
+            # Try the tab role FIRST, then a link, then raw text. Plain text
+            # matching is last because console side-nav items frequently reuse
+            # a tab's label (CloudFront has both a "Security" nav section and a
+            # "Security" tab) - matching the nav item collapses the sidebar and
+            # leaves you on the default tab, producing a convincingly-wrong
+            # screenshot with no error at all. Learned the hard way, Week 13.
+            clicked = False
+            for locator in (
+                page.get_by_role("tab", name=click_text, exact=True),
+                page.get_by_role("link", name=click_text, exact=True),
+                page.get_by_text(click_text, exact=True),
+            ):
+                try:
+                    locator.first.click(timeout=5000)
+                    clicked = True
+                    break
+                except Exception:
+                    continue
+            if not clicked:
+                context.close()
+                raise SystemExit(
+                    f"ERROR: could not click '{click_text}' — refusing to save a "
+                    "screenshot of the wrong tab. Check the exact visible label."
+                )
+            page.wait_for_timeout(click_wait_ms)
+
         if account_id:
             redact_account_id(page, account_id)  # final pass; observer covers the rest
             print("Redacted account ID from page text before capture")
@@ -278,6 +311,9 @@ if __name__ == "__main__":
     parser.add_argument("--headed", action="store_true", help="Show the browser window (needed for first-time login)")
     parser.add_argument("--login-wait-seconds", type=int, default=90, help="Fixed wait window for manual login in --headed mode")
     parser.add_argument("--height", type=int, default=900, help="Viewport height in px - increase for pages with real content below the fold")
+    parser.add_argument("--click-text", default=None, help="Exact visible text to click before capturing (for SPA tabs with no addressable URL). Fails loudly rather than capturing the wrong tab.")
+    parser.add_argument("--click-wait-ms", type=int, default=5000, help="Wait after the click before capturing")
     args = parser.parse_args()
 
-    capture(args.url, args.output_path, args.wait_selector, args.wait_ms, args.headed, args.login_wait_seconds, args.height)
+    capture(args.url, args.output_path, args.wait_selector, args.wait_ms, args.headed, args.login_wait_seconds,
+            args.height, args.click_text, args.click_wait_ms)
