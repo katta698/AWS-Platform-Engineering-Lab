@@ -31,6 +31,9 @@ doesn't load that CSS).
 | `config.svg` | Management Tools — `#E7157B` (added Week 12) |
 | `systems-manager.svg` | Management Tools — `#E7157B` (added Week 12) |
 | `s3.svg` | Storage — `#7AA116` (added Week 12) |
+| `waf.svg` | Security, Identity & Compliance — `#DD344C` (added Week 13) |
+| `shield.svg` | Security, Identity & Compliance — `#DD344C` (added Week 13) |
+| `cloudfront.svg` | Networking & Content Delivery — `#8C4FFF` (added Week 13) |
 
 **Adding a new service icon for a future week:** don't re-download the full
 14MB package if you still have it locally. If not, re-download from the URL
