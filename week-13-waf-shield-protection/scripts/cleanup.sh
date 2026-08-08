@@ -22,14 +22,27 @@ PREFIX="week13-waf"
 echo "Checking for surviving Week 13 resources..."
 echo
 
+fail=0
+
+# Distinguishes three outcomes, not two. The original version swallowed
+# stderr and treated any empty result as "gone" -- which meant an expired
+# SSO session, a permissions error or a typo'd query all reported a clean
+# teardown while having verified nothing at all. A teardown check that can
+# pass without checking is worse than no check.
 check() {
   local label="$1"
   shift
-  local out
-  out=$("$@" 2>/dev/null)
-  if [[ -n "$out" && "$out" != "None" ]]; then
+  local out rc
+  out=$("$@" 2>&1); rc=$?
+
+  if [[ $rc -ne 0 ]]; then
+    echo "  ERROR          $label -- could not verify"
+    echo "$out" | head -2 | sed 's/^/                 /'
+    fail=1
+  elif [[ -n "$out" && "$out" != "None" ]]; then
     echo "  STILL PRESENT  $label"
     echo "$out" | sed 's/^/                 /'
+    fail=1
   else
     echo "  gone           $label"
   fi
@@ -70,6 +83,29 @@ MSYS_NO_PATHCONV=1 aws logs describe-log-groups --region us-east-1 \
   --log-group-name-prefix "aws-waf-logs-$PREFIX" \
   --query 'logGroups[].logGroupName' --output text 2>/dev/null | sed 's/^/  /'
 
+check "SNS topics" \
+  aws sns list-topics --region "$REGION" \
+  --query "Topics[?contains(TopicArn, '$PREFIX')].TopicArn" --output text
+
+check "CloudWatch alarms" \
+  aws cloudwatch describe-alarms --alarm-name-prefix "$PREFIX" --region "$REGION" \
+  --query 'MetricAlarms[].AlarmName' --output text
+
+check "IAM roles" \
+  aws iam list-roles \
+  --query "Roles[?starts_with(RoleName, '$PREFIX')].RoleName" --output text
+
 echo
 echo "Reminder: Shield Standard needs no teardown. It was never provisioned"
 echo "and remains active on the account at no charge."
+echo
+
+if [[ $fail -ne 0 ]]; then
+  echo "RESULT: NOT clean -- see the ERROR/STILL PRESENT lines above."
+  echo "An ERROR line means the check could not run (expired SSO session is the"
+  echo "usual cause: run 'aws sso login' and re-run this script). Do not read a"
+  echo "failed check as a successful teardown."
+  exit 1
+fi
+
+echo "RESULT: clean -- every check ran and found nothing."
