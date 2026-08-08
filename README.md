@@ -30,7 +30,7 @@
 | [Week 10](./week-10-centralized-logging) | Centralised Logging Platform | CloudWatch OAM, Logs Centralization, Logs Insights, Lambda, EventBridge, SNS | ✅ Complete |
 | [Week 11](./week-11-security-hub-guardduty) | Security Hub + GuardDuty Automation | Security Hub, GuardDuty, EventBridge, Lambda auto-remediation | ✅ Complete |
 | [Week 12](./week-12-config-compliance-automation) | AWS Config Compliance Automation | Config Rules, Auto-Remediation, Compliance Dashboard | ✅ Complete |
-| Week 13 | WAF + Shield Standard | WAF Web ACL, Rate Limiting, DDoS Protection, Managed Rules | 📅 Planned |
+| [Week 13](./week-13-waf-shield-protection) | WAF + Shield Standard | WAF Web ACL (both scopes), Rate Limiting, Anti-DDoS Managed Rules, CloudFront, API Gateway | ✅ Complete |
 | Week 14 | VPC Flow Logs + Network Intelligence | Flow Logs, Athena, traffic analysis, anomaly detection | 📅 Planned |
 | Week 15 | CloudTrail Lake + Audit Automation | CloudTrail Lake, SIEM integration, Query Editor | 📅 Planned |
 | Week 16 | Secrets Rotation at Scale | Cross-account rotation, rotation orchestration, break-glass access | 📅 Planned |
@@ -350,6 +350,28 @@ Every project follows the same enterprise pattern:
 
 ---
 
+## Week 13 — AWS WAF + Shield Standard
+
+**The story:** AWS Shield Standard is free, always on, and has no Terraform resource — it stops layer 3/4 volumetric attacks and cannot read a single line of HTTP. The layer where credential stuffing, path scanners and Log4Shell probes actually live is layer 7, and that is AWS WAF's job. The common failure is assuming DDoS protection means Shield Advanced at $3,000/month, concluding it is unaffordable, and shipping nothing at all.
+
+**What it builds:**
+- **Two web ACLs, one per WAF scope** — `CLOUDFRONT` at the edge and `REGIONAL` on the API Gateway stage. Two rather than one because the API Gateway invoke URL stays publicly reachable, so an edge-only firewall is trivially bypassed
+- Five rules per ACL: break-glass IP set, rate-based rule on a 60-second evaluation window, `AWSManagedRulesCommonRuleSet`, `AWSManagedRulesKnownBadInputsRuleSet`, and `AWSManagedRulesAntiDDoSRuleSet` — **953 of the 1,500 included WCUs**, so no capacity overage
+- CloudFront → API Gateway REST API → Lambda echo origin as the protected application (REST, not HTTP API — WAF cannot attach to HTTP APIs at all)
+- WAF logging to CloudWatch with `authorization`/`cookie`/`x-api-key` redacted, plus a per-web-ACL log resource policy rather than contributing to the shared account-wide `AWSWAF-LOGS` policy
+- `BlockedRequests` **and** `CountedRequests` alarms → SNS, because during the Count phase `BlockedRequests` stays at zero and would report "all clear" while rules match heavily
+- Deployed via **HCP Terraform** (VCS-driven, org: Katta, workspace: week-13-dev), Count mode first and flipped to Block only after the evidence justified it
+
+**Key lessons learned:**
+- The Anti-DDoS managed rule group **requires** a non-empty `exempt_uri_regular_expression` list when its challenge action is enabled. The Terraform provider documents the field as optional; AWS rejects `CreateWebACL` outright. Neither `validate` nor `plan` catches it
+- **CLOUDFRONT-scope WAF metrics carry no `Region` dimension at all.** Setting it to `"Global"` is a plausible-looking guess that matches no metric series, so the alarm sits in `INSUFFICIENT_DATA` forever while appearing healthy. Regional metrics *do* carry it. Related: the `Rule` dimension uses `visibility_config.metric_name`, not the rule's `name`
+- **An HTTP status is not a WAF verdict**, especially in Count mode where everything returns 200 by design. API Gateway's 400/405 and CloudFront's 403 have nothing to do with WAF. Only `CountedRequests`/`BlockedRequests` or the WAF logs are evidence
+- Shield Advanced's automatic application-layer mitigation **sunsets 2027-01-01**, replaced by the Anti-DDoS managed rule group at the standard $1/month — no Shield Advanced subscription required
+
+**Resources:** 33 Terraform resources | **Blog:** https://jayanthkatta.com/blog/week-13-waf-shield-protection/
+
+---
+
 ## Standalone Posts
 
 Technical deep-dives and guides published outside the weekly series.
@@ -450,6 +472,7 @@ plan**, and a git push (or "Start new plan") to rebuild.
 | 10   | < $2/month (OAM free; first centralized copy free; bounded log storage) | $0 |
 | 11   | ~$5-20/month (GuardDuty + Security Hub CSPM checks; 30-day free trial covers the lab window) | $0 |
 | 12   | ~$1-5/month (Config recorder now bills account-wide; rule/conformance-pack evaluations are pennies) | $0 — but also removes the account's only Config recorder, check Week 11 dependency first |
+| 13   | ~$20/month (2 web ACLs @ $5 + 10 rules @ $1; **prorated hourly**, so a build-test-destroy day is under $1) | $0 |
 
 ---
 
