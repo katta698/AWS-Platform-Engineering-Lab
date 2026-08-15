@@ -1,0 +1,66 @@
+# Copy to terraform.tfvars for local use. terraform.tfvars is gitignored.
+#
+# In HCP Terraform (workspace week-14-dev) these are set as workspace variables
+# instead. alert_email arrives automatically from the org-wide `shared-alert-email`
+# variable set -- do not set it here or in the workspace.
+
+aws_region  = "us-east-1"
+environment = "dev"
+
+# alert_email = "your-email@example.com"   # supplied by the shared HCP variable set
+
+###############################################################################
+# Network
+###############################################################################
+
+vpc_cidr      = "10.14.0.0/16"
+instance_type = "t4g.nano"
+
+# The internet-reachable instance that collects real scanning traffic into
+# REJECT records. Its security group has no ingress rules at all. Set false to
+# build everything except the internet-reachable surface.
+enable_exposed_instance = true
+
+# Ends up in the instance_tag column. This is what NAT egress gets attributed to.
+generator_team_tag = "platform-engineering"
+
+###############################################################################
+# Capture
+###############################################################################
+
+# Record version 11 allows at most two instance tag keys.
+flow_log_tag_keys = ["Team"]
+
+# 600 or 60 seconds. 60 gives tighter timelines and produces more billable GB.
+# Nitro-backed ENIs aggregate at <=1 minute regardless of this setting.
+max_aggregation_interval = 600
+
+# Flow logs never stop arriving. This is what bounds the storage bill.
+log_retention_days = 30
+
+###############################################################################
+# Analytics
+###############################################################################
+
+projection_start_year = "2026"
+projection_end_year   = "2027"
+
+# Athena bills $5/TB scanned with no default ceiling. This is the guardrail.
+bytes_scanned_cutoff_gb = 10
+
+###############################################################################
+# Analysis and alarms
+###############################################################################
+
+# Must exceed the ~10 minute S3 delivery lag or every run reads a partial window.
+lookback_hours = 2
+
+# Static, not anomaly-detected: zero is the correct value for port scanning, and
+# a learned baseline would just normalise it.
+port_scan_alarm_threshold = 1
+
+anomaly_detection_stddev = 2
+
+# $3.00/alarm/month each (three metrics per alarm), prorated hourly.
+# Set false to keep only the static alarms.
+enable_anomaly_alarms = true
