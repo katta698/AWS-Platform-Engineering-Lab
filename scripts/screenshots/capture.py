@@ -37,15 +37,67 @@ PROFILE_DIR = REPO_ROOT / "playwright_profile"
 
 
 def get_aws_account_id() -> str | None:
-    try:
-        result = subprocess.run(
-            ["aws", "sts", "get-caller-identity", "--query", "Account", "--output", "text"],
-            capture_output=True, text=True, timeout=10,
+    # Timeout raised from 10s to 30s, with one retry, after a real silent leak on
+    # Week 14 (2026-08-15): the call takes ~5s idle but ran past 10s while
+    # Playwright was launching Chromium concurrently. It returned None, redaction
+    # was skipped, and an HCP page with a role ARN saved with the account ID
+    # visible. The call is cheap and runs once per capture -- there is no reason
+    # for the timeout to be tight enough to lose a race with a browser launch.
+    for attempt in (1, 2):
+        try:
+            result = subprocess.run(
+                ["aws", "sts", "get-caller-identity", "--query", "Account", "--output", "text"],
+                capture_output=True, text=True, timeout=30,
+            )
+            account_id = result.stdout.strip()
+            if account_id:
+                return account_id
+            if attempt == 1:
+                print(f"WARNING: STS returned no account id (rc={result.returncode}), retrying...")
+        except Exception as exc:
+            if attempt == 1:
+                print(f"WARNING: STS call failed ({type(exc).__name__}), retrying...")
+    return None
+
+
+def assert_not_present(page, needle: str, label: str) -> None:
+    """
+    Positive check that a secret is genuinely absent from the rendered page.
+
+    The redactors are best-effort DOM rewrites. This asserts the outcome instead
+    of trusting that they ran -- it is the automated form of the standing rule
+    that every console screenshot must be read back before being committed,
+    which exists because blind redaction has under-covered a leak more than once.
+
+    Descends into same-origin iframes for the same reason the redactor does:
+    AWS renders resource-detail panels in them and a top-document check never
+    sees that content.
+    """
+    found = page.evaluate(
+        """
+        (needle) => {
+            const hit = (doc) => {
+                try {
+                    if (doc.body && doc.body.innerText && doc.body.innerText.includes(needle)) return true;
+                } catch (e) { /* cross-origin */ }
+                for (const f of Array.from(doc.querySelectorAll('iframe'))) {
+                    try { if (f.contentDocument && hit(f.contentDocument)) return true; }
+                    catch (e) { /* cross-origin */ }
+                }
+                return false;
+            };
+            return hit(document);
+        }
+        """,
+        needle,
+    )
+    if found:
+        raise SystemExit(
+            f"ERROR: {label} is STILL VISIBLE in the rendered page after redaction — "
+            "refusing to save. The redactor did not reach it (shadow DOM, canvas, "
+            "or an image). Capture this one manually and redact with PIL, then "
+            "read the image back to confirm."
         )
-        account_id = result.stdout.strip()
-        return account_id if account_id else None
-    except Exception:
-        return None
 
 
 def redact_strings(page, replacements: list) -> None:
@@ -184,7 +236,8 @@ def redact_account_id(page, account_id: str) -> None:
 
 def capture(url: str, output_path: Path, wait_selector: str | None, wait_ms: int | None,
             headed: bool, login_wait_seconds: int, height: int,
-            click_text: str | None = None, click_wait_ms: int = 5000):
+            click_text: str | None = None, click_wait_ms: int = 5000,
+            allow_unresolved_account: bool = False):
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -217,17 +270,47 @@ def capture(url: str, output_path: Path, wait_selector: str | None, wait_ms: int
         # wait window, catching async-loaded fields (e.g. the EC2 SG "Owner")
         # that render after the initial pass.
         is_aws = "console.aws.amazon.com" in url or "signin.aws.amazon.com" in url
-        account_id = get_aws_account_id() if is_aws else None
+        # Resolve the account id for EVERY page, not just AWS console pages.
+        #
+        # This used to be `if is_aws else None`, which scoped account-ID redaction
+        # to AWS Console URLs only. That assumption is wrong: the account ID shows
+        # up in plenty of non-AWS surfaces. Found live on Week 14 (2026-08-15) —
+        # an HCP Terraform workspace variables page renders
+        # TFC_AWS_RUN_ROLE_ARN as arn:aws:iam::<account>:role/... in plain text,
+        # and the capture saved it unredacted because app.terraform.io is not an
+        # AWS domain. The same exposure exists on any page that displays a role
+        # ARN: HCP, ServiceNow, GitHub Actions logs, a CI dashboard.
+        #
+        # Resolving it always and redacting whenever it resolves costs one cached
+        # STS call and removes the whole class of bug. The fail-loud below stays
+        # scoped to AWS pages: a non-AWS capture should not be blocked just
+        # because an SSO session happens to be expired.
+        account_id = get_aws_account_id()
         # Fail LOUD, don't save, if we can't resolve the account id on an AWS
         # console page — a transient CLI hiccup returning None used to skip
         # redaction with only a WARNING and silently leak the account id into a
         # committed screenshot (caught on 05-eventbridge 2026-07-21). Refusing
         # to save is the safe default; re-run once creds are healthy.
-        if is_aws and not account_id:
+        # Refuse on ANY page, not just AWS console pages.
+        #
+        # This guard used to be `if is_aws and not account_id`. That is what let
+        # the Week 14 leak through: an HCP page is not an AWS domain, so an
+        # unresolved account id skipped both the redaction and this check, and
+        # the capture saved happily with the ARN in plain text. Any page can
+        # display a role ARN, so "we could not resolve the thing we redact" is a
+        # stop condition everywhere.
+        #
+        # The escape hatch is deliberate but explicit: --allow-unresolved-account
+        # for capturing a genuinely AWS-free page while SSO happens to be dead.
+        if not account_id and not allow_unresolved_account:
             context.close()
             raise SystemExit(
-                "ERROR: could not resolve AWS account ID on an AWS console page — "
-                "refusing to capture (would leak the account ID). Check AWS creds/SSO and retry."
+                "ERROR: could not resolve the AWS account ID — refusing to capture, "
+                "because any page may render a role ARN and redaction cannot run "
+                "without it.\n"
+                "  Fix:  aws sso login    (then retry)\n"
+                "  Or:   pass --allow-unresolved-account if this page provably "
+                "contains no AWS identifiers."
             )
         # Extra secrets to redact (e.g. subscriber email) supplied out-of-band
         # via REDACT_EXTRA=comma,separated so nothing sensitive is committed.
@@ -289,6 +372,16 @@ def capture(url: str, output_path: Path, wait_selector: str | None, wait_ms: int
             redact_strings(page, extras)  # final pass
             print(f"Redacted {len(extras)} extra string(s) from REDACT_EXTRA")
 
+        # Verify the redaction actually worked rather than assuming it did.
+        # Running the redactor and checking the result are different things --
+        # this is the check that would have caught the Week 14 HCP leak at the
+        # moment it happened instead of on a manual read-back afterwards.
+        if account_id:
+            assert_not_present(page, account_id, "the AWS account ID")
+        for needle, _ in extras:
+            assert_not_present(page, needle, f"the REDACT_EXTRA value '{needle[:4]}...'")
+        print("Verified: no unredacted secrets in the rendered page")
+
         # full_page=False (viewport-only, 1400x900) is the deliberate choice
         # here, not full_page=True - SPA pages (AWS Console especially) often
         # reserve DOM height for widgets that never finish loading (e.g. a
@@ -313,7 +406,9 @@ if __name__ == "__main__":
     parser.add_argument("--height", type=int, default=900, help="Viewport height in px - increase for pages with real content below the fold")
     parser.add_argument("--click-text", default=None, help="Exact visible text to click before capturing (for SPA tabs with no addressable URL). Fails loudly rather than capturing the wrong tab.")
     parser.add_argument("--click-wait-ms", type=int, default=5000, help="Wait after the click before capturing")
+    parser.add_argument("--allow-unresolved-account", action="store_true",
+                        help="Capture even if the AWS account ID cannot be resolved. Only for pages that provably contain no AWS identifiers -- normally you want `aws sso login` instead.")
     args = parser.parse_args()
 
     capture(args.url, args.output_path, args.wait_selector, args.wait_ms, args.headed, args.login_wait_seconds,
-            args.height, args.click_text, args.click_wait_ms)
+            args.height, args.click_text, args.click_wait_ms, args.allow_unresolved_account)
