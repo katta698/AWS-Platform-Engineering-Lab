@@ -13,10 +13,9 @@ output "flow_log_id" {
   value       = aws_flow_log.this.id
 }
 
-output "delivery_role_arn" {
-  description = "ARN of the flow log delivery role."
-  value       = aws_iam_role.flow_logs.arn
-}
+# No delivery_role_arn output: S3-destination flow logs do not use one, and the
+# tag fields are served by the auto-created AWSServiceRoleForVPCFlowLogs
+# service-linked role. See the note in main.tf.
 
 output "s3_prefix" {
   description = <<-EOT

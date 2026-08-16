@@ -44,14 +44,55 @@ resource "aws_internet_gateway" "this" {
   tags = { Name = "${var.name_prefix}-igw" }
 }
 
+# Picking an AZ is not as simple as taking the first "available" one.
+#
+# `state = "available"` alone ALSO returns opted-in Local Zones and Wavelength
+# Zones. This account has the Dallas Local Zone (us-east-1-dfw-1a) opted in, so
+# names[0] resolved to it and the first apply failed three separate ways at once:
+#
+#   NatGateway            NotAvailableInZone
+#   gp3 root volume       VolumeTypeNotAvailableInZone
+#   t4g.nano (Graviton)   not offered there
+#
+# Local Zones are a deliberately reduced subset of the region's services. The
+# `zone-type` filter is what restricts this to real regional AZs.
 data "aws_availability_zones" "available" {
   state = "available"
+
+  filter {
+    name   = "zone-type"
+    values = ["availability-zone"]
+  }
+}
+
+# Belt and braces: even among real AZs, a given instance type is not offered
+# everywhere (us-east-1e has no Graviton). Intersecting with the actual offering
+# list means the AZ choice is derived from what the region really supports rather
+# than from an assumption, and it fixes the gp3 case too since the zones lacking
+# Graviton are the same legacy zones lacking gp3.
+data "aws_ec2_instance_type_offerings" "by_az" {
+  location_type = "availability-zone"
+
+  filter {
+    name   = "instance-type"
+    values = [var.instance_type]
+  }
+}
+
+locals {
+  # AZs that are both real regional zones AND actually offer this instance type.
+  usable_azs = sort(setintersection(
+    toset(data.aws_availability_zones.available.names),
+    toset(data.aws_ec2_instance_type_offerings.by_az.locations),
+  ))
+
+  az = local.usable_azs[0]
 }
 
 resource "aws_subnet" "public" {
   vpc_id                  = aws_vpc.this.id
   cidr_block              = var.public_subnet_cidr
-  availability_zone       = data.aws_availability_zones.available.names[0]
+  availability_zone       = local.az
   map_public_ip_on_launch = true
 
   tags = { Name = "${var.name_prefix}-public" }
@@ -63,7 +104,7 @@ resource "aws_subnet" "public" {
 resource "aws_subnet" "private" {
   vpc_id            = aws_vpc.this.id
   cidr_block        = var.private_subnet_cidr
-  availability_zone = data.aws_availability_zones.available.names[0]
+  availability_zone = local.az
 
   tags = { Name = "${var.name_prefix}-private" }
 }

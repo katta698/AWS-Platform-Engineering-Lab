@@ -231,81 +231,34 @@ resource "aws_s3_bucket_policy" "flow_logs" {
 }
 
 ###############################################################################
-# Flow log delivery role
+# No delivery role. This is deliberate, and it is not what the first draft did.
 #
-# Publishing to S3 does not strictly require an IAM role -- but reading EC2 tag
-# values for the v11 tag fields does. That is the whole reason this role exists.
+# The first apply failed with:
+#
+#   InvalidParameter: DeliverLogsPermissionArn is not applicable for s3 delivery
+#
+# For an S3 destination, permissions come from the BUCKET POLICY above, not from
+# an assumed role -- passing `iam_role_arn` is rejected outright. A delivery role
+# applies only to the CloudWatch Logs destination.
+#
+# The reason a role was here at all was to grant ec2:DescribeTags for the v11
+# instance-tag field. That reasoning was wrong about the mechanism. Per AWS's
+# service-linked role documentation, calling CreateFlowLogs with tag fields and
+# TagFieldSpecifications makes VPC Flow Logs create the service-linked role
+# AWSServiceRoleForVPCFlowLogs automatically, and THAT role carries the
+# tag-reading permissions (tag:GetResources, autoscaling:DescribeTags) plus the
+# EventBridge managed rules that keep tag values current as they change.
+#
+# So the only permission that matters here belongs to the principal running
+# Terraform -- it needs iam:CreateServiceLinkedRole for vpc-flow-logs.amazonaws.com.
+# HCP's run role has it. If a future week runs this under a tightly-scoped
+# principal, that is the grant to add, and its absence is what would make the
+# tag column come back as '-'.
+#
+# Teardown note: the SLR survives this module's destroy. AWS asks for the tag
+# subscriptions to be gone and roughly an hour to elapse before it can be
+# removed, so cleanup.sh does not treat it as leftover state.
 ###############################################################################
-
-data "aws_iam_policy_document" "flow_log_assume" {
-  statement {
-    actions = ["sts:AssumeRole"]
-
-    principals {
-      type        = "Service"
-      identifiers = ["vpc-flow-logs.amazonaws.com"]
-    }
-
-    condition {
-      test     = "StringEquals"
-      variable = "aws:SourceAccount"
-      values   = [data.aws_caller_identity.current.account_id]
-    }
-  }
-}
-
-resource "aws_iam_role" "flow_logs" {
-  name               = "${var.name_prefix}-flow-logs-role"
-  assume_role_policy = data.aws_iam_policy_document.flow_log_assume.json
-}
-
-data "aws_iam_policy_document" "flow_logs" {
-  statement {
-    sid    = "DeliverToS3"
-    effect = "Allow"
-    actions = [
-      "logs:CreateLogDelivery",
-      "logs:DeleteLogDelivery",
-      "s3:PutObject",
-      "s3:GetBucketAcl",
-      "s3:ListBucket",
-    ]
-    resources = [aws_s3_bucket.flow_logs.arn, "${aws_s3_bucket.flow_logs.arn}/*"]
-  }
-
-  # The two permissions that make the difference between real tag values and a
-  # column full of "-". DescribeTags has no resource-level scoping, hence "*".
-  statement {
-    sid    = "ReadResourceTagsForV11TagFields"
-    effect = "Allow"
-    actions = [
-      "ec2:DescribeTags",
-      "autoscaling:DescribeTags",
-    ]
-    resources = ["*"]
-  }
-
-  # VPC Flow Logs creates a service-linked role the first time tag fields are
-  # used in an account. Scoped to that one service so this is not a broad grant.
-  statement {
-    sid       = "CreateFlowLogsTagsServiceLinkedRole"
-    effect    = "Allow"
-    actions   = ["iam:CreateServiceLinkedRole"]
-    resources = ["*"]
-
-    condition {
-      test     = "StringEquals"
-      variable = "iam:AWSServiceName"
-      values   = ["vpc-flow-logs.amazonaws.com"]
-    }
-  }
-}
-
-resource "aws_iam_role_policy" "flow_logs" {
-  name   = "${var.name_prefix}-flow-logs-policy"
-  role   = aws_iam_role.flow_logs.id
-  policy = data.aws_iam_policy_document.flow_logs.json
-}
 
 ###############################################################################
 # The flow log subscription
@@ -318,7 +271,6 @@ resource "aws_flow_log" "this" {
   log_destination          = aws_s3_bucket.flow_logs.arn
   log_format               = var.log_format
   max_aggregation_interval = var.max_aggregation_interval
-  iam_role_arn             = aws_iam_role.flow_logs.arn
 
   destination_options {
     file_format = "parquet"
@@ -344,8 +296,7 @@ resource "aws_flow_log" "this" {
 
   tags = { Name = "${var.name_prefix}-flow-log" }
 
-  depends_on = [
-    aws_s3_bucket_policy.flow_logs,
-    aws_iam_role_policy.flow_logs,
-  ]
+  # The bucket policy must exist before the subscription, or delivery fails
+  # silently after a successful create.
+  depends_on = [aws_s3_bucket_policy.flow_logs]
 }
