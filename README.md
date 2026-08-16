@@ -31,7 +31,7 @@
 | [Week 11](./week-11-security-hub-guardduty) | Security Hub + GuardDuty Automation | Security Hub, GuardDuty, EventBridge, Lambda auto-remediation | ✅ Complete |
 | [Week 12](./week-12-config-compliance-automation) | AWS Config Compliance Automation | Config Rules, Auto-Remediation, Compliance Dashboard | ✅ Complete |
 | [Week 13](./week-13-waf-shield-protection) | WAF + Shield Standard | WAF Web ACL (both scopes), Rate Limiting, Anti-DDoS Managed Rules, CloudFront, API Gateway | ✅ Complete |
-| Week 14 | VPC Flow Logs + Network Intelligence | Flow Logs, Athena, traffic analysis, anomaly detection | 📅 Planned |
+| [Week 14](./week-14-vpc-flow-logs-intelligence) | VPC Flow Logs + Network Intelligence | Flow Logs (record v11), S3 Parquet, Glue partition projection, Athena, Lambda, CloudWatch anomaly detection | ✅ Complete |
 | Week 15 | CloudTrail Lake + Audit Automation | CloudTrail Lake, SIEM integration, Query Editor | 📅 Planned |
 | Week 16 | Secrets Rotation at Scale | Cross-account rotation, rotation orchestration, break-glass access | 📅 Planned |
 | Week 17 | Private CA + Certificate Automation | ACM Private CA, internal PKI, auto-renewal pipeline | 📅 Planned |
@@ -372,6 +372,30 @@ Every project follows the same enterprise pattern:
 
 ---
 
+## Week 14 — VPC Flow Logs + Network Intelligence
+
+**The story:** flow logs get switched on for a compliance checkbox, write tens of gigabytes a month into a bucket nobody has permission to read, and are never queried again — until an incident, when the answer is technically sitting in S3 and unreachable in under a day. Flow logs are pure cost until someone builds the query layer, and the query layer is the part that always gets deferred. You pay $0.25/GB ingested whether or not a single query ever runs.
+
+**What it builds:**
+- **Flow logs to S3 in Parquet**, hive-partitioned and hourly, using a **record version 11** custom format of 32 fields — S3 rather than CloudWatch Logs is a 2× cost decision ($0.25/GB vs $0.50/GB) and Parquet is only offered on the S3 path
+- A small VPC built to produce identifiable traffic: a private generator egressing through both a **NAT gateway** (billed) and a **free S3 gateway endpoint**, plus an internet-reachable instance whose security group has **no ingress rules at all** — those denials are what create the REJECT records the detection queries analyse
+- **Glue table with partition projection, no crawler** — flow log prefixes are fully deterministic, so a crawler would pay DPU-time to rediscover a known structure and lag behind new partitions
+- **Athena workgroup with a 10 GB per-query scan ceiling**, enforced at workgroup level so no client can opt out. Athena bills $5/TB scanned with no default limit
+- Seven saved Athena queries (top talkers, rejected traffic, port-scan candidates, NAT cost attribution, traffic-path contrast, next-hop trace, and a partition sanity check)
+- An hourly `flow_analyzer` Lambda publishing custom metrics, with a **deliberately mixed** alarm strategy: anomaly-detection bands where normal is unknown (traffic volume, NAT egress) and static thresholds where zero is the correct value (port scans, DLQ depth, analyzer silence)
+- Deployed via **HCP Terraform** (VCS-driven, org: Katta, workspace: week-14-dev)
+
+**Key lessons learned:**
+- **`traffic_path` cannot attribute NAT cost — it is relative to the capture point, not the journey.** Measured at the sending instance's own ENI, NAT-bound traffic records `traffic_path = 1` ("same VPC"), because that is literally what the next hop is. The NAT's own ENI records `8` for the same bytes but carries no instance tag. The documented value `2` never appeared in real data at all. The **record v11 `next_hop_interface_type`** field is what actually solves it, putting the team's tag and the NAT destination on one row
+- **`data.aws_availability_zones` with `state = "available"` also returns opted-in Local Zones.** One wrong AZ produced three unrelated-looking failures at once — NAT gateway, gp3 and Graviton all unavailable. Filter on `zone-type` and intersect with the instance type's real offering list
+- **An S3-destination flow log rejects `iam_role_arn` outright.** A delivery role applies only to the CloudWatch Logs destination; for S3, permissions come from the bucket policy. The v11 tag fields are served by the auto-created `AWSServiceRoleForVPCFlowLogs` service-linked role, so the only grant that matters is `iam:CreateServiceLinkedRole` on whatever runs Terraform
+- **Flow log tag values arrive percent-encoded** — `platform-engineering` is delivered as `platform%2Dengineering`. Every tag column needs `url_decode()` or grouping silently splits
+- **Every failure mode in this build is silent.** A projection template that does not match the delivered prefixes returns zero rows and reports `SUCCEEDED`; missing tag permissions produce a column of `-`. Hence a `verify_pipeline.sh` that checks a real delivered S3 key against the template rather than re-reading the config
+
+**Resources:** 58 Terraform resources | **Blog:** _(pending publish)_
+
+---
+
 ## Standalone Posts
 
 Technical deep-dives and guides published outside the weekly series.
@@ -473,6 +497,7 @@ plan**, and a git push (or "Start new plan") to rebuild.
 | 11   | ~$5-20/month (GuardDuty + Security Hub CSPM checks; 30-day free trial covers the lab window) | $0 |
 | 12   | ~$1-5/month (Config recorder now bills account-wide; rule/conformance-pack evaluations are pennies) | $0 — but also removes the account's only Config recorder, check Week 11 dependency first |
 | 13   | ~$20/month (2 web ACLs @ $5 + 10 rules @ $1; **prorated hourly**, so a build-test-destroy day is under $1) | $0 |
+| 14   | ~$33/month (**~75% is the NAT gateway** at $0.045/hr + $0.045/GB, which bills with no usage signal to remind you; 2 anomaly alarms @ $3 each, prorated hourly) | $0 |
 
 ---
 
