@@ -18,7 +18,8 @@ SELECT
     srcaddr                         AS observed_source,
     dstaddr                         AS destination,
     dstport                         AS destination_port,
-    instance_tag                    AS owning_team,
+    -- Tag values arrive percent-encoded ('-' as %2D); decode or the values are wrong.
+    url_decode(instance_tag)        AS owning_team,
     COUNT(*)                        AS flow_records,
     SUM(packets)                    AS total_packets,
     SUM(bytes)                      AS total_bytes,

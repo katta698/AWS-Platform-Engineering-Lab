@@ -27,9 +27,11 @@ SELECT
     MIN(from_unixtime(start))       AS min_start_time,
     MAX(from_unixtime("end"))       AS max_end_time,
     SUM(bytes)                      AS total_bytes,
-    -- If this column is entirely '-', the delivery role is missing
-    -- ec2:DescribeTags and the v11 tag fields are not resolving.
-    COUNT(DISTINCT instance_tag)    AS distinct_instance_tags
+    -- If this comes back as 1 and that one value is '-', the v11 tag fields are
+    -- not resolving: the principal that called CreateFlowLogs lacked
+    -- iam:CreateServiceLinkedRole, so AWSServiceRoleForVPCFlowLogs was never
+    -- created and nothing is reading tag values. There is no error for this.
+    COUNT(DISTINCT url_decode(instance_tag))    AS distinct_instance_tags
 FROM ${table}
 WHERE concat(year, '-', month, '-', day) >= date_format(current_date - interval '2' day, '%Y-%m-%d')
 GROUP BY 1, 2, 3, 4

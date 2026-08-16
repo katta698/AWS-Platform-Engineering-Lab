@@ -92,9 +92,19 @@ def build_queries() -> dict:
             FROM {QUALIFIED_TABLE}
             WHERE {where}
         """,
-        # NAT-path egress only. Tracked separately from total volume because it
+        # NAT-bound egress only. Tracked separately from total volume because it
         # is the portion that carries a per-GB charge -- total traffic can be
         # flat while the billed share of it climbs.
+        #
+        # Filters on next_hop_interface_type, NOT traffic_path. The first version
+        # used `traffic_path = 2` and published a permanent zero: measured at the
+        # sending instance's ENI, NAT-bound traffic records traffic_path 1 ("same
+        # VPC"), and the value 8 appears later on the NAT's own ENI where there is
+        # no instance tag. traffic_path 2 never appeared in real data at all.
+        #
+        # This is also why the filter is on the sender's hop rather than the NAT's:
+        # the same bytes are visible at both capture points, and counting both
+        # would double the cost figure.
         "nat_egress": f"""
             SELECT
                 COALESCE(SUM(bytes), 0)                                    AS nat_bytes,
@@ -103,7 +113,7 @@ def build_queries() -> dict:
             WHERE {where}
               AND action = 'ACCEPT'
               AND flow_direction = 'egress'
-              AND traffic_path = 2
+              AND next_hop_interface_type = 'nat_gateway'
         """,
         # Rejected traffic volume. Expected to be non-zero at all times on any
         # internet-reachable address; the anomaly band is what makes it useful.

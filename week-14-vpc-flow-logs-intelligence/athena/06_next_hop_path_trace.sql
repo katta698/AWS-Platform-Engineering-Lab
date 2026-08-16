@@ -19,12 +19,13 @@ SELECT
     next_hop_interface_id           AS next_hop_eni,
     next_hop_vpc_id                 AS next_hop_vpc,
     flow_direction,
+    url_decode(instance_tag)        AS owning_team,
     pkt_dst_aws_service             AS destination_service,
     COUNT(*)                        AS flow_records,
     SUM(bytes)                      AS total_bytes
 FROM ${table}
 WHERE concat(year, '-', month, '-', day) >= date_format(current_date - interval '1' day, '%Y-%m-%d')
   AND next_hop_interface_id <> '-'
-GROUP BY 1, 2, 3, 4, 5, 6
+GROUP BY 1, 2, 3, 4, 5, 6, 7
 ORDER BY total_bytes DESC
 LIMIT 100;
