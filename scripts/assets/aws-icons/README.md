@@ -34,6 +34,10 @@ doesn't load that CSS).
 | `waf.svg` | Security, Identity & Compliance — `#DD344C` (added Week 13) |
 | `shield.svg` | Security, Identity & Compliance — `#DD344C` (added Week 13) |
 | `cloudfront.svg` | Networking & Content Delivery — `#8C4FFF` (added Week 13) |
+| `athena.svg` | Analytics — `#8C4FFF` (added Week 14) |
+| `glue.svg` | Analytics — `#8C4FFF` (added Week 14) |
+| `ec2.svg` | Compute — `#ED7100` (added Week 14) |
+| `nat-gateway.svg` | Networking & Content Delivery — resource icon, 48x48 viewBox, line style rather than a colored square (added Week 14) |
 
 **Adding a new service icon for a future week:** don't re-download the full
 14MB package if you still have it locally. If not, re-download from the URL
