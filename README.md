@@ -392,7 +392,7 @@ Every project follows the same enterprise pattern:
 - **Flow log tag values arrive percent-encoded** — `platform-engineering` is delivered as `platform%2Dengineering`. Every tag column needs `url_decode()` or grouping silently splits
 - **Every failure mode in this build is silent.** A projection template that does not match the delivered prefixes returns zero rows and reports `SUCCEEDED`; missing tag permissions produce a column of `-`. Hence a `verify_pipeline.sh` that checks a real delivered S3 key against the template rather than re-reading the config
 
-**Resources:** 58 Terraform resources | **Blog:** _(pending publish)_
+**Resources:** 58 Terraform resources | **Blog:** https://jayanthkatta.com/blog/week-14-vpc-flow-logs-intelligence/
 
 ---
 
