@@ -350,6 +350,28 @@ Every project follows the same enterprise pattern:
 
 ---
 
+## Week 12 — AWS Config Compliance Automation
+
+**The story:** Compliance drift is rarely dramatic. Somebody turns off versioning on a bucket to stop a lifecycle rule complaining, someone else launches an instance without the tag the cost report groups by, and neither shows up until an audit or an invoice. Detecting that is only half the job — a rule that reports a bucket as non-compliant every day for six months has not improved anything. This week detects the drift *and* fixes the mechanical cases automatically, then reports what is left.
+
+**What it builds:**
+- **One AWS Config conformance pack** (`week12-cfgcompliance-pack`) rendered from a CFN-style YAML template via `templatefile()`, containing three managed rules: `required-tags`, `s3-bucket-versioning-enabled`, and `s3-bucket-server-side-encryption-enabled` — all three confirmed absent from the ~300 `securityhub-*` rules Week 11's FSBP standard already created
+- **Auto-remediation using AWS-managed SSM Automation documents** — `AWS-ConfigureS3BucketVersioning` and `AWS-EnableS3BucketEncryption`, both verified to exist and Amazon-owned before use, rather than the plausible-sounding `AWSConfigRemediation-*` names that do not
+- **Its own Config configuration recorder**, because the account's shared one was deleted mid-build by an unrelated project's cleanup and took every rule with it
+- A `compliance_reporter` Lambda that **discovers the real rule names at runtime** via `DescribeConformancePackCompliance`, publishing a summary to SNS
+- Deployed via **HCP Terraform** (VCS-driven, org: Katta, workspace: week-12-dev)
+
+**Key lessons learned:**
+- **A conformance pack defines its own rules; it does not wrap externally-created ones.** The original design had standalone `aws_config_config_rule` resources *plus* a pack around them, which would have duplicated every rule. Pick one — do not create the same rule both ways
+- **AWS Config appends a generated suffix to every rule name inside a conformance pack** (`week12-required-tags-conformance-pack-<id>`, not `week12-required-tags`). A hardcoded rule-name env var silently matches nothing, so the reporter has to discover names rather than assume them
+- **Config `Scope` cannot combine `ComplianceResourceTypes` with `TagKey`/`TagValue`** — it is resource-type-based or tag-based, never both. Only a real apply catches this; a web search during the briefing had suggested otherwise and was wrong
+- **S3 bucket-level admin actions do not support `aws:ResourceTag` IAM conditions at all.** `PutBucketVersioning` and `PutBucketEncryption` with a tag condition do not error — the statement simply never matches, so it grants nothing. This does *not* generalise from Week 11, where the same trick works fine on EC2 security groups. Verify per action, not per service
+- **`boto3.client("configservice")` does not exist** — the client name is `"config"`; `configservice` is only the AWS CLI's command namespace. Caught by a real invoke, not by `terraform validate` or `py_compile`
+
+**Resources:** 23 Terraform resources | **Blog:** https://jayanthkatta.com/blog/week-12-config-compliance-automation/
+
+---
+
 ## Week 13 — AWS WAF + Shield Standard
 
 **The story:** AWS Shield Standard is free, always on, and has no Terraform resource — it stops layer 3/4 volumetric attacks and cannot read a single line of HTTP. The layer where credential stuffing, path scanners and Log4Shell probes actually live is layer 7, and that is AWS WAF's job. The common failure is assuming DDoS protection means Shield Advanced at $3,000/month, concluding it is unaffordable, and shipping nothing at all.
