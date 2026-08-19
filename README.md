@@ -32,8 +32,8 @@
 | [Week 12](./week-12-config-compliance-automation) | AWS Config Compliance Automation | Config Rules, Auto-Remediation, Compliance Dashboard | ✅ Complete |
 | [Week 13](./week-13-waf-shield-protection) | WAF + Shield Standard | WAF Web ACL (both scopes), Rate Limiting, Anti-DDoS Managed Rules, CloudFront, API Gateway | ✅ Complete |
 | [Week 14](./week-14-vpc-flow-logs-intelligence) | VPC Flow Logs + Network Intelligence | Flow Logs (record v11), S3 Parquet, Glue partition projection, Athena, Lambda, CloudWatch anomaly detection | ✅ Complete |
-| Week 15 | CloudTrail Lake + Audit Automation | CloudTrail Lake, SIEM integration, Query Editor | 📅 Planned |
-| Week 16 | Secrets Rotation at Scale | Cross-account rotation, rotation orchestration, break-glass access | 📅 Planned |
+| Week 15 | CloudTrail Org Trail + Audit Forensics | CloudTrail organization trail, S3, Glue partition projection, Athena, Lambda (replaces CloudTrail Lake — closed to new customers 2026-05-31) | 📅 Planned |
+| Week 16 | AWS Health Event Triage with DevOps Agent | AWS Health, EventBridge, Step Functions, AWS DevOps Agent, SSM OpsCenter, DynamoDB routing | 📅 Planned |
 | Week 17 | Private CA + Certificate Automation | ACM Private CA, internal PKI, auto-renewal pipeline | 📅 Planned |
 
 ### Phase 3 — Containers & Modern Patterns (Weeks 18–25)
@@ -45,7 +45,7 @@
 | Week 20 | EventBridge Event-Driven Platform | EventBridge, event buses, schema registry, cross-account events | 📅 Planned |
 | Week 21 | Blue/Green Deployment Automation | CodeDeploy, traffic shifting, automated rollback | 📅 Planned |
 | Week 22 | Container Image Security Pipeline | ECR scanning, image signing, policy enforcement | 📅 Planned |
-| Week 23 | Service Mesh with App Mesh | Traffic management, observability, mTLS between services | 📅 Planned |
+| Week 23 | Service Networking with VPC Lattice | VPC Lattice service networks, cross-VPC/cross-account routing, auth policies (replaces App Mesh — shut down 2026-09-30) | 📅 Planned |
 | Week 24 | Chaos Engineering Platform | FIS fault injection, resilience testing, runbooks | 📅 Planned |
 | Week 25 | Serverless Microservices | API Gateway + Lambda, DynamoDB, SAM, local testing | 📅 Planned |
 
@@ -54,7 +54,7 @@
 | Week | Project | Key AWS Services | Status |
 |------|---------|-----------------|--------|
 | Week 26 | DynamoDB Self-Service Platform | DynamoDB, DAX, on-demand capacity, table-per-tenant | 📅 Planned |
-| Week 27 | ElastiCache Redis Cluster | ElastiCache, Redis, caching layer, automated failover | 📅 Planned |
+| Week 27 | ElastiCache for Valkey | ElastiCache Serverless for Valkey, caching layer, automated failover (Valkey is AWS's recommended engine for new deployments) | 📅 Planned |
 | Week 28 | RDS Multi-Region with Read Replicas | RDS, read replicas, global database pattern, failover automation | 📅 Planned |
 | Week 29 | Database Migration Service | DMS, homogeneous + heterogeneous migrations, CDC, cutover | 📅 Planned |
 | Week 30 | Redshift Data Warehouse | Redshift Serverless, data sharing, Spectrum, RA3 | 📅 Planned |
@@ -79,18 +79,29 @@
 
 | Week | Project | Key AWS Services | Status |
 |------|---------|-----------------|--------|
-| Week 42 | Bedrock AI-Powered Self-Service | Bedrock, RAG, natural language infra requests, Lambda | 📅 Planned |
+| Week 42 | Agentic Self-Service with Bedrock AgentCore | Bedrock AgentCore runtime, tool use, natural language infra requests, guardrails | 📅 Planned |
 | Week 43 | SageMaker ML Pipeline | SageMaker, model registry, endpoint automation, CI/CD | 📅 Planned |
 | Week 44 | FinOps Intelligence Dashboard | Cost Intelligence Dashboard, showback, chargeback, tagging | 📅 Planned |
 | Week 45 | Well-Architected Review Automation | WA Tool API, automated checks, remediation tracking | 📅 Planned |
 | Week 46 | Service Control Policies at Scale | SCPs, guardrails, permission boundaries, deny-list patterns | 📅 Planned |
-| Week 47 | Lambda Power Tuning + Optimisation | Memory tuning, cold start reduction, provisioned concurrency | 📅 Planned |
+| Week 47 | MCP Server for Platform Operations | Model Context Protocol server over the lab's own operational data (Athena, CloudWatch, Config), agent-consumable | 📅 Planned |
 | Week 48 | CodePipeline Enterprise CI/CD | Multi-stage pipeline, approval gates, cross-account deploy | 📅 Planned |
 | Week 49 | CloudFormation StackSets | Multi-account/multi-region baseline, drift detection | 📅 Planned |
 | Week 50 | Internal Developer Portal | Backstage on ECS, service catalog, tech radar, TechDocs | 📅 Planned |
 | Week 51 | Step Functions Express Workflows | High-volume event processing, saga pattern, compensations | 📅 Planned |
 | Week 52 | Platform Reliability Engineering | SLOs, error budgets, automated incident response | 📅 Planned |
 | Week 53 | Capstone: Full Cloud Platform | Everything integrated — self-service, GitOps, AI, FinOps, DR | 📅 Planned |
+
+> **Roadmap currency — reviewed 2026-08-18.** This roadmap is re-audited against live AWS
+> documentation rather than followed blindly. Two originally-planned topics turned out to be
+> unbuildable and were replaced: **CloudTrail Lake** (Week 15 — closed to new customers
+> 2026-05-31) and **AWS App Mesh** (Week 23 — shuts down 2026-09-30, closed to new customers
+> since 2024). Every week's Pre-Build Briefing re-verifies pricing, deprecations and provider
+> arguments against current docs before any code is written.
+>
+> **Displaced by the 2026-08-18 revision, to be re-slotted:** *Secrets Rotation at Scale*
+> (was Week 16) and *Lambda Power Tuning + Optimisation* (was Week 47). Both are still worth
+> building; they lost their slots to more current material rather than being dropped on merit.
 
 ---
 
