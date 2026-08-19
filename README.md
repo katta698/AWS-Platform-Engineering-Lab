@@ -7,7 +7,7 @@
 
 ---
 
-## Full 52-Week Roadmap
+## Roadmap — Year 1 planned, Year 2 themed
 
 ### Phase 1 — Self-Service Platforms (Weeks 1–9)
 
@@ -92,6 +92,48 @@
 | Week 52 | Platform Reliability Engineering | SLOs, error budgets, agent-assisted incident response end to end | 📅 Planned |
 | Week 53 | Capstone: Full Cloud Platform | Everything integrated — self-service, GitOps, AI, FinOps, DR | 📅 Planned |
 
+## Year 2 — Weeks 54+ (themed backlog, not a fixed schedule)
+
+Year 1 is planned week by week. **Year 2 deliberately is not.**
+
+That is a lesson, not laziness. The Year 1 roadmap was written in early 2026 and by Week 15 two
+of its topics had become unbuildable — CloudTrail Lake closed to new customers, App Mesh was
+given a shutdown date — while the single biggest development in platform engineering that year
+(agentic operations) had no slot at all, because the category did not exist when the list was
+written. **A fixed two-year plan would rot twice as fast as a one-year plan.**
+
+So Year 2 is a set of themes with candidate topics. **Actual topics are fixed 4–8 weeks out**,
+against live AWS documentation and the real account, in each week's Pre-Build Briefing.
+
+### Carried forward — displaced from Year 1, not dropped on merit
+
+| Week | Project | Key AWS Services |
+|------|---------|-----------------|
+| Week 54 | Secrets Rotation at Scale | Secrets Manager, cross-account rotation, rotation orchestration, break-glass access |
+| Week 55 | Lambda Power Tuning + Optimisation | Memory tuning, cold start reduction, provisioned concurrency, ARM migration |
+
+### Candidate themes for Weeks 56+
+
+| Theme | Candidate topics |
+|---|---|
+| **Agentic operations, deeper** | Agent evaluation harnesses, guardrails and approval boundaries, multi-agent workflows, Strands, agent cost control |
+| **Compliance as evidence** | PCI/SOC2/HIPAA evidence automation, Audit Manager, control attestation from real telemetry |
+| **Modern observability** | OpenTelemetry and ADOT, trace-based SLOs, Application Signals, cardinality and cost control |
+| **Data platform** | S3 Tables and Iceberg, zero-ETL integrations, data contracts, cross-account data sharing |
+| **Container platform, deeper** | Karpenter, EKS Auto Mode in anger, Fargate profiles, admission control, multi-tenancy |
+| **Network modernisation** | Cloud WAN, IPv6 migration, Verified Access, egress inspection at scale |
+| **Identity and access** | Verified Permissions, IAM Access Analyzer at scale, permission-boundary automation, workload identity |
+| **Resilience engineering** | Application Recovery Controller, zonal shift, dependency mapping, game days |
+| **Developer experience** | Spec-driven development with Kiro, golden paths, platform APIs, Terraform Stacks |
+| **Migration and modernisation** | Application Migration Service, strangler-fig patterns, continuous modernisation tooling |
+| **Edge and delivery** | CloudFront Functions, Lambda@Edge, multi-CDN, edge auth |
+| **Cost engineering** | Unit economics, rightsizing automation, Savings Plans modelling, waste detection |
+
+**How a Year 2 week gets chosen:** pick from the themes above based on what is genuinely current
+and what the series has not yet proved, verify it is still buildable, then write the briefing.
+A theme that stops mattering gets dropped without ceremony — that is the point of not fixing it
+in advance.
+
 > **Roadmap currency — reviewed 2026-08-18.** This roadmap is re-audited against live AWS
 > documentation rather than followed blindly. Two originally-planned topics turned out to be
 > unbuildable and were replaced: **CloudTrail Lake** (Week 15 — closed to new customers
@@ -99,9 +141,9 @@
 > since 2024). Every week's Pre-Build Briefing re-verifies pricing, deprecations and provider
 > arguments against current docs before any code is written.
 >
-> **Displaced by the 2026-08-18 revision, to be re-slotted:** *Secrets Rotation at Scale*
-> (was Week 16) and *Lambda Power Tuning + Optimisation* (was Week 47). Both are still worth
-> building; they lost their slots to more current material rather than being dropped on merit.
+> **Nothing is dropped to make room.** *Secrets Rotation at Scale* (was Week 16) and *Lambda
+> Power Tuning + Optimisation* (was Week 47) lost Year 1 slots to more current material, not on
+> merit, and open Year 2 at Weeks 54–55.
 
 ---
 
