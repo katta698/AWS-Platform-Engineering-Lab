@@ -1,0 +1,48 @@
+# Copy to terraform.tfvars for local use. terraform.tfvars is gitignored.
+#
+# In HCP Terraform (workspace week-15-dev) these are workspace variables instead.
+# alert_email arrives automatically from the org-wide `shared-alert-email`
+# variable set -- do not set it here or in the workspace.
+
+aws_region  = "us-east-1"
+environment = "dev"
+
+# alert_email = "your-email@example.com"   # supplied by the shared HCP variable set
+
+###############################################################################
+# Trail
+###############################################################################
+
+# Requires the management account AND trusted access already enabled:
+#   aws organizations enable-aws-service-access \
+#     --service-principal cloudtrail.amazonaws.com
+is_organization_trail = true
+
+# Leave on. "Did anything happen in a region we don't use?" cannot be answered
+# by a single-region trail -- it cannot see the regions being asked about.
+is_multi_region_trail = true
+
+# Must exceed 90. The CloudTrail console already keeps 90 days for free.
+log_retention_days = 365
+
+enable_log_file_validation = true
+
+###############################################################################
+# Analytics
+###############################################################################
+
+projection_start_year = "2026"
+projection_end_year   = "2027"
+
+# Athena bills $5/TB scanned with no default limit. This is the guardrail.
+bytes_scanned_cutoff_gb = 10
+
+###############################################################################
+# Analysis and alarms
+###############################################################################
+
+# Adding a region here to silence an alarm is the same as switching it off.
+expected_regions = ["us-east-1"]
+
+schedule_expression    = "rate(1 day)"
+lambda_timeout_seconds = 600
