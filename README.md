@@ -34,7 +34,7 @@
 | [Week 14](./week-14-vpc-flow-logs-intelligence) | VPC Flow Logs + Network Intelligence | Flow Logs (record v11), S3 Parquet, Glue partition projection, Athena, Lambda, CloudWatch anomaly detection | ✅ Complete |
 | Week 15 | CloudTrail Org Trail + Audit Forensics | CloudTrail organization trail, S3, Glue partition projection, Athena, Lambda (replaces CloudTrail Lake — closed to new customers 2026-05-31) | 📅 Planned |
 | Week 16 | AWS Health Event Triage with DevOps Agent | AWS Health, EventBridge, Step Functions, AWS DevOps Agent, SSM OpsCenter, DynamoDB routing | 📅 Planned |
-| Week 17 | Private CA + Certificate Automation | ACM Private CA, internal PKI, auto-renewal pipeline | 📅 Planned |
+| Week 17 | MCP Server for Platform Operations | Model Context Protocol server over the lab's own operational data (Athena, CloudWatch, Config) — makes Weeks 10–16 agent-consumable | 📅 Planned |
 
 ### Phase 3 — Containers & Modern Patterns (Weeks 18–25)
 
@@ -46,7 +46,7 @@
 | Week 21 | Blue/Green Deployment Automation | CodeDeploy, traffic shifting, automated rollback | 📅 Planned |
 | Week 22 | Container Image Security Pipeline | ECR scanning, image signing, policy enforcement | 📅 Planned |
 | Week 23 | Service Networking with VPC Lattice | VPC Lattice service networks, cross-VPC/cross-account routing, auth policies (replaces App Mesh — shut down 2026-09-30) | 📅 Planned |
-| Week 24 | Chaos Engineering Platform | FIS fault injection, resilience testing, runbooks | 📅 Planned |
+| Week 24 | Chaos Engineering + Agent Evaluation | FIS fault injection, resilience testing, runbooks — plus measuring whether AWS DevOps Agent finds a fault you deliberately caused | 📅 Planned |
 | Week 25 | Serverless Microservices | API Gateway + Lambda, DynamoDB, SAM, local testing | 📅 Planned |
 
 ### Phase 4 — Data & Database (Weeks 26–33)
@@ -84,12 +84,12 @@
 | Week 44 | FinOps Intelligence Dashboard | Cost Intelligence Dashboard, showback, chargeback, tagging | 📅 Planned |
 | Week 45 | Well-Architected Review Automation | WA Tool API, automated checks, remediation tracking | 📅 Planned |
 | Week 46 | Service Control Policies at Scale | SCPs, guardrails, permission boundaries, deny-list patterns | 📅 Planned |
-| Week 47 | MCP Server for Platform Operations | Model Context Protocol server over the lab's own operational data (Athena, CloudWatch, Config), agent-consumable | 📅 Planned |
+| Week 47 | Private CA + Certificate Automation | ACM Private CA, internal PKI, auto-renewal pipeline | 📅 Planned |
 | Week 48 | CodePipeline Enterprise CI/CD | Multi-stage pipeline, approval gates, cross-account deploy | 📅 Planned |
 | Week 49 | CloudFormation StackSets | Multi-account/multi-region baseline, drift detection | 📅 Planned |
 | Week 50 | Internal Developer Portal | Backstage on ECS, service catalog, tech radar, TechDocs | 📅 Planned |
 | Week 51 | Step Functions Express Workflows | High-volume event processing, saga pattern, compensations | 📅 Planned |
-| Week 52 | Platform Reliability Engineering | SLOs, error budgets, automated incident response | 📅 Planned |
+| Week 52 | Platform Reliability Engineering | SLOs, error budgets, agent-assisted incident response end to end | 📅 Planned |
 | Week 53 | Capstone: Full Cloud Platform | Everything integrated — self-service, GitOps, AI, FinOps, DR | 📅 Planned |
 
 > **Roadmap currency — reviewed 2026-08-18.** This roadmap is re-audited against live AWS
