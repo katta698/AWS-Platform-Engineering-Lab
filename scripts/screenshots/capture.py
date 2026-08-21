@@ -98,6 +98,67 @@ def get_org_account_ids(caller_account_id: str | None) -> list[str]:
         return []
 
 
+def shut_down(context, page, cdp_port):
+    """
+    Tear down what we own, and nothing else.
+
+    When attached over CDP the browser belongs to the user -- closing the context
+    would take their HCP session and every other tab with it. Only the tab this
+    script opened gets closed.
+    """
+    try:
+        if cdp_port:
+            page.close()
+        else:
+            context.close()
+    except Exception:
+        pass
+
+
+def settle(page, label=""):
+    """
+    Wait for the page to stop navigating before touching the DOM.
+
+    A redaction pass is a page.evaluate(), and evaluate() throws
+    "Execution context was destroyed" if a navigation lands while it runs. That
+    is not a hypothetical: an expired HCP session redirects to /login a moment
+    after load, which crashed the whole capture on 2026-08-21 -- before the
+    headed login window was ever shown, so it looked to the user like the
+    browser never opened.
+
+    Any page that redirects after load can do this: SSO bounces, consent
+    interstitials, SPA route changes. Settling first is cheap; crashing loses
+    the run.
+    """
+    try:
+        page.wait_for_load_state("networkidle", timeout=15000)
+    except Exception:
+        pass  # networkidle never settles on pages with long-poll connections
+    page.wait_for_timeout(700)
+
+
+def redact_safely(fn, page, arg, label):
+    """
+    Run a redaction pass, tolerating one navigation race.
+
+    Retried rather than ignored: skipping a failed redaction pass is how an
+    unredacted page reaches disk, which is the exact failure this module exists
+    to prevent. If it fails twice the caller's assert_not_present() still stands
+    as the last line of defence.
+    """
+    for attempt in (1, 2):
+        try:
+            fn(page, arg)
+            return
+        except Exception as exc:
+            if "Execution context was destroyed" in str(exc) or "navigating" in str(exc):
+                if attempt == 1:
+                    print(f"NOTE: page navigated during {label}; settling and retrying")
+                    settle(page)
+                    continue
+            raise
+
+
 def assert_not_a_login_page(page, allow_login_page: bool) -> None:
     """
     Refuse to save a screenshot of a sign-in screen.
@@ -320,7 +381,7 @@ def redact_account_id(page, account_id: str) -> None:
 def capture(url: str, output_path: Path, wait_selector: str | None, wait_ms: int | None,
             headed: bool, login_wait_seconds: int, height: int,
             click_text: str | None = None, click_wait_ms: int = 5000,
-            allow_unresolved_account: bool = False):
+            allow_unresolved_account: bool = False, cdp_port: int | None = None):
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -336,12 +397,33 @@ def capture(url: str, output_path: Path, wait_selector: str | None, wait_ms: int
         # (confirmed on a real HCP run-list capture, same day - lost 2 of 4
         # real runs at height=900). Pick --height per page based on what's
         # actually needed, not a single default that fits neither case well.
-        context = p.chromium.launch_persistent_context(
-            str(PROFILE_DIR),
-            headless=not headed,
-            viewport={"width": 1400, "height": height},
-        )
-        page = context.new_page()
+        browser = None
+        if cdp_port:
+            # Attach to a Chrome the user started themselves. Nothing here is
+            # automation-flagged, so identity providers that refuse automated
+            # browsers (Google, and therefore HCP) behave normally.
+            try:
+                browser = p.chromium.connect_over_cdp(f"http://127.0.0.1:{cdp_port}")
+            except Exception as exc:
+                raise SystemExit(
+                    f"Could not attach to Chrome on port {cdp_port}: {exc}\n"
+                    "Start it first (see scripts/screenshots/START_CHROME.md), and leave it running."
+                )
+            context = browser.contexts[0] if browser.contexts else browser.new_context()
+            page = context.new_page()
+            # An attached Chrome owns its own window size; force the capture
+            # viewport so images stay consistent with every other week.
+            try:
+                page.set_viewport_size({"width": 1400, "height": height})
+            except Exception:
+                pass
+        else:
+            context = p.chromium.launch_persistent_context(
+                str(PROFILE_DIR),
+                headless=not headed,
+                viewport={"width": 1400, "height": height},
+            )
+            page = context.new_page()
         # "networkidle" doesn't work for SPA-heavy pages (AWS Console, HCP UI)
         # that poll continuously in the background and never go idle -
         # confirmed via a real 30s timeout testing against the ECS console.
@@ -387,7 +469,7 @@ def capture(url: str, output_path: Path, wait_selector: str | None, wait_ms: int
         # The escape hatch is deliberate but explicit: --allow-unresolved-account
         # for capturing a genuinely AWS-free page while SSO happens to be dead.
         if not account_id and not allow_unresolved_account:
-            context.close()
+            shut_down(context, page, cdp_port)
             raise SystemExit(
                 "ERROR: could not resolve the AWS account ID — refusing to capture, "
                 "because any page may render a role ARN and redaction cannot run "
@@ -406,10 +488,13 @@ def capture(url: str, output_path: Path, wait_selector: str | None, wait_ms: int
         # Member account IDs go through the same path as REDACT_EXTRA so they
         # inherit its assert_not_present() check for free.
         extras = [[a, "<member-account-id>"] for a in org_account_ids] + extras
+        # The page may still be redirecting (an expired SSO session bounces to a
+        # login page); touching the DOM mid-navigation kills the run.
+        settle(page, "initial load")
         if account_id:
-            redact_account_id(page, account_id)
+            redact_safely(redact_account_id, page, account_id, "initial redaction")
         if extras:
-            redact_strings(page, extras)
+            redact_safely(redact_strings, page, extras, "initial extra redaction")
 
         if headed:
             print(f"Browser window open on this machine - log in within {login_wait_seconds}s...")
@@ -445,18 +530,19 @@ def capture(url: str, output_path: Path, wait_selector: str | None, wait_ms: int
                 except Exception:
                     continue
             if not clicked:
-                context.close()
+                shut_down(context, page, cdp_port)
                 raise SystemExit(
                     f"ERROR: could not click '{click_text}' — refusing to save a "
                     "screenshot of the wrong tab. Check the exact visible label."
                 )
             page.wait_for_timeout(click_wait_ms)
 
+        settle(page, "pre-capture")
         if account_id:
-            redact_account_id(page, account_id)  # final pass; observer covers the rest
+            redact_safely(redact_account_id, page, account_id, "final redaction")
             print("Redacted account ID from page text before capture")
         if extras:
-            redact_strings(page, extras)  # final pass
+            redact_safely(redact_strings, page, extras, "final extra redaction")
             print(f"Redacted {len(extras)} extra string(s) from REDACT_EXTRA")
 
         # Verify the redaction actually worked rather than assuming it did.
@@ -481,7 +567,7 @@ def capture(url: str, output_path: Path, wait_selector: str | None, wait_ms: int
         # screenshot 2026-07-12: ~500px of blank space below the actual
         # footer. Viewport-only crops that out automatically.
         page.screenshot(path=str(output_path), full_page=False)
-        context.close()
+        shut_down(context, page, cdp_port)
 
     print(f"Saved: {output_path}")
 
@@ -497,6 +583,10 @@ if __name__ == "__main__":
     parser.add_argument("--height", type=int, default=900, help="Viewport height in px - increase for pages with real content below the fold")
     parser.add_argument("--click-text", default=None, help="Exact visible text to click before capturing (for SPA tabs with no addressable URL). Fails loudly rather than capturing the wrong tab.")
     parser.add_argument("--click-wait-ms", type=int, default=5000, help="Wait after the click before capturing")
+    parser.add_argument("--cdp", type=int, default=None, metavar="PORT",
+                        help="Attach to a real Chrome already running with "
+                             "--remote-debugging-port=PORT instead of launching Chromium. "
+                             "Needed for sites behind Google sign-in.")
     parser.add_argument("--allow-login-page", action="store_true",
                         help="Permit saving a page that looks like a sign-in screen "
                              "(only when the sign-in screen is genuinely the subject)")
@@ -505,4 +595,4 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     capture(args.url, args.output_path, args.wait_selector, args.wait_ms, args.headed, args.login_wait_seconds,
-            args.height, args.click_text, args.click_wait_ms, args.allow_unresolved_account)
+            args.height, args.click_text, args.click_wait_ms, args.allow_unresolved_account, cdp_port=args.cdp)
