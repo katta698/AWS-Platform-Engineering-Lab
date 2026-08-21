@@ -213,7 +213,8 @@ Published into the Athena console. Source in [`athena/`](./athena).
 
 Three CloudTrail schema traps are already handled in the SQL:
 
-- **`mfaauthenticated` is a STRING** (`'true'`/`'false'`) that can also be **NULL** for federated sign-ins. `<> 'true'` alone silently drops the NULL rows.
+- **A federated sign-in is not an MFA-less sign-in.** IAM Identity Center, SAML and any external IdP satisfy MFA *at the identity provider*, then federate into the console. Nothing happens at the AWS sign-in step, so CloudTrail records `MFAUsed = "No"` on a login that was fully MFA-protected. Counting those rows means alarming on every normal login in any estate using Identity Center — the setup AWS recommends. **This build got that wrong first time round**; see the write-up. The query is now scoped to `IAMUser` and `Root`.
+- **Read `MFAUsed` from `additionalEventData`, not `sessioncontext.attributes.mfaauthenticated`.** A root or IAM-user console login has no assumed-role session context at all, so the latter is NULL even when a second factor was used. Both are STRINGS, never booleans — `WHERE ... = false` is a type error.
 - **Role sessions leave `useridentity.username` null** — the useful name is in `sessioncontext.sessionissuer.username`. Querying only the top level misses nearly every Terraform-driven action.
 - **`ConsoleLogin` events are global** and land in us-east-1 regardless of where the user is.
 
@@ -226,7 +227,7 @@ Three CloudTrail schema traps are already handled in the SQL:
 | Alarm | Why static |
 |---|---|
 | Root account used | Zero is the correct value. An anomaly band would learn a baseline rate of root logins and stop reporting them |
-| Console login without MFA | Same — every credential-theft path ends at this event |
+| Console login without MFA | Same — every credential-theft path ends at this event. Scoped to `IAMUser`/`Root`: federated logins cannot report MFA and would fire it constantly |
 | Activity in unexpected region | Same |
 | **Trail delivered nothing** | If the trail stops, all three metrics above go to zero and read as good news. `treat_missing_data = "breaching"` |
 | Analyzer DLQ not empty | The audit checks are not running |
@@ -258,7 +259,8 @@ Side effect: nothing creates an implicit anomaly detector, so teardown leaves no
 | Query succeeds, zero rows, objects in S3 | Projection template mismatch | Compare `terraform output partition_location_template` against a real key |
 | One account missing from results | Account absent from the projection enum | Check `terraform output projected_accounts` |
 | Unused-region query always empty | Region enum too narrow, or trail not multi-region | Both must cover the regions being asked about |
-| MFA query returns nothing | `mfaauthenticated` compared as a boolean, or NULLs dropped | It is a string and can be NULL |
+| MFA alarm fires constantly | Federated/Identity Center logins counted as MFA-less | Scope the query to `useridentity.type IN ('IAMUser','Root')` |
+| MFA query returns nothing | `MFAUsed` compared as a boolean, or read from the wrong field | It is a string; read it from `additionalEventData` |
 | Query cancelled, `SCAN_BYTES_EXCEEDED` | Scan ceiling fired | Working as intended — add or tighten the partition filter |
 | `aws logs` CLI errors on a `/aws/...` argument | Git Bash rewrites leading-slash arguments | Prefix with `MSYS_NO_PATHCONV=1` |
 

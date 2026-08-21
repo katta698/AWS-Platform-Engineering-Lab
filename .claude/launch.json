@@ -1,0 +1,24 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "projectebs-dashboard",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "C:/Projects/Engineering/projectebs/dashboard", "run", "dev", "--", "--port", "5179", "--strictPort"],
+      "port": 5179
+    },
+    {
+      "// note": "Serves the built blog at C:/Projects/Engineering/katta698.github.io so weekly posts can be previewed exactly as published. Run scripts/sync_blog.py in that repo first -- this serves blog/, it does not build it. Port 4319 matches that repo's own site-alt entry; 4173 is avoided because this site's service worker claims scope '/'.",
+      "name": "blog-preview",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "4319",
+        "--directory",
+        "C:/Projects/Engineering/katta698.github.io"
+      ],
+      "port": 4319
+    }
+  ]
+}
