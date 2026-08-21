@@ -21,6 +21,7 @@ Usage:
 """
 import html as _html
 import os
+import re
 import subprocess
 import sys
 import time
@@ -44,6 +45,61 @@ def account_id() -> str:
         ["aws", "sts", "get-caller-identity", "--query", "Account", "--output", "text"],
         capture_output=True, text=True, timeout=30,
     ).stdout.strip()
+
+
+
+# Public IP addresses in your own CloudTrail are YOUR OWN network. `sourceipaddress`
+# on a console action is the address you were sitting behind, and on Week 15 that
+# went into three blog screenshots before anyone noticed -- a residential IP and an
+# IPv6 address, published, while the account ID beside them was being carefully
+# masked. The redactor was answering "is the account ID visible" and nothing else.
+#
+# These are PSEUDONYMISED rather than blanked. Whether two rows share a source
+# address is often the whole point of a forensic query, and replacing every
+# address with the same placeholder destroys that. A stable per-render label
+# keeps "same origin" and "different origin" legible while publishing neither.
+RE_IPV4 = re.compile(r"(?<![\d.])((?:\d{1,3}\.){3}\d{1,3})(?![\d.])")
+RE_IPV6 = re.compile(r"(?<![0-9a-fA-F:])(?:[0-9a-fA-F]{1,4}:){4,}[0-9a-fA-F]{1,4}")
+
+# Ranges that are not the user's network and carry no personal information.
+RE_NON_PUBLIC = re.compile(
+    r"^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|127\.|0\.|169\.254\.|22[4-9]\.|23\d\.)"
+)
+
+
+def _is_public_v4(ip: str) -> bool:
+    parts = ip.split(".")
+    if len(parts) != 4:
+        return False
+    try:
+        nums = [int(x) for x in parts]
+    except ValueError:
+        return False
+    # Guards against version strings ("1.43.38.0") being read as addresses.
+    if any(n > 255 for n in nums) or nums[0] == 0 or nums[0] > 223:
+        return False
+    return not RE_NON_PUBLIC.match(ip)
+
+
+def make_ip_pseudonymiser():
+    """One mapping per render, so labels are stable within an image."""
+    seen = {}
+
+    def sub(value: str) -> str:
+        def repl_v4(m):
+            ip = m.group(0)
+            if not _is_public_v4(ip):
+                return ip
+            return "<ip-%d>" % seen.setdefault(ip, len(seen) + 1)
+
+        def repl_v6(m):
+            ip = m.group(0)
+            return "<ipv6-%d>" % seen.setdefault(ip, len(seen) + 1)
+
+        value = RE_IPV6.sub(repl_v6, value)
+        return RE_IPV4.sub(repl_v4, value)
+
+    return sub
 
 
 def org_account_ids(caller: str) -> list[str]:
@@ -133,12 +189,14 @@ def main():
 
     acct = account_id()
     members = org_account_ids(acct)
+    pseudonymise_ips = make_ip_pseudonymiser()
 
     def clean(v: str) -> str:
         # Plain replace. See the module docstring for why this is not a regex.
         v = (v or "").replace(acct, "<account-id>")
         for m in members:
             v = v.replace(m, "<member-account-id>")
+        v = pseudonymise_ips(v)
         # Long values (full user agents, raw requestparameters) push the table
         # past the capture width and get silently clipped at the image edge.
         if len(v) > MAX_CELL:
@@ -176,6 +234,8 @@ at $5/TB &middot; {len(body)} of {len(body)} rows shown</div>
     assert acct not in html, "account ID survived redaction — refusing to render"
     for m in members:
         assert m not in html, f"member account ID {m[:4]}... survived redaction — refusing to render"
+    leaked = sorted({ip for ip in RE_IPV4.findall(html) if _is_public_v4(ip)})
+    assert not leaked, "public IP(s) survived redaction: %s — refusing to render" % ", ".join(leaked)
 
     tmp = Path(out_png).with_suffix(".html")
     tmp.write_text(html, encoding="utf-8")

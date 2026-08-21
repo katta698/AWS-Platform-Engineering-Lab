@@ -5,6 +5,17 @@
 ###############################################################################
 set -euo pipefail
 
+
+# The account ID is resolved at runtime rather than hardcoded. It is only needed
+# to satisfy a required variable during destroy -- the destroy targets whatever
+# account the caller is already authenticated to, so any other value would be
+# wrong anyway. Resolving it also keeps the account ID out of this repository.
+AWS_ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
+if [[ -z "$AWS_ACCOUNT_ID" || "$AWS_ACCOUNT_ID" == "None" ]]; then
+  echo "ERROR: could not resolve the AWS account ID -- are your credentials valid?" >&2
+  exit 1
+fi
+
 ENVIRONMENT="${1:-dev}"
 REGION="${2:-us-east-1}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -40,7 +51,7 @@ terraform destroy -auto-approve \
   -var="servicenow_password=dummy" \
   -var="webhook_secret=dummy" \
   -var="create_github_oidc_provider=false" \
-  -var="existing_oidc_provider_arn=arn:aws:iam::684346483786:oidc-provider/token.actions.githubusercontent.com"
+  -var="existing_oidc_provider_arn=arn:aws:iam::${AWS_ACCOUNT_ID}:oidc-provider/token.actions.githubusercontent.com"
 
 # ── Post-destroy: delete CloudWatch log groups (AWS retains them after destroy) ─
 echo ""

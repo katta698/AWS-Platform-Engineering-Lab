@@ -98,6 +98,51 @@ def get_org_account_ids(caller_account_id: str | None) -> list[str]:
         return []
 
 
+def assert_not_a_login_page(page, allow_login_page: bool) -> None:
+    """
+    Refuse to save a screenshot of a sign-in screen.
+
+    The redaction assertions answer "did anything leak", not "did we capture the
+    page we asked for". A login page passes every one of them trivially, because
+    it contains no account ID and no secrets -- it just contains nothing useful.
+
+    Caught the hard way on Week 15 (2026-08-20): an expired HCP session sent both
+    `01-hcp-runs` and `01b-hcp-workspace-variables` to the same sign-in screen.
+    Both saved cleanly, both were reported as captured, and both went into a blog
+    post as two identical pictures of a login form.
+
+    Deliberately narrow. It looks for a sign-in HEADING or a password field, not
+    for the word "login" anywhere on the page -- an IAM console page legitimately
+    says "sign-in" all over itself, and a check that cries wolf gets bypassed.
+    """
+    if allow_login_page:
+        return
+
+    hit = page.evaluate("""
+        () => {
+            const pw = document.querySelector('input[type="password"]');
+            if (pw && pw.offsetParent !== null) return 'a visible password field';
+            for (const el of document.querySelectorAll('h1,h2,[role="heading"]')) {
+                const t = (el.textContent || '').trim().toLowerCase();
+                if (/^(sign in|log in|login|sign in to |welcome back)/.test(t)) {
+                    return 'a heading reading "' + (el.textContent || '').trim().slice(0, 60) + '"';
+                }
+            }
+            return null;
+        }
+    """)
+
+    if hit:
+        raise SystemExit(
+            "REFUSING TO SAVE: this looks like a sign-in page (%s).\n"
+            "The session for this service has expired. Re-run with --headed and\n"
+            "--login-wait-seconds to sign in by hand; the profile is persistent, so\n"
+            "later captures reuse the session.\n"
+            "If the sign-in screen IS the intended subject, pass --allow-login-page."
+            % hit
+        )
+
+
 def assert_not_present(page, needle: str, label: str) -> None:
     """
     Positive check that a secret is genuinely absent from the rendered page.
@@ -424,6 +469,10 @@ def capture(url: str, output_path: Path, wait_selector: str | None, wait_ms: int
             assert_not_present(page, needle, f"the REDACT_EXTRA value '{needle[:4]}...'")
         print("Verified: no unredacted secrets in the rendered page")
 
+        # Separate question from the leak checks above: is this the page we asked
+        # for at all? A sign-in screen passes every redaction assertion.
+        assert_not_a_login_page(page, args.allow_login_page)
+
         # full_page=False (viewport-only, 1400x900) is the deliberate choice
         # here, not full_page=True - SPA pages (AWS Console especially) often
         # reserve DOM height for widgets that never finish loading (e.g. a
@@ -448,6 +497,9 @@ if __name__ == "__main__":
     parser.add_argument("--height", type=int, default=900, help="Viewport height in px - increase for pages with real content below the fold")
     parser.add_argument("--click-text", default=None, help="Exact visible text to click before capturing (for SPA tabs with no addressable URL). Fails loudly rather than capturing the wrong tab.")
     parser.add_argument("--click-wait-ms", type=int, default=5000, help="Wait after the click before capturing")
+    parser.add_argument("--allow-login-page", action="store_true",
+                        help="Permit saving a page that looks like a sign-in screen "
+                             "(only when the sign-in screen is genuinely the subject)")
     parser.add_argument("--allow-unresolved-account", action="store_true",
                         help="Capture even if the AWS account ID cannot be resolved. Only for pages that provably contain no AWS identifiers -- normally you want `aws sso login` instead.")
     args = parser.parse_args()
