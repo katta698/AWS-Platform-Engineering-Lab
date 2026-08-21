@@ -60,6 +60,44 @@ def get_aws_account_id() -> str | None:
     return None
 
 
+def get_org_account_ids(caller_account_id: str | None) -> list[str]:
+    """
+    Every OTHER account ID in the organization.
+
+    Added on Week 15, the first build with an organization trail. Until then the
+    caller's own account ID was the only one that could appear on screen, so
+    redacting that single value was sufficient. An org trail changes that: the S3
+    console lists one folder PER MEMBER ACCOUNT under AWSLogs/<org-id>/, and
+    Athena results carry an `account` column. Those are real account IDs of real
+    accounts, and the standing rule against publishing an account ID does not
+    only cover the one you happen to be logged into.
+
+    Caught on a real capture (03-s3-org-prefix, 2026-08-20): the member account
+    ID rendered in plain text while the caller's was correctly redacted.
+
+    Returns an empty list, with a warning, when the account is not in an
+    organization or lacks organizations:ListAccounts. That is not a silent
+    fail-open: a standalone account has no sibling IDs to leak, and the caller's
+    own ID is still redacted and asserted separately.
+    """
+    try:
+        result = subprocess.run(
+            ["aws", "organizations", "list-accounts", "--query", "Accounts[].Id", "--output", "text"],
+            capture_output=True, text=True, timeout=30,
+        )
+        if result.returncode != 0:
+            print("NOTE: could not list organization accounts (not an org, or no permission);")
+            print("      only the caller's own account ID will be redacted.")
+            return []
+        ids = [a for a in result.stdout.split() if a and a != caller_account_id]
+        if ids:
+            print(f"Found {len(ids)} other organization account ID(s) to redact")
+        return ids
+    except Exception as exc:
+        print(f"NOTE: organization lookup failed ({type(exc).__name__}); caller account only.")
+        return []
+
+
 def assert_not_present(page, needle: str, label: str) -> None:
     """
     Positive check that a secret is genuinely absent from the rendered page.
@@ -286,6 +324,7 @@ def capture(url: str, output_path: Path, wait_selector: str | None, wait_ms: int
         # scoped to AWS pages: a non-AWS capture should not be blocked just
         # because an SSO session happens to be expired.
         account_id = get_aws_account_id()
+        org_account_ids = get_org_account_ids(account_id)
         # Fail LOUD, don't save, if we can't resolve the account id on an AWS
         # console page — a transient CLI hiccup returning None used to skip
         # redaction with only a WARNING and silently leak the account id into a
@@ -319,6 +358,9 @@ def capture(url: str, output_path: Path, wait_selector: str | None, wait_ms: int
             for s in os.environ.get("REDACT_EXTRA", "").split(",")
             if s.strip()
         ]
+        # Member account IDs go through the same path as REDACT_EXTRA so they
+        # inherit its assert_not_present() check for free.
+        extras = [[a, "<member-account-id>"] for a in org_account_ids] + extras
         if account_id:
             redact_account_id(page, account_id)
         if extras:

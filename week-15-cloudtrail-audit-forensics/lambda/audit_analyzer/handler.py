@@ -101,9 +101,25 @@ def build_queries() -> dict:
         """,
         # Successful interactive sign-in with no second factor.
         #
-        # mfaauthenticated is a STRING that can also be NULL for federated
-        # sign-ins. Testing only `<> 'true'` silently drops the NULL rows, which
-        # are exactly the ones worth seeing.
+        # SCOPED TO IAMUser AND Root ON PURPOSE, and this is the whole subtlety.
+        #
+        # A federated sign-in (IAM Identity Center, SAML, any external IdP)
+        # satisfies MFA AT THE IDENTITY PROVIDER and then federates into the
+        # console. No MFA happens at the AWS sign-in step, so CloudTrail records
+        # MFAUsed = "No" on a login that was in fact fully MFA-protected.
+        # CloudTrail cannot see the IdP's decision and never will.
+        #
+        # An earlier version of this query counted those rows. In an estate using
+        # Identity Center -- which is the recommended setup -- that means the
+        # alarm fires on EVERY NORMAL LOGIN. Measured here on 2026-08-20: six
+        # federated logins from this lab's own screenshot tooling put the alarm
+        # into ALARM, all of them MFA-protected. An alarm that fires on routine
+        # activity is worse than no alarm; it is training to ignore the thing.
+        #
+        # MFAUsed from additionalEventData is used rather than
+        # sessioncontext.attributes.mfaauthenticated because a root or IAM-user
+        # console login has no assumed-role session context at all, so that field
+        # is NULL even when MFA was used.
         "console_login_no_mfa": f"""
             SELECT
                 COUNT(*)                          AS logins_without_mfa,
@@ -113,10 +129,10 @@ def build_queries() -> dict:
               AND eventsource = 'signin.amazonaws.com'
               AND eventname = 'ConsoleLogin'
               AND responseelements LIKE '%Success%'
-              AND (
-                    useridentity.sessioncontext.attributes.mfaauthenticated IS NULL
-                 OR useridentity.sessioncontext.attributes.mfaauthenticated <> 'true'
-              )
+              AND useridentity.type IN ('IAMUser', 'Root')
+              AND COALESCE(
+                    json_extract_scalar(additionaleventdata, '$.MFAUsed'), 'No'
+                  ) <> 'Yes'
         """,
         # Mutating activity outside the regions this estate uses.
         "unexpected_regions": f"""

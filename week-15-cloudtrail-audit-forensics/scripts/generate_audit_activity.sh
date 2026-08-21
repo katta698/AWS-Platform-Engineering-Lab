@@ -22,6 +22,14 @@
 
 set -uo pipefail
 
+# Git Bash / MSYS rewrites any argument that looks like a Unix path into a
+# Windows path, so an SSM parameter name beginning with "/" arrives at the API
+# mangled and fails with a misleading "Parameter name must be a fully qualified
+# name." It reads like an AWS-side validation problem and is not one. This is a
+# documented trap in this environment; exporting the guard once covers every
+# call below.
+export MSYS_NO_PATHCONV=1
+
 REGION="${AWS_REGION:-us-east-1}"
 ODD_REGION="${ODD_REGION:-eu-west-2}"
 STAMP="$(date -u +%Y%m%d%H%M%S)"
@@ -39,16 +47,16 @@ echo "--- 1. Create then delete a resource (the 'who deleted it' story) ---"
 # in CloudTrail. Standard parameters are free.
 
 aws ssm put-parameter --name "$PARAM" --value "week15-audit-demo" --type String \
-  --region "$REGION" >/dev/null 2>&1 \
+  --region "$REGION" >/dev/null \
   && echo "  created  $PARAM" || echo "  WARN: create failed"
 
 aws ssm add-tags-to-resource --resource-type Parameter --resource-id "$PARAM" \
-  --tags "Key=Week,Value=15" --region "$REGION" >/dev/null 2>&1 \
+  --tags "Key=Week,Value=15" --region "$REGION" >/dev/null \
   && echo "  tagged   $PARAM" || echo "  WARN: tag failed"
 
 sleep 2
 
-aws ssm delete-parameter --name "$PARAM" --region "$REGION" >/dev/null 2>&1 \
+aws ssm delete-parameter --name "$PARAM" --region "$REGION" >/dev/null \
   && echo "  DELETED  $PARAM   <- this is what query 02 should find" \
   || echo "  WARN: delete failed"
 
@@ -84,10 +92,10 @@ echo "--- 4. One action in a region we do not use (trips the alarm) ---"
 
 ODD_PARAM="/week15-audit/odd-region-${STAMP}"
 aws ssm put-parameter --name "$ODD_PARAM" --value "unexpected-region-demo" --type String \
-  --region "$ODD_REGION" >/dev/null 2>&1 \
+  --region "$ODD_REGION" >/dev/null \
   && echo "  created  $ODD_PARAM in $ODD_REGION" || echo "  WARN: create failed (region may be disabled)"
 
-aws ssm delete-parameter --name "$ODD_PARAM" --region "$ODD_REGION" >/dev/null 2>&1 \
+aws ssm delete-parameter --name "$ODD_PARAM" --region "$ODD_REGION" >/dev/null \
   && echo "  deleted  $ODD_PARAM in $ODD_REGION" || true
 
 echo "  <- query 07 should now show $ODD_REGION"
