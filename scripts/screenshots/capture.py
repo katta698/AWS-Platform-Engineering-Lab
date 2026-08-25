@@ -159,6 +159,52 @@ def redact_safely(fn, page, arg, label):
             raise
 
 
+def assert_not_an_error_page(page, allow_error_page: bool) -> None:
+    """
+    Refuse to save a not-found or error page.
+
+    Sibling of assert_not_a_login_page, and the same underlying mistake: the
+    redaction assertions answer "did anything leak", never "is this the page I
+    asked for". A 404 leaks nothing and contains nothing.
+
+    Caught on 2026-08-25 smoke-testing the Week 16 console path: a guessed URL
+    returned the AWS "The page you tried was not found" page and capture.py saved
+    it without complaint. A wrong-but-plausible console URL is easy to produce --
+    AWS console paths are undocumented and change between services.
+
+    Narrow on purpose: matches the specific not-found copy AWS and HCP render,
+    not the word "error" anywhere on the page, since plenty of legitimate console
+    pages show error counts, error rates or failed-item tables.
+    """
+    if allow_error_page:
+        return
+
+    hit = page.evaluate("""
+        () => {
+            const body = (document.body && document.body.innerText || '').slice(0, 3000);
+            const needles = [
+                'The page you tried was not found',
+                'Page not found',
+                '404 Not Found',
+                'This page isn\u2019t available',
+                'We can\u2019t find that page',
+            ];
+            for (const n of needles) {
+                if (body.includes(n)) return n;
+            }
+            return null;
+        }
+    """)
+
+    if hit:
+        raise SystemExit(
+            "REFUSING TO SAVE: this looks like a not-found page (matched %r).\n"
+            "The URL is probably wrong -- AWS console paths are undocumented and\n"
+            "differ between services. Open the page by hand and copy the real URL.\n"
+            "If an error page IS the intended subject, pass --allow-error-page." % hit
+        )
+
+
 def assert_not_a_login_page(page, allow_login_page: bool) -> None:
     """
     Refuse to save a screenshot of a sign-in screen.
@@ -558,6 +604,7 @@ def capture(url: str, output_path: Path, wait_selector: str | None, wait_ms: int
         # Separate question from the leak checks above: is this the page we asked
         # for at all? A sign-in screen passes every redaction assertion.
         assert_not_a_login_page(page, args.allow_login_page)
+        assert_not_an_error_page(page, args.allow_error_page)
 
         # full_page=False (viewport-only, 1400x900) is the deliberate choice
         # here, not full_page=True - SPA pages (AWS Console especially) often
@@ -583,6 +630,8 @@ if __name__ == "__main__":
     parser.add_argument("--height", type=int, default=900, help="Viewport height in px - increase for pages with real content below the fold")
     parser.add_argument("--click-text", default=None, help="Exact visible text to click before capturing (for SPA tabs with no addressable URL). Fails loudly rather than capturing the wrong tab.")
     parser.add_argument("--click-wait-ms", type=int, default=5000, help="Wait after the click before capturing")
+    parser.add_argument("--allow-error-page", action="store_true",
+                        help="Permit saving a not-found/error page (only when that IS the subject)")
     parser.add_argument("--cdp", type=int, default=None, metavar="PORT",
                         help="Attach to a real Chrome already running with "
                              "--remote-debugging-port=PORT instead of launching Chromium. "
