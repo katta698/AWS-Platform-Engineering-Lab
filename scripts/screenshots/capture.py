@@ -270,6 +270,34 @@ def assert_not_present(page, needle: str, label: str) -> None:
                 try {
                     if (doc.body && doc.body.innerText && doc.body.innerText.includes(needle)) return true;
                 } catch (e) { /* cross-origin */ }
+
+                // innerText DOES NOT INCLUDE FORM FIELD VALUES.
+                //
+                // A value rendered inside <input value="..."> is plainly visible
+                // on screen and completely absent from innerText, so a check
+                // that only reads innerText looks in exactly the right places
+                // and still sees nothing. That is worse than not checking,
+                // because it reports clean.
+                //
+                // Caught on 2026-08-26: a ServiceNow OAuth Client ID sat in a
+                // read-only input, the redactor found nothing to rewrite, this
+                // assertion passed, and the identifier went into a screenshot in
+                // plain text. Every admin console renders configuration this
+                // way, so this is the common case, not an edge one.
+                try {
+                    for (const el of Array.from(doc.querySelectorAll('input, textarea, select, option'))) {
+                        if (el.value && String(el.value).includes(needle)) return true;
+                        const av = el.getAttribute && el.getAttribute('value');
+                        if (av && av.includes(needle)) return true;
+                    }
+                    for (const el of Array.from(doc.querySelectorAll('[title],[aria-label],[data-value],[placeholder]'))) {
+                        for (const a of ['title', 'aria-label', 'data-value', 'placeholder']) {
+                            const v = el.getAttribute(a);
+                            if (v && v.includes(needle)) return true;
+                        }
+                    }
+                } catch (e) { /* defensive */ }
+
                 for (const f of Array.from(doc.querySelectorAll('iframe'))) {
                     try { if (f.contentDocument && hit(f.contentDocument)) return true; }
                     catch (e) { /* cross-origin */ }
@@ -474,7 +502,27 @@ def capture(url: str, output_path: Path, wait_selector: str | None, wait_ms: int
         # that poll continuously in the background and never go idle -
         # confirmed via a real 30s timeout testing against the ECS console.
         # "load" + an explicit wait is the reliable choice for these.
-        page.goto(url, wait_until="load", timeout=30000)
+        # A failed navigation must not leak the page.
+        #
+        # When attached over CDP the browser is long-lived and shared across
+        # every capture in a session. Each timed-out navigation used to leave
+        # its page open, and after a handful the whole CDP session stops
+        # responding: Playwright connects the websocket, then times out on the
+        # handshake. That presents as "Chrome is not running" and is nothing of
+        # the kind -- the browser is fine, its target list is jammed.
+        #
+        # Hit twice on 2026-08-26 capturing ServiceNow, whose frame-based pages
+        # never fire `load` and so time out by design. Each occurrence needed a
+        # full browser restart to clear.
+        try:
+            page.goto(url, wait_until="load", timeout=30000)
+        except Exception:
+            if cdp_port:
+                try:
+                    page.close()
+                except Exception:
+                    pass
+            raise
 
         # Resolve the account id up front (for AWS pages) and install the
         # redactor EARLY - its MutationObserver then runs through the whole
