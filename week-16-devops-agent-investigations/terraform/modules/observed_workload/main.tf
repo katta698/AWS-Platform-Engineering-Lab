@@ -146,11 +146,22 @@ resource "aws_cloudwatch_log_group" "processor" {
 }
 
 resource "aws_lambda_function" "processor" {
-  function_name    = "${var.name_prefix}-processor"
-  role             = aws_iam_role.processor.arn
-  handler          = "handler.handler"
-  runtime          = "python3.12"
-  timeout          = 15
+  function_name = "${var.name_prefix}-processor"
+  role          = aws_iam_role.processor.arn
+  handler       = "handler.handler"
+  runtime       = "python3.12"
+
+  # DECOY, on purpose.
+  #
+  # Bumped 15 -> 20 immediately before the second deliberate break, to put a
+  # real, recent, innocent deployment in front of the actual cause. A recent
+  # deploy is the most attractive explanation in any incident, and it is wrong
+  # here -- the timeout has nothing to do with the failure.
+  #
+  # The first investigation found the true cause when it was the ONLY change in
+  # the window. This tests whether it still does when a more obvious candidate
+  # sits closer to the symptom in time.
+  timeout          = 20
   filename         = data.archive_file.processor.output_path
   source_code_hash = data.archive_file.processor.output_base64sha256
 
