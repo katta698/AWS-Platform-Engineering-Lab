@@ -1,0 +1,14 @@
+# Copy to terraform.tfvars (gitignored) or set these as HCP workspace variables.
+# In HCP, mark servicenow_oauth_client_secret as SENSITIVE.
+
+aws_region  = "us-east-1"
+environment = "dev"
+
+# Wake the instance before applying -- developer instances hibernate after
+# ~10 days idle and the failure looks like an auth problem, not a sleep problem.
+servicenow_instance_url = "https://devXXXXXX.service-now.com"
+
+# ServiceNow > System OAuth > Application Registry >
+#   Create an OAuth API endpoint for external clients
+servicenow_oauth_client_id     = "your-oauth-client-id"
+servicenow_oauth_client_secret = "your-oauth-client-secret"
