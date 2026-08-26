@@ -32,3 +32,31 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "operator_app_role_arn" {
+  description = <<-EOT
+    Role the Operator App assumes on behalf of a signed-in human.
+
+    Required in practice even though the schema marks operator_app optional:
+    without an operator app there is no way to talk to the agent. The CLI can
+    create a chat execution but has no operation for sending it a message --
+    verified against the API on 2026-08-26, create-chat accepts only
+    agentSpaceId, userId and userType. Interaction happens in the web UI.
+  EOT
+  type        = string
+}
+
+variable "idc_instance_arn" {
+  description = <<-EOT
+    IAM Identity Center instance ARN, to authenticate Operator App users through
+    SSO instead of IAM.
+
+    Null selects IAM auth, which is what AWS's own Terraform sample uses and the
+    shorter path. Setting this selects IDC, which is what a real team would want:
+    named humans signing in through the same directory they use everywhere else,
+    so an agent action is attributable to a person. Week 7 built the Identity
+    Center instance this would point at.
+  EOT
+  type        = string
+  default     = null
+}

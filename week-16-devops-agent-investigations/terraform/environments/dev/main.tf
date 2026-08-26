@@ -39,6 +39,10 @@ terraform {
       source  = "hashicorp/archive"
       version = "~> 2.4"
     }
+    time = {
+      source  = "hashicorp/time"
+      version = "~> 0.12"
+    }
   }
 
   cloud {
@@ -88,6 +92,13 @@ module "agent_space" {
   name        = local.name_prefix
   description = "Week 16 lab: investigates a deliberately broken workload; findings graded against CloudTrail."
   tags        = local.tags
+
+  operator_app_role_arn = aws_iam_role.operator.arn
+  idc_instance_arn      = var.idc_instance_arn
+
+  # The service validates the operator role's trust policy while creating the
+  # space, so the role has to have propagated first. See iam.tf.
+  depends_on = [time_sleep.iam_propagation]
 }
 
 ###############################################################################

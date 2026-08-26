@@ -55,4 +55,18 @@ resource "awscc_devopsagent_agent_space" "this" {
     key   = k
     value = v
   }]
+
+  # Exactly one of iam / idc. IDC when an Identity Center instance is supplied,
+  # IAM otherwise -- see variables.tf for why the choice matters rather than
+  # being a formality.
+  operator_app = var.idc_instance_arn == null ? {
+    iam = {
+      operator_app_role_arn = var.operator_app_role_arn
+    }
+    } : {
+    idc = {
+      operator_app_role_arn = var.operator_app_role_arn
+      idc_instance_arn      = var.idc_instance_arn
+    }
+  }
 }

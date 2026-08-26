@@ -62,3 +62,33 @@ variable "servicenow_oauth_client_secret" {
   type        = string
   sensitive   = true
 }
+
+variable "servicenow_instance_id" {
+  description = <<-EOT
+    SHORT ServiceNow instance name -- "dev388443", not the full URL.
+
+    Carried separately from servicenow_instance_url on purpose. Registration
+    takes the URL and the association takes the bare name, and passing the URL
+    to the association fails with
+
+      400 GeneralServiceException: instanceId '<url>' does not match the
+      registered ServiceNow instance
+
+    which reads as a mismatch between two things that do in fact match. Deriving
+    one from the other in Terraform would work, but keeping them as two explicit
+    inputs is what makes the asymmetry visible to whoever reads this next.
+  EOT
+  type        = string
+}
+
+variable "idc_instance_arn" {
+  description = <<-EOT
+    IAM Identity Center instance ARN for Operator App sign-in.
+
+    Null uses IAM auth, which is the shorter path and what AWS's sample does.
+    Supplying the Week 7 Identity Center instance switches to SSO, so agent
+    actions are attributable to named people rather than to a role.
+  EOT
+  type        = string
+  default     = null
+}
