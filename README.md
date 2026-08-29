@@ -33,7 +33,7 @@
 | [Week 13](./week-13-waf-shield-protection) | WAF + Shield Standard | WAF Web ACL (both scopes), Rate Limiting, Anti-DDoS Managed Rules, CloudFront, API Gateway | ✅ Complete |
 | [Week 14](./week-14-vpc-flow-logs-intelligence) | VPC Flow Logs + Network Intelligence | Flow Logs (record v11), S3 Parquet, Glue partition projection, Athena, Lambda, CloudWatch anomaly detection | ✅ Complete |
 | [Week 15](./week-15-cloudtrail-audit-forensics) | CloudTrail Org Trail + Audit Forensics | CloudTrail organization trail, S3, Glue five-key partition projection, Athena, Lambda, static-threshold alarms (replaces CloudTrail Lake — closed to new customers 2026-05-31) | ✅ Complete |
-| Week 16 | AWS Health Event Triage with DevOps Agent | AWS Health, EventBridge, Step Functions, AWS DevOps Agent, SSM OpsCenter, DynamoDB routing | 📅 Planned |
+| [Week 16](./week-16-devops-agent-investigations) | AWS DevOps Agent — Investigations, Graded | AWS DevOps Agent (agent space + associations) via the `awscc` provider, ServiceNow OAuth `client_credentials`, Lambda, EventBridge, SSM, S3, CloudWatch alarm, graded against Week 15's CloudTrail trail (planned as *Health Event Triage*; became an evaluation of whether the agent's conclusions can be trusted) | ✅ Complete |
 | Week 17 | MCP Server for Platform Operations | Model Context Protocol server over the lab's own operational data (Athena, CloudWatch, Config) — makes Weeks 10–16 agent-consumable | 📅 Planned |
 
 ### Phase 3 — Containers & Modern Patterns (Weeks 18–25)
@@ -495,6 +495,32 @@ Every project follows the same enterprise pattern:
 
 ---
 
+## Week 16 — AWS DevOps Agent: Investigations, Graded
+
+**The story:** an investigating agent does not return a metric, it returns a **narrative** — *"the IAM change at 15:57 removed the parameter read, here is the evidence."* A wrong metric looks wrong; a wrong explanation reads like an explanation. So this week is not a demonstration that an agent can investigate — AWS's marketing covers that. It is an **evaluation**: break something in a known way, write the true cause down *before* asking, and grade the agent's conclusion against Week 15's CloudTrail attribution, which is fact rather than opinion.
+
+**What it builds:**
+- An **agent space** and two **associations** (the monitored AWS account, and ServiceNow) — the agent space is the blast radius, and everything it can reach is a Terraform resource rather than a console click
+- A deliberately small **observed workload** — a scheduled Lambda that reads an SSM parameter and writes to S3, with its permissions split across two inline policies so the break can detach exactly one
+- `break_it.sh` / `fix_it.sh` — the break confirms the workload is healthy first, writes a **ground-truth ledger** with the cause, the expected symptom, what did *not* change, and the marking scheme, and only then runs a single `delete-role-policy`
+- `measure_usage.sh` — reads the usage meter, because this service has **no spend ceiling** and observation is the only control available
+- Deployed via **HCP Terraform** (VCS-driven, workspace: week-16-dev), using the **`awscc`** provider throughout
+
+**Key lessons learned:**
+- **The `hashicorp/aws` provider has no DevOps Agent resources** ([#46894](https://github.com/hashicorp/terraform-provider-aws/issues/46894) still open). `awscc` generates from the CloudFormation registry, so a service appears there as soon as its CFN types go LIVE — the price is machine-generated shapes and thin documentation
+- **`service_id = "aws"` is a reserved literal that appears in no schema.** Every association needs one, the `ServiceType` enum contains only third-party integrations, and `list-services` returns empty on a fresh account. The value was found in AWS's own published Terraform sample and nowhere else
+- **Through IaC this agent can only ever read.** `AccountType` accepts exactly one value (`monitor`), and *neither* CloudFormation resource exposes an actions-role property — so an estate built entirely in code gets a read-only agent whether or not anyone decided that. The console shows the capability exists; enabling it means stepping outside Terraform
+- **ServiceNow `client_credentials` needs three separate settings to agree, and reports all three failures identically.** A system property enables the grant at all; **Client Type** must be *Integration as a Service*; an **OAuth Application User** must be assigned. The errors — "check your service credentials", `401 access_denied`, `unauthorized_client` — all read like a wrong secret. None of them are
+- **The registration is not the integration.** OAuth issued tokens and the association was created, and **zero ServiceNow incidents were ever produced**. "Configured" and "working" are separate claims; check the destination system, not the source config
+- **An investigation costs a flat rate regardless of effort** — 0.168 hrs / $5.03 for both runs, though the second visibly did more work. The meter also **reads 0.0 until the work completes**, which materially weakens watching it as a live guardrail
+- **I left the answer key in the environment.** The SSM parameter's Terraform `description` said *"Revoking the role's ssm:GetParameter is the deliberate break"* — and the agent quoted it back in its root cause. Resource descriptions, names and tags are **inputs to the agent**, not annotations for humans
+- **Read the mitigation plan; do not run it.** The first run proposed adding the permission to the `baseline` policy rather than restoring the deleted `config-read` resource — restoring service while deepening Terraform drift. The second run proposed the correct repair *plus* an SCP preventing recurrence. Same agent, same account, two runs, two qualities of remediation
+- **The grading method was only ever tested against right answers.** Both runs were correct, so nothing establishes that the marking scheme would catch a confident wrong one. N=2, one failure mode — the shape of an answer, not the answer
+
+**Resources:** 24 Terraform resources | **Cost:** $23.28 | **Blog:** https://jayanthkatta.com/blog/week-16-devops-agent-investigations/
+
+---
+
 ## Standalone Posts
 
 Technical deep-dives and guides published outside the weekly series.
@@ -598,6 +624,7 @@ plan**, and a git push (or "Start new plan") to rebuild.
 | 13   | ~$20/month (2 web ACLs @ $5 + 10 rules @ $1; **prorated hourly**, so a build-test-destroy day is under $1) | $0 |
 | 14   | ~$33/month (**~75% is the NAT gateway** at $0.045/hr + $0.045/GB, which bills with no usage signal to remind you; 2 anomaly alarms @ $3 each, prorated hourly) | $0 |
 | 15   | ~$9-12/month — **not the $0 the free-tier line implies.** One free copy of management events per region exists, but an unrelated project's trail already held it, so this is a *second* copy at $2.00/100k events (~450-600k/month measured). A build-and-destroy is $1-2. No NAT, no always-on compute, 6 static alarms @ $0.10 | $0 |
+| 16   | ~$0.12/month idle (one static alarm @ $0.10; the agent space itself is **$0 while idle**, verified on every meter). The real exposure is per-use and **uncapped** — $0.0083/agent-second (~$0.50/min) with no budget, duration or task limit anywhere in the schema, unlike Weeks 14–15 where Athena was capped at workgroup level. Actual spend was **$23.28**: two investigations at a flat $5.03 each, plus a one-time **$13.22 `system learning`** charge that is not one of the three billed categories AWS publishes | $0 |
 
 ---
 

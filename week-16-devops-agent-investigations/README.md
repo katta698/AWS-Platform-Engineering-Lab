@@ -75,6 +75,20 @@ Take the Client ID and Client Secret into HCP workspace variables, marking the s
 
 ## Status
 
-Scaffolded and `terraform validate` clean. Not yet deployed.
+Built, deployed, broken twice on purpose, investigated twice, and graded.
 
-**Still to build:** the ServiceNow service registration and association, the deliberate-break script, verification and cleanup scripts, and the grading comparison against Week 15's queries.
+**Blog:** https://jayanthkatta.com/blog/week-16-devops-agent-investigations/
+
+Both investigations named the IAM policy deletion as the cause rather than the
+`AccessDeniedException` it produced. The second ran with an innocent Terraform deploy
+landing 71 seconds ahead of the true cause, and did not take the bait — it reconstructed
+the whole sequence instead, including a single successful invocation between the repair
+and the re-break that appears in no alarm. Grading and the caveats are in
+[`docs/ground-truth.md`](docs/ground-truth.md); the full agent output is in
+[`docs/investigation-transcript.md`](docs/investigation-transcript.md) and
+[`docs/decoy-investigation-transcript.md`](docs/decoy-investigation-transcript.md).
+
+**Read the grading before the transcripts.** The agent is persuasive in both runs,
+including where it is weakest — a timeout change is a poor decoy, so this shows it is not
+naively ranking by recency, not that it can separate two plausible permission-shaped
+causes.
