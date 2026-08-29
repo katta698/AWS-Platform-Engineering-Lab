@@ -111,6 +111,32 @@ def main():
                   f"{t.count('<div')} open / {t.count('</div>')} close")
             m = re.search(r"verified:\s*'(\d{4}-\d{2}-\d{2})'", t)
             check("front matter carries a verified date", bool(m), m.group(1) if m else "missing")
+
+            # A badge asserts a human checked the figures. That is only worth
+            # something if the figures are individually traceable -- Week 16
+            # shipped with a badge, 5 claims and 22% of its printed numbers
+            # appearing in no claim at all, including every cost figure. The
+            # blog repo already owns the tool that measures this; it was only
+            # ever run against the Architecture series.
+            audit = BLOG / "scripts" / "audit_claims.py"
+            if m and audit.is_file():
+                try:
+                    p = subprocess.run([sys.executable, str(audit), slug],
+                                       capture_output=True, text=True, cwd=str(BLOG),
+                                       timeout=120, encoding="utf-8", errors="replace")
+                    pct = re.search(r"(\d+)%", p.stdout or "")
+                    traced = int(pct.group(1)) if pct else -1
+                    untraced = ""
+                    tail = (p.stdout or "").strip().splitlines()
+                    if traced < 100 and tail:
+                        untraced = tail[-1].strip()[:70]
+                    # 80% is the floor, not the goal: a handful of illustrative
+                    # numbers in prose do not need sourcing, but a majority of
+                    # untraced figures under a badge is the failure this catches.
+                    check("verified figures traced to claims (>=80%)", traced >= 80,
+                          f"{traced}% traced" + (f" - untraced: {untraced}" if untraced else ""))
+                except Exception as exc:
+                    check("claims audit ran", False, str(exc), required=False)
             # every figure must resolve to a file that actually exists
             missing = []
             for fn in re.findall(r"screenshots/([\w.-]+\.(?:png|jpg|jpeg))", t):
