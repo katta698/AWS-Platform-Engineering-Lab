@@ -66,8 +66,15 @@ def main():
     if card.is_file():
         try:
             from PIL import Image
-            size = Image.open(card).size
-            check("LinkedIn card is 1200x675", size == LINKEDIN_CARD_SIZE, f"{size[0]}x{size[1]}")
+            w, h = Image.open(card).size
+            # 1200x675 at 1x reads soft on a phone, so cards are rendered at an
+            # integer scale factor (2x by default -- see scripts/render_card.py).
+            # What must hold is the aspect ratio and a floor on width.
+            cw, ch = LINKEDIN_CARD_SIZE
+            scale = w / cw
+            ok = scale >= 1 and abs(scale - round(scale)) < 0.001 and h == round(ch * scale)
+            check("LinkedIn card is 1200x675 (or an integer multiple)", ok,
+                  f"{w}x{h}" + (f" = {round(scale)}x" if ok else ""))
         except Exception as exc:
             check("LinkedIn card readable", False, str(exc))
 
