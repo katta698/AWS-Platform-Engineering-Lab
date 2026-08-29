@@ -137,6 +137,22 @@ def main():
                           f"{traced}% traced" + (f" - untraced: {untraced}" if untraced else ""))
                 except Exception as exc:
                     check("claims audit ran", False, str(exc), required=False)
+            # Structure is not appearance. Week 16 passed every check on this
+            # list and still shipped six scrambled paragraphs, because nothing
+            # here looks at the laid-out page. This does.
+            render = REPO / "scripts" / "check_render.py"
+            if render.is_file():
+                try:
+                    p2 = subprocess.run([sys.executable, str(render), slug],
+                                        capture_output=True, text=True, timeout=180,
+                                        encoding="utf-8", errors="replace")
+                    detail = (p2.stdout or p2.stderr or "").strip().splitlines()
+                    detail = detail[-1][:80] if detail else ""
+                    check("post renders correctly at 390px and 1280px",
+                          p2.returncode == 0, detail)
+                except Exception as exc:
+                    check("render check ran", False, str(exc), required=False)
+
             # every figure must resolve to a file that actually exists
             missing = []
             for fn in re.findall(r"screenshots/([\w.-]+\.(?:png|jpg|jpeg))", t):
