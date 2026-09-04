@@ -1,0 +1,9 @@
+# Copy to terraform.tfvars for local runs. HCP supplies these as workspace
+# variables in the real deploy, so this file is committed only as documentation.
+aws_region         = "us-east-1"
+name_prefix        = "week17"
+log_retention_days = 7
+cache_ttl_seconds  = 3600
+
+# Leave empty and the errors alarm still evaluates, it just notifies nobody.
+alarm_sns_topic_arn = ""
