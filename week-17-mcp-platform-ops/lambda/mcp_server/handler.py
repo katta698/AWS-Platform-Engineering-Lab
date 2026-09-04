@@ -7,9 +7,10 @@ leave anything behind" took eleven API calls across Cost Explorer, CloudTrail,
 Resource Groups Tagging, CloudWatch and Terraform Cloud. The data was there the
 whole time. What was missing was a way to ask.
 
-Four tools, all read-only. The IAM role this runs under has no write action of
-any kind, so a manipulated model cannot change the account -- it can only
-report on it. That is deliberate: the top MCP risk in current guidance is tool
+Four tools, all read-only. The IAM role holds exactly one write action --
+dynamodb:PutItem on its own cache table -- and no write of any kind on anything
+it reports on. A manipulated model can therefore fill a cache; it cannot change
+the account. That is deliberate: the top MCP risk in current guidance is tool
 poisoning, where instructions hidden in a tool description or parameter schema
 steer the model. A read-only server makes that a disclosure problem rather than
 a destruction one.

@@ -23,7 +23,7 @@ Rather than rebuild data that was just deliberately removed, the server reads **
 | `find_untagged_resources` | What has no owner | free |
 | `get_alarm_state` | Is monitoring actually working | free |
 
-**Every tool is read-only.** The server's IAM role holds no write action on any service — see `terraform/modules/mcp_server/main.tf`. That is not caution for its own sake: the top risk in current MCP guidance is *tool poisoning*, where instructions hidden in a tool's description or parameter schema steer the model. A read-only server turns that from a destruction risk into a disclosure one.
+**Every tool is read-only.** The server's IAM role holds exactly one write action — `dynamodb:PutItem` on its own cache table — and no write on anything it reports on. The whole policy is five statements; it is short enough to read in full, and the post does. That is not caution for its own sake: the top risk in current MCP guidance is *tool poisoning*, where instructions hidden in a tool's description or parameter schema steer the model. A read-only server turns that from a destruction risk into a disclosure one.
 
 ---
 
@@ -100,7 +100,7 @@ It checks Lambda, IAM, DynamoDB, alarms, log groups **and a tag search on `Week=
 
 ## Security patterns
 
-- **Read-only by construction** — no write action in the role, so a manipulated model cannot change the account
+- **Read-only where it counts** — the only write in the role is `dynamodb:PutItem` on its own cache table, so a manipulated model can fill a cache but cannot change the account
 - **IAM scoped per tool, not per server** — each statement maps to exactly one tool
 - **DynamoDB access scoped to the one table**, not to DynamoDB generally
 - **`AWS_IAM` auth on the Function URL** — unsigned requests are rejected by Lambda before reaching this code

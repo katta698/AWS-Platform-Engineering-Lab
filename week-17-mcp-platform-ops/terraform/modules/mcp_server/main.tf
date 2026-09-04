@@ -78,10 +78,11 @@ resource "aws_iam_role" "server" {
   tags               = local.tags
 }
 
-# Every statement here maps to exactly one tool. There is no write action of
-# any kind in this policy -- not on the resources it reads, and not on the
-# account. A model that is manipulated through a poisoned tool description can
-# still only read, which turns a destruction risk into a disclosure one.
+# Every statement here maps to exactly one tool. The only write in this policy
+# is dynamodb:PutItem, scoped to the server's own cache table -- there is no
+# write action on anything the server reports on. A model manipulated through a
+# poisoned tool description can fill a cache; it cannot change the account,
+# which turns a destruction risk into a disclosure one.
 data "aws_iam_policy_document" "server" {
   # get_daily_cost
   statement {
