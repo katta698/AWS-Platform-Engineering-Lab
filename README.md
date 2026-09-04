@@ -34,7 +34,7 @@
 | [Week 14](./week-14-vpc-flow-logs-intelligence) | VPC Flow Logs + Network Intelligence | Flow Logs (record v11), S3 Parquet, Glue partition projection, Athena, Lambda, CloudWatch anomaly detection | ✅ Complete |
 | [Week 15](./week-15-cloudtrail-audit-forensics) | CloudTrail Org Trail + Audit Forensics | CloudTrail organization trail, S3, Glue five-key partition projection, Athena, Lambda, static-threshold alarms (replaces CloudTrail Lake — closed to new customers 2026-05-31) | ✅ Complete |
 | [Week 16](./week-16-devops-agent-investigations) | AWS DevOps Agent — Investigations, Graded | AWS DevOps Agent (agent space + associations) via the `awscc` provider, ServiceNow OAuth `client_credentials`, Lambda, EventBridge, SSM, S3, CloudWatch alarm, graded against Week 15's CloudTrail trail (planned as *Health Event Triage*; became an evaluation of whether the agent's conclusions can be trusted) | ✅ Complete |
-| Week 17 | MCP Server for Platform Operations | Model Context Protocol server over the lab's own operational data (Athena, CloudWatch, Config) — makes Weeks 10–16 agent-consumable | 📅 Planned |
+| [Week 17](./week-17-mcp-platform-ops) | MCP Server for Platform Operations | MCP server over **live** AWS control-plane state (Cost Explorer, Resource Groups Tagging, CloudWatch) on Lambda + Function URL with SigV4, DynamoDB TTL cache, read-only per-tool IAM (planned over Weeks 10–16's stored data; that data was destroyed on 2026-08-30, so the source changed and the topic did not) | ✅ Complete |
 
 ### Phase 3 — Containers & Modern Patterns (Weeks 18–25)
 
@@ -521,6 +521,23 @@ Every project follows the same enterprise pattern:
 
 ---
 
+## Week 17 — MCP Server for Platform Operations
+
+**The story:** on 30 August I asked my own account what it was doing — what is running, what is it costing, did I leave anything behind. Answering took eleven API calls across five systems, and by then a service had been billing $9.35/day for a week. Every number had existed the whole time. What was missing was a way to ask.
+
+**What it builds:** a Model Context Protocol server exposing four read-only tools — daily cost by service, running resources, untagged resources, alarm state — behind a Lambda Function URL with `AWS_IAM` auth. An MCP client signs with SigV4 and asks in plain English.
+
+**Two decisions worth the reading:**
+
+- **`ce:GetCostAndUsage` bills $0.01 per request**, and each page counts separately, while every other read here is free. An LLM decides when to call a tool and will re-ask inside one conversation — so the cost tool sits behind a DynamoDB TTL cache. Without it a chatty session quietly bills cents at a time, which is the exact failure this week exists to catch.
+- **Function URL over API Gateway, and not AgentCore Runtime.** Runtime bills per vCPU-second for sessions that can live 14 days: the same uncapped-meter shape as the charge that motivated the week. The trade is real — SigV4 means an off-the-shelf MCP client cannot connect, which is why API Gateway + OAuth is documented as the production path.
+
+**What it found on first use:** 15 resources with no owner tag, including the two Week 12 test buckets that survived a teardown I had personally verified — because I verified it against Terraform's idea of the world rather than the account's.
+
+**Resources:** 7 Terraform resources (HCP reports 12; its count includes data sources) | **Cost:** measured at teardown | **Blog:** *(publishing 2026-09-06)*
+
+---
+
 ## Standalone Posts
 
 Technical deep-dives and guides published outside the weekly series.
@@ -625,6 +642,7 @@ plan**, and a git push (or "Start new plan") to rebuild.
 | 14   | ~$33/month (**~75% is the NAT gateway** at $0.045/hr + $0.045/GB, which bills with no usage signal to remind you; 2 anomaly alarms @ $3 each, prorated hourly) | $0 |
 | 15   | ~$9-12/month — **not the $0 the free-tier line implies.** One free copy of management events per region exists, but an unrelated project's trail already held it, so this is a *second* copy at $2.00/100k events (~450-600k/month measured). A build-and-destroy is $1-2. No NAT, no always-on compute, 6 static alarms @ $0.10 | $0 |
 | 16   | ~$0.12/month idle (one static alarm @ $0.10; the agent space itself is **$0 while idle**, verified on every meter). The real exposure is per-use and **uncapped** — $0.0083/agent-second (~$0.50/min) with no budget, duration or task limit anywhere in the schema, unlike Weeks 14–15 where Athena was capped at workgroup level. Actual spend was **$23.28**: two investigations at a flat $5.03 each, plus a one-time **$13.22 `system learning`** charge that is not one of the three billed categories AWS publishes | $0 |
+| 17   | **~$0.10/month idle** (one alarm @ $0.10; Lambda, DynamoDB and the Function URL have no idle charge at all). The exposure is per-call, not per-hour: `ce:GetCostAndUsage` is **$0.01 per request** and each page counts separately, which is why the cost tool sits behind a DynamoDB TTL cache — an LLM decides call frequency, so a metered read needs a cache rather than a budget | $0 |
 
 ---
 

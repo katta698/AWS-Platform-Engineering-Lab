@@ -39,6 +39,7 @@ doesn't load that CSS).
 | `ec2.svg` | Compute — `#ED7100` (added Week 14) |
 | `nat-gateway.svg` | Networking & Content Delivery — resource icon, 48x48 viewBox, line style rather than a colored square (added Week 14) |
 | `cloudtrail.svg` | Management & Governance — `#E7157B` (added Week 16, recovered from Week 15's published post rather than re-downloading the package) |
+| `dynamodb.svg` | Database — `#C925D1` (added Week 17, extracted from the official package) |
 
 **Adding a new service icon for a future week:** don't re-download the full
 14MB package if you still have it locally. If not, re-download from the URL
