@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.claude/
+
+.env
+.env.*
+!.env.example
+
+*.log
+*.zip
+__pycache__/
+*.pyc
