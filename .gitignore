@@ -74,3 +74,42 @@ playwright_profile/
 # Local MCP client config - points at an ephemeral Function URL that changes
 # on every apply, so it is machine-specific rather than shared.
 .mcp.json
+
+# ---------------------------------------------------------------------------
+# Untracked-but-present paths, ignored explicitly after 2026-09-05.
+#
+# A `git add -A` from the repo root staged all of these and pushed them to a
+# PUBLIC repo: 20,000 node_modules files, local scratch projects, working
+# notes and two .env files. They were never secret -- the .env files hold a
+# Vite feature flag and an API URL, both of which ship in a browser bundle
+# anyway -- but none of it belongs in this repository.
+#
+# Being untracked was not protection. `git add -A` stages untracked files by
+# design. Being ignored is protection.
+# ---------------------------------------------------------------------------
+
+# Local assistant config and notes
+.claude/
+CLAUDE.md
+
+# Separate projects that happen to live under this root
+bedrock-secure-model-invocation-api/
+finops-ebs-savings-tracker/
+ebs-savings-dashboard/
+
+# Browser automation profiles used for screenshots
+playwright_profile_batch/
+
+# Build and run detritus
+node_modules/
+dist/
+*.log
+throwaway.png
+**/out.json
+**/docs/repost-draft.md
+
+# Environment files, everywhere, always
+.env
+.env.*
+**/.env
+**/.env.*

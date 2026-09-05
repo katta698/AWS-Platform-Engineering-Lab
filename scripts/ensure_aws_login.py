@@ -153,6 +153,11 @@ def login(profile, timeout):
                 code = m.group(1)
             if url and code and not printed:
                 printed = True
+                # The CLI prints the plain URL before the autofill one, so if we
+                # only saw the plain form, build the one-tap link ourselves --
+                # typing a code on a phone is the step people get wrong.
+                if "user_code=" not in url:
+                    url = f"{url}?user_code={code}"
                 print()
                 print("=" * 68)
                 print("APPROVE THIS LOGIN -- works from a phone, no localhost involved")
@@ -203,12 +208,40 @@ def main():
         default=600,
         help="seconds to wait for approval (default 600)",
     )
+    ap.add_argument(
+        "--force",
+        action="store_true",
+        help="log in again even if the session is still valid -- use before long work "
+             "when the session is close to expiring",
+    )
+    ap.add_argument(
+        "--renew-under",
+        type=float,
+        default=0.0,
+        help="log in again if fewer than this many hours remain (e.g. --renew-under 1)",
+    )
     args = ap.parse_args()
 
     ident = caller_identity(args.profile)
-    if ident:
-        report_valid(args.profile, ident)
-        return 0
+    if ident and not args.force:
+        # A session that is about to expire is not much use for a long task, so
+        # allow renewing one that is technically still valid.
+        renew = False
+        if args.renew_under > 0:
+            exp = cached_token_expiry(args.profile)
+            if exp:
+                try:
+                    when = dt.datetime.fromisoformat(exp.replace("Z", "+00:00"))
+                    left = (when - dt.datetime.now(dt.timezone.utc)).total_seconds() / 3600
+                    renew = left < args.renew_under
+                except ValueError:
+                    pass
+        if not renew:
+            report_valid(args.profile, ident)
+            return 0
+        print(f"Session valid but under {args.renew_under}h remaining -- renewing.")
+    elif ident:
+        print("Session is valid; renewing anyway (--force).")
 
     exp = cached_token_expiry(args.profile)
     print(f"SSO session INVALID for profile '{args.profile}'"
