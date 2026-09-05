@@ -118,8 +118,8 @@ __SYMBOLS__
   </div>
 
   <div class="foot">
-    <div><b>Asked once:</b> &ldquo;what did I leave running with no owner?&rdquo; &rarr; 15 untagged resources</div>
-    <div><b>Including</b> two buckets a teardown I had already signed off never saw</div>
+    <div><b>Asked once, in English:</b> &ldquo;what am I spending, and is anything running that nobody owns?&rdquo;</div>
+    <div><b>The model picked two tools itself</b> &mdash; and named a VM running six weeks that I had forgotten</div>
   </div>
 </div>
 """
