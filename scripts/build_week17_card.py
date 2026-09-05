@@ -112,14 +112,13 @@ __SYMBOLS__
           <div class="n"><svg class="ico"><use href="#i-cw"/></svg>CloudWatch</div>
           <div class="d">Alarm state &mdash; free</div>
         </div>
-        <div class="note">Deployed by HCP Terraform: 7 managed resources, VCS-driven, OIDC credentials.</div>
+        <div class="note">Seven resources, all Terraform. Nothing here bills while nobody is asking &mdash; no gateway, no idle compute.</div>
       </div>
     </div>
   </div>
 
   <div class="foot">
-    <div><b>Asked once, in English:</b> &ldquo;what am I spending, and is anything running that nobody owns?&rdquo;</div>
-    <div><b>The model picked two tools itself</b> &mdash; and named a VM running six weeks that I had forgotten</div>
+    <div><b>It found a VM running six weeks that I had forgotten</b> &mdash; from one question, choosing its own tools</div>
   </div>
 </div>
 """
