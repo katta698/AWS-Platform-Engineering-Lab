@@ -56,6 +56,7 @@ __pycache__/
 .DS_Store
 Thumbs.db
 SESSION_CONTEXT.md
+SESSION_ARCHIVE.md
 WEEK_TEMPLATE.md
 BRIEFINGS.md
 
@@ -69,3 +70,7 @@ playwright_profile/
 # Exported browser cookies (Cookie-Editor JSON, etc.) — local only, read once
 # by scripts/screenshots/import_cookies.py, delete after import if desired
 *cookies*.json
+
+# Local MCP client config - points at an ephemeral Function URL that changes
+# on every apply, so it is machine-specific rather than shared.
+.mcp.json

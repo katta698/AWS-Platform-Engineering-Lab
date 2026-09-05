@@ -73,10 +73,26 @@ def main():
     ap.add_argument("--width", type=int, default=1000)
     ap.add_argument("--font", type=float, default=12.5)
     ap.add_argument("--scale", type=int, default=2)
+    ap.add_argument("--wrap", type=int, default=0,
+                    help="hard-wrap prose at N columns; 0 leaves lines untouched. "
+                         "Terminal output is fine unwrapped, but a model's prose "
+                         "runs off the right edge because <pre> does not wrap.")
     args = ap.parse_args()
 
     body = (pathlib.Path(args.file).read_text(encoding="utf-8")
             if args.file else sys.stdin.read())
+
+    if args.wrap:
+        import textwrap
+        wrapped = []
+        for line in body.splitlines():
+            if len(line) <= args.wrap:
+                wrapped.append(line)
+            else:
+                indent = ' ' * (len(line) - len(line.lstrip()))
+                wrapped.extend(textwrap.wrap(line, args.wrap,
+                                             subsequent_indent=indent) or [''])
+        body = chr(10).join(wrapped)
 
     page = TEMPLATE % {
         "width": args.width, "font": args.font,
