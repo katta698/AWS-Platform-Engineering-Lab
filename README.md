@@ -534,7 +534,7 @@ Every project follows the same enterprise pattern:
 
 **What it found on first use:** 15 resources with no owner tag, including the two Week 12 test buckets that survived a teardown I had personally verified — because I verified it against Terraform's idea of the world rather than the account's.
 
-**Resources:** 7 Terraform resources (HCP reports 12; its count includes data sources) | **Cost:** measured at teardown | **Blog:** *(publishing 2026-09-06)*
+**Resources:** 7 Terraform resources (HCP reports 12; its count includes data sources) | **Cost:** $0.13 | **Blog:** https://jayanthkatta.com/blog/week-17-mcp-platform-ops/
 
 ---
 
