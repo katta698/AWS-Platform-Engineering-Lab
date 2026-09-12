@@ -195,11 +195,23 @@ def main():
             # before the Step 3 that creates the cluster. Prose did not stop it;
             # this does. Sections after the build narrative are exempt, since
             # Challenges legitimately revisits earlier evidence.
+            # Bound the narrative by SECTION IDs, not by heading text. The
+            # first version split on the literal "Challenges &mdash;", which
+            # also appears in the table of contents at the top of every post --
+            # so it sliced off the entire body, found no figures at all, and
+            # passed vacuously. It could not fail. Jay found the forward
+            # reference it was written to catch, the same day it was added.
             build = t
-            for marker in ("Challenges &mdash;", "Challenges &amp;mdash;", "id=\"challenges\""):
-                if marker in build:
-                    build = build.split(marker)[0]
-                    break
+            m_start = re.search(r'id="(?:how|build|how-we-built-it)"', build)
+            m_end = re.search(r'id="challenges"', build)
+            if m_start:
+                build = build[m_start.start():]
+                if m_end and m_end.start() > m_start.start():
+                    build = build[:m_end.start() - m_start.start()]
+            else:
+                build = ""  # cannot locate the section -> assert nothing
+            check("build narrative located for figure-order check", bool(build),
+                  "no id=\"how\" section found" if not build else "")
             seq = [int(m.group(1)) for m in
                    re.finditer(r"screenshots/(\d+)", build) if m.group(1).isdigit()]
             regressions = [(a, b) for a, b in zip(seq, seq[1:]) if b < a]
