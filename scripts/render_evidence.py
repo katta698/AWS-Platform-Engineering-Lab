@@ -18,6 +18,7 @@ Renders at 2x so the type stays sharp when the blog scales it down.
 import argparse
 import html
 import pathlib
+import re
 import sys
 import tempfile
 
@@ -55,8 +56,11 @@ def colourise(text):
         low = line.lower()
         if "403" in line or "denied" in low or "error" in low or "not clean" in low:
             cls = "bad"
-        elif ("200" in line or "true" in low or "connected" in low
-              or "[gone]" in low or "clean" in low or "ok" in low):
+        elif re.search(r"\[ok\]|\[gone\]|HTTP 200|true|connected"
+                       r"|CLEAN|denied, as it should|applied", line):
+            # Deliberately anchored. An earlier version matched a bare "ok",
+            # which turned every comment containing "looked" green -- making
+            # prose read as a passing check in the rendered screenshot.
             cls = "ok"
         elif line.strip().startswith("#") or line.strip().startswith("$"):
             cls = "dim"
