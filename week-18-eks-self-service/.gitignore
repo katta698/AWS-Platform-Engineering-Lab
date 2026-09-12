@@ -1,0 +1,42 @@
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+terraform.tfvars
+*.auto.tfvars
+.terraform.lock.hcl
+
+# Lambda
+lambda/**/__pycache__/
+lambda/**/*.pyc
+lambda/**/*.zip
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.venv/
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+
+# Secrets
+*.pem
+*.key
+.env
+.env.*
+
+# Local study and working docs — kept locally only
+docs/explainer.md
+docs/blog-prep.md
+docs/commands.md
+docs/screenshots.md
+docs/screenshots-guide.md
+docs/readme-with-screenshots.md
+docs/execution-guide.md
+docs/linkedin/
+lambda/builds/
