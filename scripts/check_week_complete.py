@@ -34,12 +34,137 @@ def check(label, ok, detail="", required=True):
     results.append((label, bool(ok), detail, required))
 
 
+
+# ---------------------------------------------------------------------------
+# The screenshot rules live here as pure functions so that --self-test can feed
+# them known-bad input and REQUIRE them to complain. See self_test() below for
+# why that matters.
+# ---------------------------------------------------------------------------
+
+def build_narrative(html):
+    """The 'How We Built It' region only, bounded by section ids.
+
+    Bounded by ids and NOT by heading text: the first version split on the
+    literal "Challenges &mdash;", which also appears in every post's table of
+    contents, so it returned the region above the article, found no figures and
+    passed vacuously. Returns "" when the section cannot be located, which the
+    caller must treat as a failure rather than as "nothing to check".
+    """
+    m_start = re.search(r'id="(?:how|build|how-we-built-it)"', html)
+    if not m_start:
+        return ""
+    region = html[m_start.start():]
+    m_end = re.search(r'id="challenges"', region)
+    return region[:m_end.start()] if m_end else region
+
+
+def figure_regressions(html):
+    """Pairs where a lower-numbered capture follows a higher one.
+
+    Captures are numbered in build order, so descending order means a
+    screenshot of live state appears before the step that created it.
+    """
+    seq = [int(m.group(1)) for m in re.finditer(r"screenshots/(\d+)", html)]
+    return [(a, b) for a, b in zip(seq, seq[1:]) if b < a]
+
+
+def orphan_captures(html, shot_dir):
+    """Captures on disk that the post never references and that are not
+    declared in UNUSED.txt."""
+    referenced = set(re.findall(r"screenshots/([\w.-]+\.(?:png|jpg|jpeg))", html))
+    declared = set()
+    unused_file = shot_dir / "UNUSED.txt"
+    if unused_file.is_file():
+        declared = {l.strip() for l in unused_file.read_text(encoding="utf-8").splitlines()
+                    if l.strip() and not l.startswith("#")}
+    on_disk = {f.name for f in shot_dir.glob("*.*")
+               if f.suffix.lower() in (".png", ".jpg", ".jpeg")}
+    return sorted(on_disk - referenced - declared)
+
+
+def self_test(quiet=False):
+    """Prove each rule REJECTS a known-bad page. Run before trusting a green.
+
+    Why this exists (2026-09-12): the figure-order check shipped in a form that
+    could not fail, passed the broken page it was written to catch, and I
+    reported "all required checks passed" on the strength of it. Jay found the
+    error by reading the post. A check nobody has seen fail is an assumption.
+    """
+    cases = []
+
+    GOOD_TAIL = '<div id="challenges">screenshots/02-a.png</div>'
+
+    # 1. forward-referenced figure inside the build narrative
+    bad = ('<nav>Challenges &mdash; What Went Wrong</nav>'
+           '<div id="how">screenshots/09-x.png ... screenshots/01-y.png</div>' + GOOD_TAIL)
+    cases.append(("figure-order rejects a forward reference",
+                  bool(figure_regressions(build_narrative(bad)))))
+
+    # 1b. ...and the TOC decoy specifically, which is the bug that shipped
+    cases.append(("figure-order is not fooled by the table of contents",
+                  "screenshots/09-x.png" in build_narrative(bad)))
+
+    # 2. a correctly ordered page must still pass
+    good = ('<nav>Challenges &mdash; What Went Wrong</nav>'
+            '<div id="how">screenshots/01-y.png ... screenshots/09-x.png</div>' + GOOD_TAIL)
+    cases.append(("figure-order accepts a correct page",
+                  not figure_regressions(build_narrative(good))))
+
+    # 3. a missing build section must read as failure, never as "nothing to do"
+    cases.append(("missing build section is not silently OK",
+                  build_narrative("<div id=\"other\">screenshots/01-a.png</div>") == ""))
+
+    # 4. orphan detection
+    import tempfile
+    with tempfile.TemporaryDirectory() as d:
+        shots = pathlib.Path(d)
+        (shots / "01-used.png").write_bytes(b"x")
+        (shots / "02-orphan.png").write_bytes(b"x")
+        (shots / "03-declared.png").write_bytes(b"x")
+        (shots / "UNUSED.txt").write_text("# note" + chr(10) + "03-declared.png" + chr(10), encoding="utf-8")
+        html = 'screenshots/01-used.png'
+        orphans = orphan_captures(html, shots)
+        cases.append(("orphan check finds an unreferenced capture", orphans == ["02-orphan.png"]))
+        cases.append(("orphan check honours UNUSED.txt", "03-declared.png" not in orphans))
+
+    bad_count = sum(1 for _, ok in cases if not ok)
+    if quiet:
+        return bad_count
+    print()
+    width = max(len(c[0]) for c in cases) + 2
+    for label, ok in cases:
+        print("  [%s] %s" % ("PASS" if ok else "DEAD", label.ljust(width)))
+    print()
+    if bad_count:
+        print("%d check(s) DO NOT WORK. Their green means nothing until fixed." % bad_count)
+        return 1
+    print("All %d rule self-tests passed - the checks can actually fail." % len(cases))
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("week", help="week folder name, e.g. week-15-cloudtrail-audit-forensics")
+    ap.add_argument("week", nargs="?", help="week folder name, e.g. week-15-cloudtrail-audit-forensics")
     ap.add_argument("--published", action="store_true",
                     help="also check the post is built and live-ready in the blog repo")
+    ap.add_argument("--self-test", action="store_true",
+                    help="prove every rule rejects a known-bad page, then exit")
     args = ap.parse_args()
+
+    if args.self_test:
+        sys.exit(self_test())
+
+    # Every run validates its own rules first. This is not optional and there is
+    # no flag to skip it: on 2026-09-12 the figure-order rule shipped in a form
+    # that could not fail, passed the broken page it existed to catch, and this
+    # script printed "All required checks passed". Jay found the error by
+    # reading the post. A green from a rule nobody has seen fail is an
+    # assumption wearing a checkmark.
+    if self_test(quiet=True):
+        print(chr(10) + "ABORTING: some rules in this script do not work.")
+        print("Run  python scripts/check_week_complete.py --self-test  for detail.")
+        print("Do not trust any result from this script until that is green.")
+        sys.exit(2)
 
     wk = REPO / args.week
     if not wk.is_dir():
@@ -170,16 +295,7 @@ def main():
             # If a capture is genuinely not for the post, list it in
             # docs/blog/screenshots/UNUSED.txt, one filename per line. Saying
             # so is cheap; forgetting is what costs.
-            referenced = set(re.findall(r"screenshots/([\w.-]+\.(?:png|jpg|jpeg))", t))
-            shot_dir = wk / "docs/blog/screenshots"
-            unused_file = shot_dir / "UNUSED.txt"
-            declared = set()
-            if unused_file.is_file():
-                declared = {l.strip() for l in unused_file.read_text(encoding="utf-8").splitlines()
-                            if l.strip() and not l.startswith("#")}
-            on_disk = {f.name for f in shot_dir.glob("*.*")
-                       if f.suffix.lower() in (".png", ".jpg", ".jpeg")}
-            orphans = sorted(on_disk - referenced - declared)
+            orphans = orphan_captures(t, wk / "docs/blog/screenshots")
             check("every screenshot is used or declared unused", not orphans,
                   ("%d unused: %s" % (len(orphans), ", ".join(orphans[:4]))) if orphans else "")
 
@@ -201,20 +317,10 @@ def main():
             # so it sliced off the entire body, found no figures at all, and
             # passed vacuously. It could not fail. Jay found the forward
             # reference it was written to catch, the same day it was added.
-            build = t
-            m_start = re.search(r'id="(?:how|build|how-we-built-it)"', build)
-            m_end = re.search(r'id="challenges"', build)
-            if m_start:
-                build = build[m_start.start():]
-                if m_end and m_end.start() > m_start.start():
-                    build = build[:m_end.start() - m_start.start()]
-            else:
-                build = ""  # cannot locate the section -> assert nothing
+            build = build_narrative(t)
             check("build narrative located for figure-order check", bool(build),
-                  "no id=\"how\" section found" if not build else "")
-            seq = [int(m.group(1)) for m in
-                   re.finditer(r"screenshots/(\d+)", build) if m.group(1).isdigit()]
-            regressions = [(a, b) for a, b in zip(seq, seq[1:]) if b < a]
+                  'no id="how" section found' if not build else "")
+            regressions = figure_regressions(build)
             check("build-narrative figures are in capture order", not regressions,
                   ("%s appears after %s" % (regressions[0][1], regressions[0][0]))
                   if regressions else "")
