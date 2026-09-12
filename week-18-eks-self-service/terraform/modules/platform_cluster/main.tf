@@ -34,8 +34,18 @@ locals {
   })
 }
 
+# MUST filter by zone type. Without this the data source also returns Local
+# Zones -- us-east-1-dfw-1a and friends -- and picking one fails twice over:
+# EKS refuses to place a control plane there, and NAT gateways do not exist
+# there at all. Both errors arrive at apply time, after the VPC is built, and
+# neither mentions Local Zones by name.
 data "aws_availability_zones" "available" {
   state = "available"
+
+  filter {
+    name   = "zone-type"
+    values = ["availability-zone"]
+  }
 }
 
 # ------------------------------------------------------------------- network --
