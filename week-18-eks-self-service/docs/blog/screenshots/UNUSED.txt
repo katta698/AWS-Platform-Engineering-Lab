@@ -1,0 +1,8 @@
+# Captures deliberately not used in the post. Listed so the completeness
+# check can tell "decided against" from "forgotten" -- Week 18 shipped with
+# the HCP run screenshot captured and unreferenced, and Jay had to ask twice.
+
+# Superseded by 03-compute-node-and-fargate.png, which shows the node and the
+# Fargate profile together on one page.
+02-eks-cluster.png
+04-fargate-profile.png

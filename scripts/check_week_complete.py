@@ -160,6 +160,54 @@ def main():
                     missing.append(fn)
             check("every figure references a file that exists", not missing, "; ".join(missing[:4]))
 
+            # ---- EVERY CAPTURE IS EITHER USED OR DELIBERATELY NOT ----------
+            #
+            # Week 18 captured ten screenshots and wired four into the post.
+            # The HCP run was the one left out, and Jay had to ask twice. The
+            # check above only proves that referenced files exist; it is blind
+            # to files captured and never referenced.
+            #
+            # If a capture is genuinely not for the post, list it in
+            # docs/blog/screenshots/UNUSED.txt, one filename per line. Saying
+            # so is cheap; forgetting is what costs.
+            referenced = set(re.findall(r"screenshots/([\w.-]+\.(?:png|jpg|jpeg))", t))
+            shot_dir = wk / "docs/blog/screenshots"
+            unused_file = shot_dir / "UNUSED.txt"
+            declared = set()
+            if unused_file.is_file():
+                declared = {l.strip() for l in unused_file.read_text(encoding="utf-8").splitlines()
+                            if l.strip() and not l.startswith("#")}
+            on_disk = {f.name for f in shot_dir.glob("*.*")
+                       if f.suffix.lower() in (".png", ".jpg", ".jpeg")}
+            orphans = sorted(on_disk - referenced - declared)
+            check("every screenshot is used or declared unused", not orphans,
+                  ("%d unused: %s" % (len(orphans), ", ".join(orphans[:4]))) if orphans else "")
+
+            # ---- NO FORWARD-REFERENCED STATE --------------------------------
+            #
+            # Screenshots are numbered in build order. So inside the build
+            # narrative, they must appear in ascending numeric order -- a lower
+            # number appearing after a higher one means a screenshot of live
+            # state shows up before the step that created it.
+            #
+            # Week 6 learned this and it is written in SESSION_CONTEXT. Week 18
+            # broke it anyway: the Pod Identity console page sat under Step 2,
+            # before the Step 3 that creates the cluster. Prose did not stop it;
+            # this does. Sections after the build narrative are exempt, since
+            # Challenges legitimately revisits earlier evidence.
+            build = t
+            for marker in ("Challenges &mdash;", "Challenges &amp;mdash;", "id=\"challenges\""):
+                if marker in build:
+                    build = build.split(marker)[0]
+                    break
+            seq = [int(m.group(1)) for m in
+                   re.finditer(r"screenshots/(\d+)", build) if m.group(1).isdigit()]
+            regressions = [(a, b) for a, b in zip(seq, seq[1:]) if b < a]
+            check("build-narrative figures are in capture order", not regressions,
+                  ("%s appears after %s" % (regressions[0][1], regressions[0][0]))
+                  if regressions else "")
+
+
     # ---- report ---------------------------------------------------------
     width = max(len(r[0]) for r in results) + 2
     failed_required = 0
