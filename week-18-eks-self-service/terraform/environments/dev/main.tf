@@ -82,6 +82,10 @@ module "platform" {
   # The Fargate profile has to name its namespace up front; the namespace itself
   # is created by the tenant module below.
   fargate_namespace = var.fargate_tenant
+
+  # Without this the only cluster admin is HCP's runner role, and kubectl from a
+  # laptop gets "the server has asked for the client to provide credentials".
+  cluster_admin_role_arns = var.cluster_admin_role_arns
 }
 
 # ---- tenant-a: EC2 + Pod Identity, the path AWS recommends -------------------

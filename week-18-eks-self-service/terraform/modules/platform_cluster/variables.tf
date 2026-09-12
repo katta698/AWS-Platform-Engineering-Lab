@@ -44,3 +44,9 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "cluster_admin_role_arns" {
+  description = "Roles granted cluster admin through EKS access entries. The creator role is already admin; this is for everyone else, including the human who owns the account."
+  type        = list(string)
+  default     = []
+}

@@ -319,3 +319,36 @@ resource "aws_iam_openid_connect_provider" "this" {
   thumbprint_list = [data.tls_certificate.oidc.certificates[0].sha1_fingerprint]
   tags            = local.tags
 }
+
+# ---------------------------------------------------------- cluster access --
+# WHO IS THE CLUSTER ADMIN, AND WHY IT IS PROBABLY NOT YOU
+# bootstrap_cluster_creator_admin_permissions grants admin to the identity that
+# created the cluster. On a CI runner that is the runner's role, not the human
+# who pressed the button. The result is a cluster nobody can reach with kubectl,
+# which is a confusing place to arrive at when the apply reported success.
+#
+# Access entries are the current mechanism for fixing that. They replaced
+# hand-editing the aws-auth ConfigMap, which was for years the standard way to
+# lock yourself out of your own cluster permanently.
+resource "aws_eks_access_entry" "admins" {
+  for_each = toset(var.cluster_admin_role_arns)
+
+  cluster_name  = aws_eks_cluster.this.name
+  principal_arn = each.value
+  type          = "STANDARD"
+  tags          = local.tags
+}
+
+resource "aws_eks_access_policy_association" "admins" {
+  for_each = toset(var.cluster_admin_role_arns)
+
+  cluster_name  = aws_eks_cluster.this.name
+  principal_arn = each.value
+  policy_arn    = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+
+  access_scope {
+    type = "cluster"
+  }
+
+  depends_on = [aws_eks_access_entry.admins]
+}
