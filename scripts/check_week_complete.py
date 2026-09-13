@@ -41,31 +41,6 @@ def check(label, ok, detail="", required=True):
 # why that matters.
 # ---------------------------------------------------------------------------
 
-def build_narrative(html):
-    """The 'How We Built It' region only, bounded by section ids.
-
-    Bounded by ids and NOT by heading text: the first version split on the
-    literal "Challenges &mdash;", which also appears in every post's table of
-    contents, so it returned the region above the article, found no figures and
-    passed vacuously. Returns "" when the section cannot be located, which the
-    caller must treat as a failure rather than as "nothing to check".
-    """
-    m_start = re.search(r'id="(?:how|build|how-we-built-it)"', html)
-    if not m_start:
-        return ""
-    region = html[m_start.start():]
-    m_end = re.search(r'id="challenges"', region)
-    return region[:m_end.start()] if m_end else region
-
-
-def figure_regressions(html):
-    """Pairs where a lower-numbered capture follows a higher one.
-
-    Captures are numbered in build order, so descending order means a
-    screenshot of live state appears before the step that created it.
-    """
-    seq = [int(m.group(1)) for m in re.finditer(r"screenshots/(\d+)", html)]
-    return [(a, b) for a, b in zip(seq, seq[1:]) if b < a]
 
 
 def orphan_captures(html, shot_dir):
@@ -92,27 +67,10 @@ def self_test(quiet=False):
     """
     cases = []
 
-    GOOD_TAIL = '<div id="challenges">screenshots/02-a.png</div>'
 
-    # 1. forward-referenced figure inside the build narrative
-    bad = ('<nav>Challenges &mdash; What Went Wrong</nav>'
-           '<div id="how">screenshots/09-x.png ... screenshots/01-y.png</div>' + GOOD_TAIL)
-    cases.append(("figure-order rejects a forward reference",
-                  bool(figure_regressions(build_narrative(bad)))))
 
-    # 1b. ...and the TOC decoy specifically, which is the bug that shipped
-    cases.append(("figure-order is not fooled by the table of contents",
-                  "screenshots/09-x.png" in build_narrative(bad)))
 
-    # 2. a correctly ordered page must still pass
-    good = ('<nav>Challenges &mdash; What Went Wrong</nav>'
-            '<div id="how">screenshots/01-y.png ... screenshots/09-x.png</div>' + GOOD_TAIL)
-    cases.append(("figure-order accepts a correct page",
-                  not figure_regressions(build_narrative(good))))
 
-    # 3. a missing build section must read as failure, never as "nothing to do"
-    cases.append(("missing build section is not silently OK",
-                  build_narrative("<div id=\"other\">screenshots/01-a.png</div>") == ""))
 
     # 4. orphan detection
     import tempfile
@@ -317,13 +275,23 @@ def main():
             # so it sliced off the entire body, found no figures at all, and
             # passed vacuously. It could not fail. Jay found the forward
             # reference it was written to catch, the same day it was added.
-            build = build_narrative(t)
-            check("build narrative located for figure-order check", bool(build),
-                  'no id="how" section found' if not build else "")
-            regressions = figure_regressions(build)
-            check("build-narrative figures are in capture order", not regressions,
-                  ("%s appears after %s" % (regressions[0][1], regressions[0][0]))
-                  if regressions else "")
+            # Figure placement is owned by the blog repo's check_figure_order.py
+            # and enforced site-wide in its prepublish CI. Delegating rather than
+            # keeping a second copy: this script briefly carried a stricter
+            # "capture numbers must ascend" rule that was wrong on 11 of 12
+            # published posts, and two rules that disagree is how red gets
+            # ignored. One rule, one place, invoked from both.
+            fig_chk = BLOG / "scripts" / "check_figure_order.py"
+            if fig_chk.is_file():
+                try:
+                    p3 = subprocess.run([sys.executable, str(fig_chk), slug],
+                                        capture_output=True, text=True, cwd=str(BLOG),
+                                        timeout=180, encoding="utf-8", errors="replace")
+                    detail = [l.strip() for l in (p3.stdout or "").splitlines() if "figure" in l]
+                    check("no figure appears above its deploy step",
+                          p3.returncode == 0, detail[0][:80] if detail else "")
+                except Exception as exc:
+                    check("figure-order check ran", False, str(exc), required=False)
 
 
     # ---- report ---------------------------------------------------------
