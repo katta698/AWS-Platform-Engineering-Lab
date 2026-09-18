@@ -1,0 +1,22 @@
+# Planned captures that do not exist, and why. Declared rather than silently
+# missing -- check_week_complete.py compares this against the post.
+
+# Slots 03 and 05 needed BOTH a live cluster and a logged-in browser. The
+# browser attach (capture.py --cdp) broke against Chrome 152 mid-build, and
+# keeping an EKS cluster alive at $0.22/hr to debug Playwright was not a
+# reasonable trade. The cluster is gone; these cannot now be taken.
+#
+# What they would have shown is covered by rendered CLI evidence instead:
+#   03 EKS console Capabilities tab -> 09-capability-rbac.png carries the
+#      capability's real access-entry policies and their scopes
+#   05 managed Argo CD UI           -> 04-managed-vs-selfmanaged.png shows the
+#      capability owns zero pods in-cluster, which is the actual point
+03-eks-capability-argocd.png
+05-argocd-ui-managed.png
+
+# Slots 01, 06, 10 were planned and not reached. 01 (Identity Center) is
+# reproducible any time -- it predates the cluster. 10 (Cost Explorer) is
+# pending the bill posting.
+01-identity-center-instance.png
+06-app-of-apps-synced.png
+10-cost-explorer.png
