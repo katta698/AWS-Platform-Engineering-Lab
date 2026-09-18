@@ -58,6 +58,42 @@ if [[ -z "$want_replicas" ]]; then
 fi
 ok "current desired replicas: $want_replicas"
 
+# START FROM A SETTLED CLUSTER, OR DO NOT START.
+#
+# This exists because two runs of this script disagreed with each other. Run 1
+# said an out-of-band annotation survived; run 2 said it was removed. A
+# controlled experiment then showed it survives -- both when idle and across a
+# sync -- so run 2 was wrong.
+#
+# What made it wrong: run 1 ended by deleting the deployment, and Argo CD
+# recreated it while run 2 was already measuring. The annotation was not
+# stripped by anything; it was written to an object that then got replaced.
+#
+# A test that starts while the previous test's repair is still in flight is
+# measuring the previous test. Waiting for the object to stop changing costs a
+# few seconds and removes an entire class of false finding -- and this one was
+# convincing enough that I had a plausible mechanism ready to publish for it.
+echo "  waiting for the cluster to settle before measuring anything..."
+stable=0
+last_gen=""
+for _ in $(seq 1 60); do
+  gen=$(kubectl -n "$NS" get deploy "$DEPLOY" -o jsonpath='{.metadata.generation}' 2>/dev/null)
+  rdy=$(kubectl -n "$NS" get deploy "$DEPLOY" -o jsonpath='{.status.readyReplicas}' 2>/dev/null)
+  if [[ -n "$gen" && "$gen" == "$last_gen" && "$rdy" == "$want_replicas" ]]; then
+    stable=$((stable+1))
+  else
+    stable=0
+  fi
+  last_gen="$gen"
+  [[ $stable -ge 5 ]] && break
+  sleep 1
+done
+if [[ $stable -lt 5 ]]; then
+  broke "cluster never settled -- refusing to measure a moving target"
+  echo; echo "passed $pass  failed $fail  BROKEN $broken"; exit 3
+fi
+ok "settled: generation $last_gen stable, $want_replicas/$want_replicas ready"
+
 # ---------------------------------------------------------------------------
 # 1. Drift a field that IS in Git. This is the case GitOps advertises.
 # ---------------------------------------------------------------------------
@@ -65,28 +101,53 @@ echo
 echo "1. Change a field Git specifies (replicas)"
 
 drifted=$((want_replicas + 2))
+
+# metadata.generation increments on every change to .spec and never decreases.
+# So a higher generation is proof the spec was mutated, even if the value was
+# put back before we could look.
+#
+# The first version read .spec.replicas three seconds after scaling and called
+# it BROKEN when it saw the original value: "wanted 4, saw 2". That was the
+# honest report -- but the cause was not a failed scale. Argo CD reverted it in
+# under three seconds. The test was slower than the thing it was measuring.
+#
+# Worth keeping in mind generally: when a controller's whole job is to undo
+# your change, observing the change is a race you lose. Measure the fact that
+# it happened, not the state it briefly produced.
+gen_before=$(kubectl -n "$NS" get deploy "$DEPLOY" -o jsonpath='{.metadata.generation}' 2>/dev/null)
+
 if ! kubectl -n "$NS" scale deploy "$DEPLOY" --replicas="$drifted" >/dev/null 2>&1; then
   broke "could not apply the drift -- kubectl scale failed, so nothing was tested"
 else
-  # PROVE the drift landed before waiting to see it reverted. Without this,
-  # a scale that silently no-ops looks identical to a perfect self-heal.
   sleep 3
+  gen_after=$(kubectl -n "$NS" get deploy "$DEPLOY" -o jsonpath='{.metadata.generation}' 2>/dev/null)
   now=$(kubectl -n "$NS" get deploy "$DEPLOY" -o jsonpath='{.spec.replicas}')
-  if [[ "$now" != "$drifted" ]]; then
-    broke "drift did not take effect (wanted $drifted, saw $now) -- nothing was tested"
+
+  if [[ -z "$gen_after" || "$gen_after" == "$gen_before" ]]; then
+    broke "generation did not move ($gen_before -> ${gen_after:-?}) -- the scale never landed, nothing was tested"
   else
-    ok "drift applied: replicas $want_replicas -> $drifted"
-    echo "     waiting ${SETTLE}s for self-heal..."
-    reverted=""
-    for _ in $(seq 1 "$SETTLE"); do
-      cur=$(kubectl -n "$NS" get deploy "$DEPLOY" -o jsonpath='{.spec.replicas}' 2>/dev/null)
-      if [[ "$cur" == "$want_replicas" ]]; then reverted="yes"; break; fi
-      sleep 1
-    done
-    if [[ "$reverted" == "yes" ]]; then
-      ok "self-heal reverted it to $want_replicas"
+    if [[ "$now" == "$want_replicas" ]]; then
+      ok "drift applied AND already reverted (generation $gen_before -> $gen_after, replicas back to $want_replicas)"
+      echo "         self-heal beat a 3-second observation window."
+      pass=$((pass))   # already counted
+      reverted="yes"
     else
-      bad "still $cur after ${SETTLE}s -- self-heal did not revert a tracked field"
+      ok "drift applied: replicas $want_replicas -> $drifted (generation $gen_before -> $gen_after)"
+      reverted=""
+    fi
+
+    if [[ "$reverted" != "yes" ]]; then
+      echo "     waiting ${SETTLE}s for self-heal..."
+      for _ in $(seq 1 "$SETTLE"); do
+        cur=$(kubectl -n "$NS" get deploy "$DEPLOY" -o jsonpath='{.spec.replicas}' 2>/dev/null)
+        if [[ "$cur" == "$want_replicas" ]]; then reverted="yes"; break; fi
+        sleep 1
+      done
+      if [[ "$reverted" == "yes" ]]; then
+        ok "self-heal reverted it to $want_replicas"
+      else
+        bad "still $cur after ${SETTLE}s -- self-heal did not revert a tracked field"
+      fi
     fi
   fi
 fi
@@ -158,31 +219,39 @@ fi
 echo
 echo "4. Delete a resource Git declares"
 
-if ! kubectl -n "$NS" delete deploy "$DEPLOY" --wait=false >/dev/null 2>&1; then
-  broke "could not delete -- nothing was tested"
+# Identity, not absence.
+#
+# The first version of this check slept 3 seconds after the delete and looked
+# for the object to be missing. Argo CD healed it faster than that, so the
+# check reported BROKEN: "never observed the deployment absent". That was the
+# honest answer -- it genuinely could not tell an instant heal from a rejected
+# delete -- but it is a limitation of the observation, not a finding.
+#
+# A Kubernetes object's UID is assigned at creation and never changes. So a
+# NEW uid is proof the old object was destroyed and a new one created, however
+# briefly the gap lasted. That turns an unobservable window into a fact.
+before_uid=$(kubectl -n "$NS" get deploy "$DEPLOY" -o jsonpath='{.metadata.uid}' 2>/dev/null)
+if [[ -z "$before_uid" ]]; then
+  broke "could not read the deployment uid -- nothing was tested"
+elif ! kubectl -n "$NS" delete deploy "$DEPLOY" --wait=false >/dev/null 2>&1; then
+  broke "delete was rejected -- nothing was tested"
 else
-  sleep 3
-  gone_at_least_once="no"
-  if ! kubectl -n "$NS" get deploy "$DEPLOY" >/dev/null 2>&1; then
-    gone_at_least_once="yes"
-  fi
-  if [[ "$gone_at_least_once" == "no" ]]; then
-    # It may have been recreated within our 3s window, which is a pass for
-    # self-heal but means we never observed the precondition. Say so rather
-    # than guess.
-    broke "never observed the deployment absent -- cannot distinguish 'instantly healed' from 'delete rejected'"
+  ok "delete accepted (uid before: ${before_uid:0:8})"
+  echo "     waiting ${SETTLE}s for Git to put it back..."
+  new_uid=""
+  for _ in $(seq 1 "$SETTLE"); do
+    cur=$(kubectl -n "$NS" get deploy "$DEPLOY" -o jsonpath='{.metadata.uid}' 2>/dev/null)
+    if [[ -n "$cur" && "$cur" != "$before_uid" ]]; then new_uid="$cur"; break; fi
+    sleep 1
+  done
+  if [[ -n "$new_uid" ]]; then
+    ok "recreated from Git (uid after: ${new_uid:0:8}) -- different object, so it really was deleted"
   else
-    ok "deployment deleted"
-    echo "     waiting ${SETTLE}s for it to come back..."
-    back=""
-    for _ in $(seq 1 "$SETTLE"); do
-      if kubectl -n "$NS" get deploy "$DEPLOY" >/dev/null 2>&1; then back="yes"; break; fi
-      sleep 1
-    done
-    if [[ "$back" == "yes" ]]; then
-      ok "recreated from Git"
+    still=$(kubectl -n "$NS" get deploy "$DEPLOY" -o jsonpath='{.metadata.uid}' 2>/dev/null)
+    if [[ "$still" == "$before_uid" ]]; then
+      broke "same uid after ${SETTLE}s -- the delete never took effect, nothing was tested"
     else
-      bad "still missing after ${SETTLE}s"
+      bad "still missing after ${SETTLE}s -- self-heal did not restore a resource Git declares"
     fi
   fi
 fi

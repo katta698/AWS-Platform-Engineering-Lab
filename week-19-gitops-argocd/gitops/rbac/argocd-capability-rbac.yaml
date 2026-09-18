@@ -1,0 +1,75 @@
+# RBAC the EKS Capability for Argo CD does NOT ship with, and why.
+#
+# Creating the capability auto-creates an EKS access entry for its role with
+# two policies:
+#   AmazonEKSArgoCDClusterPolicy   scope=cluster
+#   AmazonEKSArgoCDPolicy          scope=namespace, namespaces=[argocd]
+#
+# That is enough for Argo CD to manage its OWN custom resources in its own
+# namespace, and not enough to do anything else. Point an Application at
+# another namespace and it fails while loading state, not while deploying:
+#
+#   Failed to load live state: ... appprojects.argoproj.io is forbidden:
+#   User ".../week19-gitops-argocd-capability/..." cannot list resource
+#   "appprojects" in API group "argoproj.io" at the cluster scope
+#
+# The Application reports Sync Status "Unknown" with Health "Healthy", which
+# is a genuinely confusing pair: nothing is unhealthy because nothing was
+# ever compared. "Unknown" here means "could not look", not "looks wrong".
+#
+# AWS's quick fix is AmazonEKSClusterAdminPolicy -- full system:masters.
+# Their own docs say not to use it in production, so this is the least
+# privilege path instead: cluster-wide READ so Argo CD can discover and
+# health-check, namespace-scoped WRITE so it can only deploy where intended.
+#
+# The group name is "eks-access-entry:" followed by the principal ARN. That
+# binding is what connects an AWS IAM role to Kubernetes RBAC.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: argocd-capability-read-all
+rules:
+  # Cluster-wide read is not optional. Argo CD compares desired against live
+  # for every resource type an Application touches, and health-checks what it
+  # finds. Restrict this and it reports Unknown rather than failing loudly.
+  - apiGroups: ["*"]
+    resources: ["*"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: argocd-capability-read-all
+subjects:
+  - kind: Group
+    name: argocd-capability
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: argocd-capability-read-all
+  apiGroup: rbac.authorization.k8s.io
+---
+# Write, scoped to exactly the one namespace this Application deploys into.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: argocd-capability-deploy
+  namespace: gitops-demo
+rules:
+  - apiGroups: ["*"]
+    resources: ["*"]
+    verbs: ["*"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: argocd-capability-deploy
+  namespace: gitops-demo
+subjects:
+  - kind: Group
+    name: argocd-capability
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: Role
+  name: argocd-capability-deploy
+  apiGroup: rbac.authorization.k8s.io

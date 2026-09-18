@@ -43,11 +43,22 @@ def get_aws_account_id() -> str | None:
     # was skipped, and an HCP page with a role ARN saved with the account ID
     # visible. The call is cheap and runs once per capture -- there is no reason
     # for the timeout to be tight enough to lose a race with a browser launch.
-    for attempt in (1, 2):
+    # 2026-09-18: raised again, 30s -> 90s, and a third attempt. Week 19 lost
+    # four capture attempts to this. A bare STS call on this machine takes
+    # 11-22s idle and goes past 30s while Chromium is launching -- the same
+    # race described above, just slower hardware. The failure is also
+    # thoroughly misleading: it prints "Fix: aws sso login" when the
+    # credentials are perfectly valid and merely slow, which sent me looking
+    # at the wrong thing twice.
+    #
+    # The cost of a generous timeout is seconds on a path that runs once per
+    # capture. The cost of a tight one is either a lost capture or, before the
+    # Week 14 fix, a silently unredacted account ID.
+    for attempt in (1, 2, 3):
         try:
             result = subprocess.run(
                 ["aws", "sts", "get-caller-identity", "--query", "Account", "--output", "text"],
-                capture_output=True, text=True, timeout=30,
+                capture_output=True, text=True, timeout=90,
             )
             account_id = result.stdout.strip()
             if account_id:
