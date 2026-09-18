@@ -48,6 +48,39 @@ resource "helm_release" "argocd" {
   timeout = 900
 
   values = [yamlencode({
+    # DO NOT INSTALL THE CRDs. This is the whole reason the first apply failed.
+    #
+    # The EKS Capability installs Argo CD's CustomResourceDefinitions into the
+    # cluster -- AWS's docs say so plainly, in a sentence that is easy to read
+    # past: "Custom Resource Definitions (CRDs) are installed in your cluster".
+    # CRDs are CLUSTER-scoped. Namespaces do not contain them.
+    #
+    # So putting the two Argo CDs in different namespaces isolates their
+    # Deployments, their Services and their config, and isolates nothing about
+    # the CRDs. The chart tried to create applications.argoproj.io, found it
+    # already there without Helm's ownership labels, and refused:
+    #
+    #   Unable to continue with install: CustomResourceDefinition
+    #   "applications.argoproj.io" in namespace "" exists and cannot be
+    #   imported into the current release: invalid ownership metadata;
+    #   label validation error: missing key "app.kubernetes.io/managed-by"
+    #
+    # Note `in namespace ""` -- Kubernetes saying the object has no namespace,
+    # because it cannot have one.
+    #
+    # The refusal is correct behaviour. Helm will not adopt an object it did
+    # not create, because adopting it would mean a later `helm uninstall`
+    # deletes a CRD it does not own -- and deleting a CRD deletes every custom
+    # resource of that kind, cluster-wide. In this cluster that would take the
+    # managed capability's Applications with it.
+    #
+    # So the self-managed install borrows the CRDs the capability already owns.
+    # That is a real consequence worth stating: these two products cannot both
+    # own the type definitions, and the second one in has to defer.
+    crds = {
+      install = false
+    }
+
     global = {
       # Keep everything on the one node group. No tolerations, so if the node
       # cannot fit Argo CD the pods stay Pending and say so, rather than
