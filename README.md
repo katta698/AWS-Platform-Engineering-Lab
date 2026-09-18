@@ -40,8 +40,8 @@
 
 | Week | Project | Key AWS Services | Status |
 |------|---------|-----------------|--------|
-| Week 18 | EKS Cluster Self-Service | EKS, IRSA, namespace isolation, developer onboarding | 📅 Planned |
-| Week 19 | GitOps with ArgoCD on EKS | ArgoCD, app-of-apps, progressive delivery, drift detection | 📅 Planned |
+| [Week 18](./week-18-eks-self-service) | EKS Cluster Self-Service | EKS 1.36, managed node group + Fargate, **EKS Pod Identity and IRSA side by side** (the roadmap said IRSA; AWS now recommends Pod Identity, which cannot run on Fargate), ResourceQuota, NetworkPolicy, per-tenant S3 and IAM, EKS access entries | ✅ Complete |
+| Week 19 | [GitOps on EKS: managed Argo CD vs self-managed](week-19-gitops-argocd) | EKS Capability for Argo CD, Helm, drift detection, cluster-scoped CRDs | ✅ Complete |
 | Week 20 | EventBridge Event-Driven Platform | EventBridge, event buses, schema registry, cross-account events | 📅 Planned |
 | Week 21 | Blue/Green Deployment Automation | CodeDeploy, traffic shifting, automated rollback | 📅 Planned |
 | Week 22 | Container Image Security Pipeline | ECR scanning, image signing, policy enforcement | 📅 Planned |
@@ -538,6 +538,43 @@ Every project follows the same enterprise pattern:
 
 ---
 
+## Week 18 — EKS Cluster Self-Service
+
+**The story:** a namespace is a label, not a boundary. It sets no CPU limit, blocks no traffic between teams, and grants no AWS permissions. Every protection people assume it provides has to be added deliberately — a ResourceQuota for the ceiling, a NetworkPolicy for the boundary, and an identity for the permissions.
+
+**What it builds:** one cluster, two tenants, and two different identity mechanisms — because AWS's own recommendations collide. Pod Identity is what AWS advises; Fargate means never managing a node; and the Pod Identity agent is a privileged DaemonSet that Fargate will not run. AWS's answer is to use both, so `tenant-a` runs on EC2 with Pod Identity and `tenant-b` runs on Fargate with IRSA.
+
+**Four bugs worth the week:**
+
+- **The isolation test passed on pods that never ran.** The ResourceQuota requires every pod to declare CPU and memory; the probes declared none, so all four were rejected before startup. The checks looked only for denial strings, and work that never starts produces none — so "no denial found" scored as success on two of them. Two green ticks, four meaningless results.
+- **Locked out of a cluster I had just created.** `bootstrap_cluster_creator_admin_permissions` grants admin to whoever ran Terraform, which on a CI runner is the runner's role. Fixed with EKS access entries.
+- **The AZ data source returned a Local Zone** (`us-east-1-dfw-1a`). EKS will not place a control plane there and NAT gateways do not exist there — two errors, neither naming Local Zones, both after the VPC was built.
+- **A run reported no changes** because the VCS webhook had not ingested the commit yet, while its own queued run held the workspace lock.
+
+**Resources:** 59 Terraform resources | **Cost:** rate and duration published; the bill had not posted at publication | **Blog:** https://jayanthkatta.com/blog/week-18-eks-self-service/
+
+
+## Week 19 — GitOps on EKS: should you run Argo CD, or let AWS?
+
+**The story:** every Argo CD tutorial starts with `helm install`. AWS now offers Argo CD as an **EKS Capability** — the controllers run in AWS-managed infrastructure *outside* your cluster, authenticated by IAM Identity Center. So the question stopped being *how do I install Argo CD* and became **should I run it at all**.
+
+**What it builds:** both, on one cluster, reading the same repository and deploying the same app. One variable — who operates Argo CD. Then four kinds of deliberate drift, to find where "the cluster converges on Git" stops being true.
+
+**What it found:**
+
+- **The two cannot both own the CRDs.** The first apply failed: `applications.argoproj.io in namespace "" exists and cannot be imported`. CRDs are cluster-scoped, so separate namespaces isolate Deployments and config and isolate nothing about shared type definitions. Helm is right to refuse — adopting would mean a later uninstall deletes every Application cluster-wide.
+- **Zero pods versus seven.** `kubectl get pods -n argocd` returns *No resources found*; `argocd-self` lists seven. Same product.
+- **The capability ships unable to deploy.** Its auto-created access entry covers its own namespace only, and the Application sits at Sync `Unknown` / Health `Healthy` — *could not look*, not *looks wrong*.
+- **AWS's documented RBAC fix binds to a group that does not exist.** The entry has `"groups": []`, so a ClusterRoleBinding to `eks-access-entry:<arn>` is inert until you add the group yourself.
+- **Two controllers, one namespace: the last writer wins**, and the loser reports OutOfSync forever.
+- **Drift:** reverts what Git specifies; leaves alone what Git never mentions; never prunes what it never tracked; recreates what you delete.
+- **Cost was not the deciding factor** — $0.03/hr managed against +$0.0208/hr of extra node for free software. The feature list decides.
+
+**Ran 5h 19m, destroyed, `cleanup.sh` clean on all eleven checks.**
+
+
+---
+
 ## Standalone Posts
 
 Technical deep-dives and guides published outside the weekly series.
@@ -643,6 +680,7 @@ plan**, and a git push (or "Start new plan") to rebuild.
 | 15   | ~$9-12/month — **not the $0 the free-tier line implies.** One free copy of management events per region exists, but an unrelated project's trail already held it, so this is a *second* copy at $2.00/100k events (~450-600k/month measured). A build-and-destroy is $1-2. No NAT, no always-on compute, 6 static alarms @ $0.10 | $0 |
 | 16   | ~$0.12/month idle (one static alarm @ $0.10; the agent space itself is **$0 while idle**, verified on every meter). The real exposure is per-use and **uncapped** — $0.0083/agent-second (~$0.50/min) with no budget, duration or task limit anywhere in the schema, unlike Weeks 14–15 where Athena was capped at workgroup level. Actual spend was **$23.28**: two investigations at a flat $5.03 each, plus a one-time **$13.22 `system learning`** charge that is not one of the three billed categories AWS publishes | $0 |
 | 17   | **~$0.10/month idle** (one alarm @ $0.10; Lambda, DynamoDB and the Function URL have no idle charge at all). The exposure is per-call, not per-hour: `ce:GetCostAndUsage` is **$0.01 per request** and each page counts separately, which is why the cost tool sits behind a DynamoDB TTL cache — an LLM decides call frequency, so a metered read needs a cache rather than a budget | $0 |
+| 18   | **~$0.17/hr, about $4/day, from the moment the cluster exists** &mdash; $0.10 control plane + $0.045 NAT + $0.0208 for one t3.small. **No free tier, nothing deferred.** The opposite shape to Weeks 11, 12, 16 and the QuickSight charge, which all cost $0 for thirty days and then quietly started billing. Built and destroyed in 11h 22m by design | $0 |
 
 ---
 

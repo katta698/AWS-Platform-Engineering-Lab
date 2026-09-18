@@ -161,7 +161,11 @@ def main():
         print("     url: %s" % info["u"][:90])
         print("   wrote: %s (%d bytes)" % (args.output, len(data)))
         low = (info["u"] + " " + info["t"]).lower()
-        if any(w in low for w in ("sign in", "log in", "login", "accounts.google")):
+        # "sign-in" with the hyphen is what AWS actually titles its page --
+        # "Amazon Web Services Sign-In" slipped straight past the first
+        # version of this list.
+        if any(w in low for w in ("sign in", "sign-in", "signin",
+                                  "log in", "login", "accounts.google")):
             print("WARNING: this looks like a sign-in page. Check the image "
                   "before using it -- Week 15 shipped two of those.")
             return 1
