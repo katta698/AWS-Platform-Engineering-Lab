@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: podinfo
+  namespace: gitops-demo
+spec:
+  # Two, so the drift test can scale to four and watch it come back. The number
+  # itself is unimportant; that Git states it at all is the whole point -- a
+  # field Git specifies is a field self-heal can converge.
+  replicas: 2
+  selector:
+    matchLabels:
+      app: podinfo
+  template:
+    metadata:
+      labels:
+        app: podinfo
+    spec:
+      containers:
+        - name: podinfo
+          image: ghcr.io/stefanprodan/podinfo:6.7.1
+          ports:
+            - containerPort: 9898
+              name: http
+          # Requests are declared for the same reason Week 18 learned to
+          # declare them: a pod with no requests is a pod that can be refused
+          # for reasons that look nothing like the reason. It cost that week
+          # two meaningless green ticks.
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 9898
+            initialDelaySeconds: 3

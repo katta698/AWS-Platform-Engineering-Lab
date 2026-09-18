@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: podinfo
+  namespace: gitops-demo
+spec:
+  # ClusterIP. A LoadBalancer here would bill for the life of the lab and prove
+  # nothing the drift test needs.
+  type: ClusterIP
+  selector:
+    app: podinfo
+  ports:
+    - port: 80
+      targetPort: 9898
+      name: http

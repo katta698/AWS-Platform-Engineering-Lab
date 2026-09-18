@@ -1,0 +1,38 @@
+# The Application as upstream Argo CD expects it.
+#
+# destination.server is the in-cluster address. Upstream Argo CD registers the
+# cluster it runs in automatically, under the well-known name
+# https://kubernetes.default.svc, so this Just Works and every tutorial on the
+# internet shows exactly this.
+#
+# The managed capability does NOT do that -- see podinfo-managed.yaml. The two
+# files differ in one field, and that field is a real difference in how the two
+# products think about what a cluster is.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: podinfo
+  namespace: argocd-self
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/katta698/AWS-Platform-Engineering-Lab.git
+    targetRevision: main
+    path: week-19-gitops-argocd/gitops/workloads/podinfo
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: gitops-demo
+
+  syncPolicy:
+    automated:
+      # selfHeal is what the drift experiment is actually testing. Without it
+      # Argo CD reports OutOfSync and waits for a human; with it, it converges.
+      selfHeal: true
+      # prune removes resources this Application tracks once Git stops
+      # declaring them. It does NOT remove resources it never tracked, which is
+      # the distinction scripts/prove_drift.sh case 3 exists to make visible.
+      prune: true
+    syncOptions:
+      - CreateNamespace=false

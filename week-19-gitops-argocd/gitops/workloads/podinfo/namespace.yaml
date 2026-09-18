@@ -1,0 +1,12 @@
+# The namespace the demo workload lands in.
+#
+# Declared in Git rather than created by hand, because the drift experiment
+# needs a clear line between "things Argo CD knows about" and "things somebody
+# made". Anything in this file is tracked. Anything created with kubectl is not,
+# and scripts/prove_drift.sh depends on that distinction being real.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: gitops-demo
+  labels:
+    lab.week: "19"

@@ -1,0 +1,46 @@
+# The same Application for the EKS Capability for Argo CD.
+#
+# ONE FIELD DIFFERS, AND IT IS NOT COSMETIC
+# The capability "does not automatically add the local cluster
+# (kubernetes.default.svc) as a deployment target -- to deploy to the same
+# cluster where the capability is created, explicitly register that cluster
+# using its ARN." It accepts only EKS cluster ARNs, never Kubernetes API server
+# URLs.
+#
+# That follows from where it runs. Upstream Argo CD is inside the cluster, so
+# "this cluster" is an address it can reach. The capability runs outside, in
+# AWS's infrastructure, where "this cluster" is not a network location at all --
+# it is an AWS resource, and AWS resources are named by ARN.
+#
+# The practical consequence: every Argo CD Application example you find online
+# needs this one edit before it will run here, and the failure if you forget is
+# a cluster-not-found that reads like a permissions problem.
+#
+# __CLUSTER_ARN__ is substituted at apply time by scripts/deploy_apps.sh --
+# the ARN embeds the AWS account ID, which does not belong in committed text.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: podinfo
+  # Must be the namespace named when the capability was created. The capability
+  # requires a single namespace for its own custom resources; workloads it
+  # deploys can still land anywhere.
+  namespace: argocd
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/katta698/AWS-Platform-Engineering-Lab.git
+    targetRevision: main
+    path: week-19-gitops-argocd/gitops/workloads/podinfo
+
+  destination:
+    name: __CLUSTER_ARN__
+    namespace: gitops-demo
+
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: true
+    syncOptions:
+      - CreateNamespace=false
