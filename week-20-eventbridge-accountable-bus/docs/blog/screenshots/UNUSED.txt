@@ -1,0 +1,22 @@
+# Planned slots with no file, and why. Declared rather than silently missing --
+# check_week_complete.py compares this against the post.
+
+# 05 and 07 are the matched path and the detection catching the unmatched
+# event. Both appear in 06, in the same run, on the same evidence. Capturing
+# the same log twice under different names would pad the figure count without
+# adding a fact.
+05-matched-path-delivered.png
+07-detection-catches-it.png
+
+# 09 was "a real failed delivery sitting in the DLQ". The build disproved the
+# premise: the EventBridge DLQ does not receive a target that accepts an event
+# and then fails, because that is not a delivery failure. The real result --
+# EventBridge DLQ 0, Lambda on-failure destination 1 -> 2 -- is in 06, which is
+# a better figure than the one planned because it shows both queues at once.
+09-dlq-caught-a-failure.png
+
+# 10 is Cost Explorer. Charges for 24 September had not posted at publication;
+# billing runs roughly a day behind. The post ships rate and duration with no
+# total and will be updated with the billed figure, exactly as Weeks 18 and 19
+# were.
+10-cost-explorer.png
