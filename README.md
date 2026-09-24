@@ -42,7 +42,7 @@
 |------|---------|-----------------|--------|
 | [Week 18](./week-18-eks-self-service) | EKS Cluster Self-Service | EKS 1.36, managed node group + Fargate, **EKS Pod Identity and IRSA side by side** (the roadmap said IRSA; AWS now recommends Pod Identity, which cannot run on Fargate), ResourceQuota, NetworkPolicy, per-tenant S3 and IAM, EKS access entries | ✅ Complete |
 | Week 19 | [GitOps on EKS: managed Argo CD vs self-managed](week-19-gitops-argocd) | EKS Capability for Argo CD, Helm, drift detection, cluster-scoped CRDs | ✅ Complete |
-| Week 20 | EventBridge Event-Driven Platform | EventBridge, event buses, schema registry, cross-account events | 📅 Planned |
+| Week 20 | [An accountable event bus](week-20-eventbridge-accountable-bus) | EventBridge custom bus, **`PutEvents` data-plane logging to CloudTrail** (opt-in, launched 4 May 2026), schema discovery, archive + replay, catch-all detection | 🚧 In review |
 | Week 21 | Blue/Green Deployment Automation | CodeDeploy, traffic shifting, automated rollback | 📅 Planned |
 | Week 22 | Container Image Security Pipeline | ECR scanning, image signing, policy enforcement | 📅 Planned |
 | Week 23 | Service Networking with VPC Lattice | VPC Lattice service networks, cross-VPC/cross-account routing, auth policies (replaces App Mesh — shut down 2026-09-30) | 📅 Planned |
@@ -571,6 +571,26 @@ Every project follows the same enterprise pattern:
 - **Cost was not the deciding factor** — $0.03/hr managed against +$0.0208/hr of extra node for free software. The feature list decides.
 
 **Ran 5h 19m, destroyed, `cleanup.sh` clean on all eleven checks.**
+
+
+---
+
+## Week 20 — An accountable event bus
+
+**The story:** an event bus is the one component every service trusts and nobody can see into. Until **4 May 2026** there was no answer in EventBridge to "who published this event?" — `PutEvents` was not logged to CloudTrail at all. It is now, as an **opt-in data event**. So the week asks what accountability on a bus actually costs, and where it still does not reach.
+
+**What it builds:** a custom bus with data-plane logging on, schema discovery on, an archive in front of the rules, one real subscriber, a catch-all rule as detection, and two failure queues that catch different things.
+
+**What it found:**
+
+- **An event that matches no rule returns HTTP 200 with an EventId.** The publisher sees success, nothing consumes it, and nothing alarms — because **no metric exists for "matched no rule"**. `MatchedEvents` is per-rule. The only detection is a catch-all rule, and it bills a second delivery on every event forever.
+- **CloudTrail records the caller and redacts the payload** — `"detail": "HIDDEN_DUE_TO_SECURITY_REASONS"`. You learn who published, never what. And on a cross-account publish the record is attributed to the **caller**, not the bus owner, so the bus owner's trail is not where the answer lives.
+- **Schema discovery wrote down a typo as a legitimate schema.** `platform.orders@Order.crated` sits in the registry beside the real one. The registry documents what producers send, not what they meant — it is a mirror, not a contract.
+- **The DLQ everyone configures catches the other failure.** Lambda targets are invoked asynchronously, so the EventBridge DLQ only sees *delivery* failures. A target that accepts and then throws needs a Lambda on-failure destination — a second queue. Proven: that queue went 1 → 2 while the EventBridge DLQ stayed at **0**.
+- **Replay is not a time machine.** It follows the rules that exist **now**, and mints **new event ids**. An event delivered to nobody can be delivered to somebody later; and since the event id is the join key between CloudTrail and the archive, a replayed event cannot be traced back to who published it. Attribution breaks exactly where an incident needs it.
+- **Turning on archive and schema discovery silently installs one managed rule each.** Four rules on the bus, two not written by Terraform. A rule inventory listing things you did not write is the service working as designed.
+
+**Cost shape inverts Weeks 18–19:** no hourly meter anywhere — no control plane, no NAT, no node. It bills per event, per **64 KB chunk**. The only standing charge is archive storage, against **1,096 measured bytes**.
 
 
 ---
