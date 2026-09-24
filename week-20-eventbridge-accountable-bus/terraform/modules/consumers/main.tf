@@ -127,6 +127,65 @@ resource "aws_sqs_queue_policy" "dlq" {
 }
 
 # ---------------------------------------------------------------------------
+# THE SECOND QUEUE, AND WHY ONE IS NOT ENOUGH
+# ---------------------------------------------------------------------------
+#
+# Measured on this build, not assumed:
+#
+#   Lambda      Invocations 5, Errors 3     (the function raised)
+#   EventBridge FailedInvocations   none
+#               InvocationsSentToDLQ none    (EventBridge saw no failure at all)
+#
+# The DLQ above stayed EMPTY while the function threw three times, and that is
+# correct behaviour. EventBridge invokes a Lambda target ASYNCHRONOUSLY: its
+# delivery succeeds the moment Lambda accepts the invocation. What the function
+# does afterwards is not EventBridge's business, so it is not a delivery
+# failure, so the DLQ never sees it.
+#
+# The EventBridge DLQ catches things like NO_PERMISSIONS, NO_RESOURCE,
+# THROTTLING -- "I could not hand this over". A function that accepts an event
+# and then fails needs LAMBDA's own on-failure destination, which is a
+# different mechanism configured in a different place.
+#
+# So: two failure modes, two queues. Configuring only the first -- which is the
+# one every tutorial shows -- means an entire class of failure lands nowhere.
+resource "aws_sqs_queue" "function_failures" {
+  name                      = "${var.name_prefix}-function-failures"
+  message_retention_seconds = 86400
+  tags                      = var.tags
+}
+
+resource "aws_iam_role_policy" "consumer_on_failure" {
+  name = "send-to-failure-queue"
+  role = aws_iam_role.consumer.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = "sqs:SendMessage"
+      Resource = aws_sqs_queue.function_failures.arn
+    }]
+  })
+}
+
+resource "aws_lambda_function_event_invoke_config" "consumer" {
+  function_name = aws_lambda_function.consumer.function_name
+
+  # Lambda's OWN async retry, separate from the rule's retry_policy. Left at 0
+  # so the failure reaches the destination immediately rather than after two
+  # more attempts -- the default of 2 is what makes this look like a slow DLQ
+  # rather than a different mechanism.
+  maximum_retry_attempts = 0
+
+  destination_config {
+    on_failure {
+      destination = aws_sqs_queue.function_failures.arn
+    }
+  }
+}
+
+# ---------------------------------------------------------------------------
 # RULE 1 -- the real subscriber
 # ---------------------------------------------------------------------------
 #

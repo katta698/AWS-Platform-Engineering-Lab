@@ -38,16 +38,48 @@ broke() { printf '  [BROKEN] %s\n' "$1"; broken=$((broken+1)); }
 aws_() { MSYS_NO_PATHCONV=1 aws --profile "$PROFILE" "$@"; }
 
 publish() {  # $1 detail-type, $2 order id -> echoes the event id, empty on failure
-  aws_ events put-events --entries \
-    "Source=${SOURCE},DetailType=$1,Detail={\"orderId\":\"$2\"},EventBusName=${BUS}" \
-    --query 'Entries[0].EventId' --output text 2>/dev/null
+  #
+  # TWO THINGS THAT BOTH LOOK LIKE THEY SHOULD WORK AND DO NOT:
+  #
+  # 1. The CLI SHORTHAND form. `Detail={"orderId":"x"}` fails with
+  #      Error parsing parameter '--entries': Expected: '=', received: '"'
+  #    A shorthand value cannot contain a JSON object -- the brace ends the
+  #    token. Most blog examples of put-events use shorthand, so this is the
+  #    first wall anyone hits.
+  #
+  # 2. `--entries file://...` with a path from mktemp. The AWS CLI here is the
+  #    Windows build, so a POSIX /tmp path is not a path it can open:
+  #      Unable to load paramfile file:///tmp/tmp.XXXX: No such file or directory
+  #
+  # So: build real JSON and pass it inline. Note `Detail` is a JSON *string*,
+  # not a nested object -- json.dumps twice, deliberately.
+  local entries
+  entries=$(python3 - "$1" "$2" "$SOURCE" "$BUS" <<'PY'
+import json, sys
+detail_type, order_id, source, bus = sys.argv[1:5]
+print(json.dumps([{
+    "Source": source,
+    "DetailType": detail_type,
+    "Detail": json.dumps({"orderId": order_id}),
+    "EventBusName": bus,
+}]))
+PY
+)
+  aws_ events put-events --entries "$entries"     --query 'Entries[0].EventId' --output text 2>/dev/null
 }
 
-seen_in_log() {  # $1 log group, $2 needle, $3 window seconds
+seen_in_log() {  # $1 log group, $2 needle, $3 window seconds -> count, or 0
   local start_ms
   start_ms=$(( ($(date +%s) - $3) * 1000 ))
-  aws_ logs filter-log-events --log-group-name "$1" --start-time "$start_ms" \
-    --filter-pattern "\"$2\"" --query 'length(events)' --output text 2>/dev/null
+  # --no-paginate is NOT optional here. The CLI auto-paginates
+  # filter-log-events and applies --query PER PAGE, so `length(events)` comes
+  # back as one number per page, joined by a newline, which bash then fails
+  # to compare as an integer: "syntax error: invalid arithmetic operator".
+  # The visible symptom was a BROKEN check announcing that delivery was broken,
+  # at a moment when the consumer had in fact been invoked four times. The
+  # measurement was wrong, not the system. Filtering on a unique event id means
+  # one page is always enough.
+  aws_ logs filter-log-events --log-group-name "$1" --start-time "$start_ms"     --filter-pattern "\"$2\"" --no-paginate --query 'length(events)'     --output text 2>/dev/null | head -1
 }
 
 echo "Preconditions"
@@ -128,48 +160,88 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 3. A REAL FAILED DELIVERY -> DLQ
+# 3. TWO FAILURE MODES, AND THE QUEUE EVERYONE CONFIGURES CATCHES ONLY ONE
 #
-# Pushed through the bus, not injected into the queue. A DLQ that has only ever
-# held a hand-written message has not been tested.
+# The DLQ attached to an EventBridge target catches DELIVERY failures -- "I
+# could not hand this over": NO_PERMISSIONS, NO_RESOURCE, THROTTLING.
+#
+# It does NOT catch the target accepting an event and then failing. EventBridge
+# invokes a Lambda target asynchronously, so its delivery succeeded the moment
+# Lambda said yes. The function raising afterwards is Lambda's business, and it
+# needs Lambda's own on-failure destination -- a different mechanism, in a
+# different place, that most walkthroughs never mention.
+#
+# This section publishes a poison event and checks BOTH queues, because the
+# interesting result is which one fills.
 # ---------------------------------------------------------------------------
-echo
-echo "3. A delivery that fails (consumer raises on '$POISON_DETAIL_TYPE')"
 POISON_DETAIL_TYPE="${POISON_DETAIL_TYPE:-order.poison}"
-DLQ_URL="${DLQ_URL:-}"
+echo
+echo "3. A target that accepts the event and then fails"
 
-if [[ -z "$DLQ_URL" ]]; then
-  DLQ_URL=$(aws_ sqs get-queue-url --queue-name "${BUS}-dlq" --query QueueUrl --output text 2>/dev/null)
-fi
+depth() {  # $1 queue url -> visible message count
+  # ApproximateNumberOfMessagesVisible is NOT a valid attribute name; the API
+  # rejects it with InvalidAttributeName. The correct one is
+  # ApproximateNumberOfMessages. An earlier version of this script asked for the
+  # wrong name, got an error on stderr, defaulted both readings to 0, and
+  # reported "depth unchanged" -- a conclusion drawn from two failed reads.
+  aws_ sqs get-queue-attributes --queue-url "$1" --attribute-names All     --query 'Attributes.ApproximateNumberOfMessages' --output text 2>/dev/null
+}
 
-if [[ -z "$DLQ_URL" || "$DLQ_URL" == "None" ]]; then
-  broke "could not resolve the DLQ url -- nothing was tested"
+EB_DLQ=$(aws_ sqs get-queue-url --queue-name "${BUS}-dlq" --query QueueUrl --output text 2>/dev/null)
+FN_DLQ=$(aws_ sqs get-queue-url --queue-name "${BUS}-function-failures" --query QueueUrl --output text 2>/dev/null)
+
+if [[ -z "$EB_DLQ" || "$EB_DLQ" == "None" || -z "$FN_DLQ" || "$FN_DLQ" == "None" ]]; then
+  broke "could not resolve both queues -- nothing was tested"
 else
-  before=$(aws_ sqs get-queue-attributes --queue-url "$DLQ_URL" \
-    --attribute-names ApproximateNumberOfMessagesVisible \
-    --query 'Attributes.ApproximateNumberOfMessagesVisible' --output text 2>/dev/null)
-  poison_id=$(publish "$POISON_DETAIL_TYPE" "poison-$(date +%s)")
-
-  if [[ -z "$poison_id" || "$poison_id" == "None" ]]; then
-    broke "PutEvents returned no event id -- nothing was tested"
+  eb_before=$(depth "$EB_DLQ"); fn_before=$(depth "$FN_DLQ")
+  if [[ -z "$eb_before" || -z "$fn_before" ]]; then
+    broke "could not read queue depth -- nothing was tested"
   else
-    ok "published a poison event, EventId ${poison_id:0:8} (queue depth before: ${before:-0})"
-    echo "     waiting ${SETTLE}s for the retry policy to exhaust..."
-    sleep "$SETTLE"
-    after=$(aws_ sqs get-queue-attributes --queue-url "$DLQ_URL" \
-      --attribute-names ApproximateNumberOfMessagesVisible \
-      --query 'Attributes.ApproximateNumberOfMessagesVisible' --output text 2>/dev/null)
-    if [[ "${after:-0}" -gt "${before:-0}" ]]; then
-      ok "DLQ depth ${before:-0} -> ${after:-0} -- a real failed delivery was captured"
+    errors_before=$(aws_ cloudwatch get-metric-statistics --namespace AWS/Lambda       --metric-name Errors --dimensions Name=FunctionName,Value="${BUS}-consumer"       --start-time "$(date -u -d '15 minutes ago' +%Y-%m-%dT%H:%M:%SZ)"       --end-time "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --period 900 --statistics Sum       --query 'Datapoints[0].Sum' --output text 2>/dev/null)
+
+    poison_id=$(publish "$POISON_DETAIL_TYPE" "poison-$(date +%s)")
+    if [[ -z "$poison_id" || "$poison_id" == "None" ]]; then
+      broke "PutEvents returned no event id -- nothing was tested"
     else
-      bad "DLQ depth unchanged (${before:-0} -> ${after:-0}); the failure went somewhere else, or nowhere"
+      ok "published a poison event, EventId ${poison_id:0:8}"
+      echo "     EventBridge DLQ before: ${eb_before}   function-failures before: ${fn_before}"
+      echo "     waiting ${SETTLE}s..."
+      sleep "$SETTLE"
+
+      # PROVE THE FUNCTION ACTUALLY FAILED. Without this, two empty queues are
+      # indistinguishable from an event that never reached the function at all
+      # -- which is precisely the confusion this whole week is about.
+      errors_after=$(aws_ cloudwatch get-metric-statistics --namespace AWS/Lambda         --metric-name Errors --dimensions Name=FunctionName,Value="${BUS}-consumer"         --start-time "$(date -u -d '15 minutes ago' +%Y-%m-%dT%H:%M:%SZ)"         --end-time "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --period 900 --statistics Sum         --query 'Datapoints[0].Sum' --output text 2>/dev/null)
+
+      if [[ "${errors_after%.*}" -le "${errors_before%.*}" ]] 2>/dev/null; then
+        broke "the consumer never recorded an error (${errors_before} -> ${errors_after}); the poison event did not reach it, so neither queue result means anything"
+      else
+        ok "the consumer raised (Errors ${errors_before} -> ${errors_after}) -- the failure is real"
+
+        eb_after=$(depth "$EB_DLQ"); fn_after=$(depth "$FN_DLQ")
+
+        if [[ "${eb_after:-0}" -eq "${eb_before:-0}" ]]; then
+          ok "EventBridge DLQ still ${eb_after} -- it saw no DELIVERY failure, because there was none"
+        else
+          bad "EventBridge DLQ grew ${eb_before} -> ${eb_after}; that contradicts the post's claim about what it catches"
+        fi
+
+        if [[ "${fn_after:-0}" -gt "${fn_before:-0}" ]]; then
+          ok "Lambda on-failure destination ${fn_before} -> ${fn_after} -- THIS is what catches a target that fails"
+          echo "         Two failure modes, two mechanisms. The queue every tutorial"
+          echo "         shows you to configure catches only the other one."
+        else
+          bad "neither queue captured it (${fn_before} -> ${fn_after}); the failure went nowhere at all"
+        fi
+      fi
     fi
   fi
 fi
 
 echo
 echo "----------------------------------------------------------------"
-printf 'passed %d   failed %d   BROKEN %d\n' "$pass" "$fail" "$broken"
+printf 'passed %d   failed %d   BROKEN %d
+' "$pass" "$fail" "$broken"
 
 if (( broken > 0 )); then
   echo

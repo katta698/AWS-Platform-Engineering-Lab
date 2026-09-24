@@ -31,3 +31,8 @@ output "unmatched_alarm_name" {
 output "alerts_topic_arn" {
   value = aws_sns_topic.alerts.arn
 }
+
+output "function_failure_queue_url" {
+  description = "Catches what the EventBridge DLQ structurally cannot: the function accepting an event and then failing"
+  value       = aws_sqs_queue.function_failures.id
+}
