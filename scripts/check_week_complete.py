@@ -57,6 +57,53 @@ def orphan_captures(html, shot_dir):
     return sorted(on_disk - referenced - declared)
 
 
+def roadmap_status(root_readme, week_no):
+    """The status cell of the roadmap row for this week, or None if no row.
+
+    The roadmap is a markdown table. The row for a week is the one whose first
+    cell names it -- either as plain text or as a link. The status is the last
+    non-empty cell on that row.
+    """
+    want = "week %s" % int(week_no)
+    for line in root_readme.splitlines():
+        s = line.strip()
+        if not s.startswith("|") or s.startswith("|--") or "---" in s.split("|")[1:2]:
+            continue
+        cells = [c.strip() for c in s.strip("|").split("|")]
+        if not cells:
+            continue
+        first = re.sub(r"[\[\]]", "", cells[0]).lower()
+        # No regex here: a word boundary written into this line once collapsed
+        # into a literal control character, and the rule silently matched nothing.
+        if first.startswith(want) and not first[len(want):len(want) + 1].isdigit():
+            tail = [c for c in cells[1:] if c]
+            return tail[-1] if tail else ""
+    return None
+
+
+def readme_status_mismatch(root_readme, week_no, is_published):
+    """Does the roadmap row agree with whether the post is actually live?
+
+    Why this exists (2026-09-19): Week 19's row still read "in progress" a full
+    day after the post was published. Jay found it on his phone. Nothing in this
+    script looked at the status cell -- it only checked that a row existed and
+    pointed at the right folder, both of which were true while the row said
+    something false.
+
+    The status cell is a claim about the outside world, so it is checkable
+    against the outside world. Returns a reason string, or None if consistent.
+    """
+    status = roadmap_status(root_readme, week_no)
+    if status is None:
+        return "no roadmap row for Week %s" % week_no
+    done = "complete" in status.lower()
+    if is_published and not done:
+        return "post is published but the roadmap row says %r" % status
+    if not is_published and done:
+        return "roadmap row says %r but the post is not published" % status
+    return None
+
+
 def self_test(quiet=False):
     """Prove each rule REJECTS a known-bad page. Run before trusting a green.
 
@@ -84,6 +131,24 @@ def self_test(quiet=False):
         orphans = orphan_captures(html, shots)
         cases.append(("orphan check finds an unreferenced capture", orphans == ["02-orphan.png"]))
         cases.append(("orphan check honours UNUSED.txt", "03-declared.png" not in orphans))
+
+    # 5. roadmap status agrees with reality
+    RM = (chr(10).join([
+        "| Week | Topic | Services | Status |",
+        "|---|---|---|---|",
+        "| [Week 19](./week-19-gitops-argocd) | GitOps | Argo CD | ✅ Complete |",
+        "| Week 20 | EventBridge | Events | 📅 Planned |",
+    ]))
+    cases.append(("roadmap check catches a published week still marked planned",
+                  readme_status_mismatch(RM, "20", True) is not None))
+    cases.append(("roadmap check catches an unpublished week marked complete",
+                  readme_status_mismatch(RM, "19", False) is not None))
+    cases.append(("roadmap check passes a consistent published row",
+                  readme_status_mismatch(RM, "19", True) is None))
+    cases.append(("roadmap check passes a consistent unpublished row",
+                  readme_status_mismatch(RM, "20", False) is None))
+    cases.append(("roadmap check notices a missing row",
+                  readme_status_mismatch(RM, "21", True) is not None))
 
     bad_count = sum(1 for _, ok in cases if not ok)
     if quiet:
@@ -167,6 +232,21 @@ def main():
     wn = week_no.group(1) if week_no else "??"
     check(f"root README has a Week {wn} section", f"## Week {wn} —" in root or f"## Week {int(wn)} —" in root)
     check(f"root README roadmap row links the folder", f"({slug})" in root or f"./{slug}" in root)
+
+    # Is the post actually live? Read it from the blog repo rather than taking
+    # --published as the answer: the flag says what this run intends to check,
+    # not what a reader of the site would see. A post carrying "draft: true" is
+    # built noindex and unlisted, so it is not published no matter how the
+    # script was invoked.
+    src = BLOG / "posts" / f"{slug}.html"
+    if src.is_file():
+        head = src.read_text(encoding="utf-8", errors="replace")[:2000]
+        live = not re.search(r"^draft:\s*true", head, re.M)
+    else:
+        live = False
+    why = readme_status_mismatch(root, wn, live)
+    check("roadmap row status matches whether the post is live", why is None,
+          why or ("live" if live else "draft/unpublished"))
 
     # ---- no leaked identifiers in tracked text --------------------------
     try:
