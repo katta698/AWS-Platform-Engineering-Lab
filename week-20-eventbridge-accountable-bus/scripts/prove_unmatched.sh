@@ -197,8 +197,6 @@ else
   if [[ -z "$eb_before" || -z "$fn_before" ]]; then
     broke "could not read queue depth -- nothing was tested"
   else
-    errors_before=$(aws_ cloudwatch get-metric-statistics --namespace AWS/Lambda       --metric-name Errors --dimensions Name=FunctionName,Value="${BUS}-consumer"       --start-time "$(date -u -d '15 minutes ago' +%Y-%m-%dT%H:%M:%SZ)"       --end-time "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --period 900 --statistics Sum       --query 'Datapoints[0].Sum' --output text 2>/dev/null)
-
     poison_id=$(publish "$POISON_DETAIL_TYPE" "poison-$(date +%s)")
     if [[ -z "$poison_id" || "$poison_id" == "None" ]]; then
       broke "PutEvents returned no event id -- nothing was tested"
@@ -208,15 +206,23 @@ else
       echo "     waiting ${SETTLE}s..."
       sleep "$SETTLE"
 
-      # PROVE THE FUNCTION ACTUALLY FAILED. Without this, two empty queues are
-      # indistinguishable from an event that never reached the function at all
-      # -- which is precisely the confusion this whole week is about.
-      errors_after=$(aws_ cloudwatch get-metric-statistics --namespace AWS/Lambda         --metric-name Errors --dimensions Name=FunctionName,Value="${BUS}-consumer"         --start-time "$(date -u -d '15 minutes ago' +%Y-%m-%dT%H:%M:%SZ)"         --end-time "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --period 900 --statistics Sum         --query 'Datapoints[0].Sum' --output text 2>/dev/null)
-
-      if [[ "${errors_after%.*}" -le "${errors_before%.*}" ]] 2>/dev/null; then
-        broke "the consumer never recorded an error (${errors_before} -> ${errors_after}); the poison event did not reach it, so neither queue result means anything"
+      # PROVE THE FUNCTION ACTUALLY RAN AND FAILED, from its own log.
+      #
+      # The first version of this read the Lambda Errors METRIC over a sliding
+      # 15-minute window and compared before/after. That is not a measurement,
+      # it is a moving target: the reading went 1.0 -> 0.0 simply because an
+      # older error aged out of the window, and the check concluded the poison
+      # event had never arrived. It had.
+      #
+      # The handler logs "poison event_id=<id> -- failing deliberately" on the
+      # line before it raises, so one grep for this event id answers both
+      # questions exactly: did it arrive, and did it fail. Same evidence the
+      # other two checks use.
+      n=$(seen_in_log "$CONSUMER_LOG" "$poison_id" 300)
+      if [[ "${n:-0}" -eq 0 ]]; then
+        broke "the consumer log has no trace of ${poison_id:0:8}; it never arrived, so neither queue result means anything"
       else
-        ok "the consumer raised (Errors ${errors_before} -> ${errors_after}) -- the failure is real"
+        ok "the consumer received it and raised -- the failure is real"
 
         eb_after=$(depth "$EB_DLQ"); fn_after=$(depth "$FN_DLQ")
 

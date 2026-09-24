@@ -41,6 +41,18 @@ So the order is decided here, first, in narrative order. Capture fills these slo
 | 08 | `08-replay-to-current-rules.png` | Challenges | A replay re-delivering to the rules that exist NOW, not the ones that existed when archived | archive + a rule change |
 | 09 | `09-dlq-caught-a-failure.png` | Challenges | A real failed delivery sitting in the DLQ, not a synthetic message | a deliberately broken target |
 | 10 | `10-cost-explorer.png` | Cost | Cost Explorer for the run window, by usage type | ~24h after teardown |
+| 11 | `11-alarm-email-consumer-errors.png` | Verifying | The OK -> ALARM notification a human actually receives | an alarm firing |
+
+**Slot 11 was added during the build, before capture, per the rule at the bottom of
+this file.** It exists because the alarm email stopped being a human-dependency item:
+Gmail is reachable from this session, so the notification can be read over an API,
+redacted, and rendered — rather than photographed off a phone. That closes the one
+gap in the screenshot set that had survived twenty weeks.
+
+**Slots 05 and 07 are covered by `06`.** The experiment output shows the matched path
+delivering and the catch-all recording the unmatched event in the same run, on the same
+evidence. Two more figures of the same log would be padding; they are declared in
+`UNUSED.txt` rather than captured for the sake of the count.
 
 ## Order check
 
