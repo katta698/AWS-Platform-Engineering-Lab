@@ -32,10 +32,10 @@ So the order is decided here, first, in narrative order. Capture fills these slo
 | # | Filename | Section | What it must show | Exists only after |
 |---|----------|---------|-------------------|-------------------|
 | 01 | `01-hcp-run-applied.png` | **Step 4 — Deploy it** | HCP run list for `week-20-dev`, applied, with the resource count | the apply |
-| 02 | `02-event-bus-configured.png` | Step 4 | The bus in the console with the archive and the schema discoverer both ON | the apply |
+| 02 | `02-bus-configured.png` | Step 4 | **AWS console.** The bus with schema discovery on, and the four rules &mdash; two of them Managed | the apply |
 | 03 | `03-discovered-schema.png` | Step 5 | A schema the discoverer inferred from real traffic — the shape producers actually send | first events published |
-| 04 | `04-cloudtrail-data-events.png` | Step 5 | CloudTrail data-plane logging enabled on the bus, and a `PutEvents` record with a caller identity | logging enabled + an event |
-| 05 | `05-matched-path-delivered.png` | Verifying | The happy path: rule matched, consumer invoked, event visible in its logs | first matched event |
+| 04 | `04-cloudtrail-data-event.png` | Step 5 | **AWS console.** The trail's data-event selector: management events off, `AWS::Events::EventBus` scoped to this bus | logging enabled |
+| 05 | `05-cloudtrail-record.png` | Step 5 | **Terminal.** The `PutEvents` record itself, caller identity and the redacted payload. The trail writes to S3 only, so no console view of a record exists | an event published |
 | 06 | `06-the-event-that-matched-nothing.png` | Verifying | **The money shot.** `PutEvents` returning HTTP 200 and an EventId, beside the consumer logs showing nothing arrived | the unmatched publish |
 | 07 | `07-detection-catches-it.png` | Verifying | The catch-all rule recording the event the specific rule ignored — and what that second delivery costs | detection deployed |
 | 08 | `08-replay-to-current-rules.png` | Challenges | A replay re-delivering to the rules that exist NOW, not the ones that existed when archived | archive + a rule change |
@@ -49,10 +49,28 @@ Gmail is reachable from this session, so the notification can be read over an AP
 redacted, and rendered — rather than photographed off a phone. That closes the one
 gap in the screenshot set that had survived twenty weeks.
 
-**Slots 05 and 07 are covered by `06`.** The experiment output shows the matched path
-delivering and the catch-all recording the unmatched event in the same run, on the same
-evidence. Two more figures of the same log would be padding; they are declared in
+**Slots 07 and 09 are covered by `06`.** The experiment output shows the matched path
+delivering, the catch-all recording the unmatched event, and the Lambda on-failure queue
+going 1 -> 2 while the EventBridge DLQ stays at 0 &mdash; all in the same run, on the same
+evidence. More figures of the same log would be padding; they are declared in
 `UNUSED.txt` rather than captured for the sake of the count.
+
+## Capture method is part of the plan (added 2026-09-24)
+
+Every slot above names **how** it is captured, not only what it shows. That column exists
+because Weeks 19 and 20 shipped with no AWS console screenshots at all: the console
+session lapsed, and each figure quietly became a typeset card rendered from CLI output.
+The content was real; nothing in the pipeline required it to be, and a reader cannot tell
+a rendered card from a captured screen.
+
+Jay's standing rule, 2026-09-24: **"I always want the screenshots from the real capture."**
+
+A terminal card is legitimate only where a terminal is the honest surface for that
+evidence &mdash; slot 05, for instance, because the trail writes to S3 and no console view
+of a single record exists. It is never a stand-in for a console view this plan asked for.
+
+A lapsed console session is not a reason to ask anyone to sign in. `capture.py` mints its
+own session from the CLI's temporary credentials on every console URL.
 
 ## Order check
 

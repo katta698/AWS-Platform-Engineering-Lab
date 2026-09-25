@@ -26,6 +26,8 @@ Examples:
 """
 import argparse
 import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import json
 import os
 import subprocess
@@ -318,6 +320,33 @@ def self_test_quiet():
         return self_test_login_guard()
 
 
+
+def authenticated_url(url):
+    """For an AWS console URL, a federated login URL that lands on it.
+
+    Why this is automatic (2026-09-24): the console session used to be a thing a
+    human maintained by signing in, so when it lapsed the capture failed and I
+    asked Jay to sign in -- twice in one evening, with the tool that makes that
+    unnecessary sitting in this same directory since 11 July. He was right to be
+    annoyed. The CLI already holds temporary credentials; AWS exchanges those for
+    a console session over a documented endpoint. So every console capture mints
+    its own session and lands on the target in one navigation.
+
+    Returns the URL unchanged for non-console targets, and on any failure -- if
+    credentials really are gone, the sign-in guard downstream still refuses to
+    save, which is the honest outcome.
+    """
+    if "console.aws.amazon.com" not in url:
+        return url
+    try:
+        from aws_console_url import get_signin_url
+        return get_signin_url(url)
+    except Exception as exc:                                    # noqa: BLE001
+        print("could not mint a console session (%s); continuing unauthenticated"
+              % str(exc)[:80])
+        return url
+
+
 def assert_not_a_login_page(page, allow_login_page: bool) -> None:
     """
     Refuse to save a screenshot of a sign-in screen.
@@ -572,7 +601,7 @@ def redact_account_id(page, account_id: str) -> None:
 def capture(url: str, output_path: Path, wait_selector: str | None, wait_ms: int | None,
             headed: bool, login_wait_seconds: int, height: int,
             click_text: str | None = None, click_wait_ms: int = 5000,
-            allow_unresolved_account: bool = False, cdp_port: int | None = None):
+            allow_unresolved_account: bool = False, cdp_port: int | None = None, scroll_to: str | None = None):
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -632,7 +661,7 @@ def capture(url: str, output_path: Path, wait_selector: str | None, wait_ms: int
         # never fire `load` and so time out by design. Each occurrence needed a
         # full browser restart to clear.
         try:
-            page.goto(url, wait_until="load", timeout=30000)
+            page.goto(authenticated_url(url), wait_until="load", timeout=30000)
         except Exception:
             if cdp_port:
                 try:
@@ -766,6 +795,31 @@ def capture(url: str, output_path: Path, wait_selector: str | None, wait_ms: int
             assert_not_present(page, needle, f"the REDACT_EXTRA value '{needle[:4]}...'")
         print("Verified: no unredacted secrets in the rendered page")
 
+        if scroll_to:
+            # Scroll rather than crop. A crop out of a very tall viewport loses
+            # the console chrome -- nav rail, breadcrumb, account badge -- which
+            # is exactly what makes a console screenshot recognisable as one
+            # rather than as something I could have typeset myself.
+            found = page.evaluate("""
+                (needle) => {
+                    const walk = document.evaluate(
+                        "//*[not(self::script) and not(self::style)][contains(text(), " +
+                        JSON.stringify(needle) + ")]",
+                        document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
+                    const el = walk.singleNodeValue;
+                    if (!el) return false;
+                    el.scrollIntoView({block: 'start', inline: 'nearest'});
+                    window.scrollBy(0, -90);
+                    return true;
+                }
+            """, scroll_to)
+            if not found:
+                raise SystemExit(
+                    "REFUSING TO SAVE: --scroll-to %r matched nothing on the page.\n"
+                    "Capturing anyway would silently produce the top of the page "
+                    "instead of the section asked for." % scroll_to)
+            settle(page, "after scroll")
+
         # Separate question from the leak checks above: is this the page we asked
         # for at all? A sign-in screen passes every redaction assertion.
         assert_not_a_login_page(page, args.allow_login_page)
@@ -795,6 +849,11 @@ if __name__ == "__main__":
     parser.add_argument("--height", type=int, default=900, help="Viewport height in px - increase for pages with real content below the fold")
     parser.add_argument("--click-text", default=None, help="Exact visible text to click before capturing (for SPA tabs with no addressable URL). Fails loudly rather than capturing the wrong tab.")
     parser.add_argument("--click-wait-ms", type=int, default=5000, help="Wait after the click before capturing")
+    parser.add_argument("--scroll-to", default=None, metavar="TEXT",
+                        help="scroll the element containing this exact visible text "
+                             "into view before capturing, so a section below the fold "
+                             "is captured as a real viewport screenshot rather than "
+                             "cropped out of a tall one")
     parser.add_argument("--allow-error-page", action="store_true",
                         help="Permit saving a not-found/error page (only when that IS the subject)")
     parser.add_argument("--cdp", type=int, default=None, metavar="PORT",
@@ -826,4 +885,5 @@ if __name__ == "__main__":
         sys.exit("ABORTING: the sign-in guard does not work. Run --self-test.")
 
     capture(args.url, args.output_path, args.wait_selector, args.wait_ms, args.headed, args.login_wait_seconds,
-            args.height, args.click_text, args.click_wait_ms, args.allow_unresolved_account, cdp_port=args.cdp)
+            args.height, args.click_text, args.click_wait_ms, args.allow_unresolved_account, cdp_port=args.cdp,
+            scroll_to=args.scroll_to)

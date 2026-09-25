@@ -1,22 +1,16 @@
-# Planned slots with no file, and why. Declared rather than silently missing --
-# check_week_complete.py compares this against the post.
+# Capture slots declared but not published, with the reason.
+# A number is never recycled; a capture not worth publishing is retired here.
 
-# 05 and 07 are the matched path and the detection catching the unmatched
-# event. Both appear in 06, in the same run, on the same evidence. Capturing
-# the same log twice under different names would pad the figure count without
-# adding a fact.
-05-matched-path-delivered.png
+# 07 - the catch-all rule recording what the specific rule ignored.
+#      Covered by 06, which shows the matched path delivering and the catch-all
+#      counting the unmatched event in the same run, on the same evidence.
 07-detection-catches-it.png
 
-# 09 was "a real failed delivery sitting in the DLQ". The build disproved the
-# premise: the EventBridge DLQ does not receive a target that accepts an event
-# and then fails, because that is not a delivery failure. The real result --
-# EventBridge DLQ 0, Lambda on-failure destination 1 -> 2 -- is in 06, which is
-# a better figure than the one planned because it shows both queues at once.
+# 09 - a real failed delivery in the DLQ.
+#      Covered by 06 as well: the same run shows the Lambda on-failure queue at
+#      1 -> 2 while the EventBridge DLQ stays at 0, which is the actual finding.
 09-dlq-caught-a-failure.png
 
-# 10 is Cost Explorer. Charges for 24 September had not posted at publication;
-# billing runs roughly a day behind. The post ships rate and duration with no
-# total and will be updated with the billed figure, exactly as Weeks 18 and 19
-# were.
+# 10 - Cost Explorer for the run window.
+#      Pending: the bill posts ~25 Sep. Read from Cost Explorer, never a rate card.
 10-cost-explorer.png
