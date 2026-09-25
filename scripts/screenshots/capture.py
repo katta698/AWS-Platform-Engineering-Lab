@@ -25,6 +25,7 @@ Examples:
     python capture.py "https://app.terraform.io/app/katta/workspaces/week-09-dev/runs" out.png
 """
 import argparse
+import sys
 import json
 import os
 import subprocess
@@ -216,6 +217,107 @@ def assert_not_an_error_page(page, allow_error_page: bool) -> None:
         )
 
 
+
+# Phrases that only ever appear when a session is gone. These are not headings
+# and no heading rule would find them -- AWS's expired-session page renders
+# "Amazon Web Services Sign In" as its heading and explains itself in body text.
+SESSION_GONE = (
+    "there was a problem with your session",
+    "your session has expired",
+    "to start a new session",
+    "session is no longer valid",
+    "please sign in again",
+)
+
+SIGNIN_WORDS = ("sign in", "log in", "login", "signin", "welcome back")
+
+
+def login_page_reason(headings, body_text, has_password):
+    """Pure decision: is this a sign-in / expired-session page? Reason, or None.
+
+    Pulled out of the browser so it can be tested without one. See --self-test.
+
+    Why it is written this way (2026-09-24): the previous version tested
+    headings with /^(sign in|log in|...)/ -- anchored at the START. AWS titles
+    its expired-session page "Amazon Web Services Sign In", where the phrase is
+    at the END, so a sign-in screen passed every check and was saved as a
+    screenshot of an EventBridge bus. That is the Week 15 failure exactly, a
+    second time, through a hole in the rule written to prevent it.
+
+    So: match a heading whose text ENDS with a sign-in phrase, which catches
+    "Amazon Web Services Sign In" while still leaving IAM's "Sign-in
+    credentials" alone -- that ends with "credentials". And read the body for
+    the expired-session sentences, which are unambiguous on their own.
+    """
+    if has_password:
+        return "a visible password field"
+
+    low_body = (body_text or "").lower()
+    for phrase in SESSION_GONE:
+        if phrase in low_body:
+            return 'the text "%s"' % phrase
+
+    for h in headings or []:
+        t = " ".join((h or "").split()).lower().rstrip(".!")
+        t = t.replace("sign-in", "sign in").replace("log-in", "log in")
+        if not t:
+            continue
+        for w in SIGNIN_WORDS:
+            if t == w or t.endswith(" " + w) or t.startswith(w + " to "):
+                return 'a heading reading "%s"' % " ".join((h or "").split())[:60]
+    return None
+
+
+
+def self_test_login_guard():
+    """Prove the sign-in guard rejects the pages it exists to reject.
+
+    The first case is the real one it missed on 2026-09-24.
+    """
+    AWS_EXPIRED_BODY = ("Amazon Web Services Sign In\n"
+                        "There was a problem with your session. To start a new "
+                        "session, access the link provided by your administrator: "
+                        "AWSPlatformEngineeringLab To logout, click here")
+    cases = [
+        ("AWS expired-session page (the one that got through)",
+         login_page_reason(["Amazon Web Services Sign In"], AWS_EXPIRED_BODY, False) is not None),
+        ("plain 'Sign in' heading",
+         login_page_reason(["Sign in"], "", False) is not None),
+        ("'Sign in to HCP Terraform'",
+         login_page_reason(["Sign in to HCP Terraform"], "", False) is not None),
+        ("a visible password field alone",
+         login_page_reason([], "", True) is not None),
+        ("'Your session has expired' in body only",
+         login_page_reason(["Dashboard"], "Your session has expired.", False) is not None),
+        ("hyphenated 'Sign-In' heading",
+         login_page_reason(["Amazon Web Services Sign-In"], "", False) is not None),
+        # False positives matter as much: a rule that cries wolf gets bypassed.
+        ("IAM 'Sign-in credentials' is NOT a login page",
+         login_page_reason(["Sign-in credentials"], "Console sign-in link", False) is None),
+        ("EventBridge bus page is NOT a login page",
+         login_page_reason(["week20-bus", "Rules"], "Event bus detail", False) is None),
+        ("'Single sign-on (SSO)' heading is NOT a login page",
+         login_page_reason(["Single sign-on (SSO)"], "", False) is None),
+    ]
+    bad = [n for n, ok in cases if not ok]
+    for n, ok in cases:
+        print("  [%s] %s" % ("PASS" if ok else "DEAD", n))
+    if bad:
+        print("\n%d guard case(s) DO NOT WORK." % len(bad))
+        return 1
+    print("\nAll %d sign-in guard cases pass." % len(cases))
+    return 0
+
+
+
+def self_test_quiet():
+    """Run the guard cases with no output; return the number that failed."""
+    import io, contextlib
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        return self_test_login_guard()
+
+
 def assert_not_a_login_page(page, allow_login_page: bool) -> None:
     """
     Refuse to save a screenshot of a sign-in screen.
@@ -236,19 +338,23 @@ def assert_not_a_login_page(page, allow_login_page: bool) -> None:
     if allow_login_page:
         return
 
-    hit = page.evaluate("""
+    facts = page.evaluate("""
         () => {
             const pw = document.querySelector('input[type="password"]');
-            if (pw && pw.offsetParent !== null) return 'a visible password field';
-            for (const el of document.querySelectorAll('h1,h2,[role="heading"]')) {
-                const t = (el.textContent || '').trim().toLowerCase();
-                if (/^(sign in|log in|login|sign in to |welcome back)/.test(t)) {
-                    return 'a heading reading "' + (el.textContent || '').trim().slice(0, 60) + '"';
-                }
+            const heads = [];
+            for (const el of document.querySelectorAll('h1,h2,h3,[role="heading"],title')) {
+                const t = (el.textContent || '').trim();
+                if (t) heads.push(t.slice(0, 120));
             }
-            return null;
+            return {
+                hasPassword: !!(pw && pw.offsetParent !== null),
+                headings: heads.slice(0, 40),
+                bodyText: (document.body ? document.body.innerText : '').slice(0, 4000)
+            };
         }
     """)
+    hit = login_page_reason(facts.get("headings"), facts.get("bodyText"),
+                            facts.get("hasPassword"))
 
     if hit:
         raise SystemExit(
@@ -680,8 +786,8 @@ def capture(url: str, output_path: Path, wait_selector: str | None, wait_ms: int
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("url")
-    parser.add_argument("output_path")
+    parser.add_argument("url", nargs="?")
+    parser.add_argument("output_path", nargs="?")
     parser.add_argument("--wait-selector", default=None, help="CSS selector to wait for before capturing")
     parser.add_argument("--wait-ms", type=int, default=1000, help="Extra wait time in ms before capturing")
     parser.add_argument("--headed", action="store_true", help="Show the browser window (needed for first-time login)")
@@ -700,7 +806,24 @@ if __name__ == "__main__":
                              "(only when the sign-in screen is genuinely the subject)")
     parser.add_argument("--allow-unresolved-account", action="store_true",
                         help="Capture even if the AWS account ID cannot be resolved. Only for pages that provably contain no AWS identifiers -- normally you want `aws sso login` instead.")
+    parser.add_argument("--self-test", action="store_true",
+                        help="prove the sign-in guard rejects known-bad pages, then exit")
     args = parser.parse_args()
+
+    if args.self_test:
+        sys.exit(self_test_login_guard())
+
+    if not args.url or not args.output_path:
+        parser.error("url and output_path are required (omit them only with --self-test)")
+
+    # Every capture validates its own sign-in guard first, silently, and refuses
+    # to run if it is dead. On 2026-09-24 that guard had a hole -- it anchored on
+    # headings STARTING with "sign in", and AWS's expired-session page is headed
+    # "Amazon Web Services Sign In" -- so a sign-in screen passed every check and
+    # was saved as a screenshot of an EventBridge bus. The guard existed because
+    # of the same failure on Week 15. A rule nobody has watched fail is not a rule.
+    if self_test_quiet():
+        sys.exit("ABORTING: the sign-in guard does not work. Run --self-test.")
 
     capture(args.url, args.output_path, args.wait_selector, args.wait_ms, args.headed, args.login_wait_seconds,
             args.height, args.click_text, args.click_wait_ms, args.allow_unresolved_account, cdp_port=args.cdp)
