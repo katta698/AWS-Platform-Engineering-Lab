@@ -113,3 +113,7 @@ throwaway.png
 .env.*
 **/.env
 **/.env.*
+
+# Account ids for the repo-wide leak scan. Never committed -- the scan must
+# not be the thing that leaks them.
+scripts/.account-ids

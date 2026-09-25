@@ -255,9 +255,60 @@ def main():
              f"{slug}/*.py", f"{slug}/*.tf", f"{slug}/*.sql"],
             cwd=REPO, capture_output=True, text=True, timeout=60)
         hits = [l for l in out.stdout.splitlines() if l.strip()]
-        check("no 12-digit numbers in this week's tracked text", not hits, "; ".join(hits[:3]), required=False)
+        # BLOCKING, not advisory. This rule was advisory until 2026-09-24, and it
+        # worked perfectly the whole time: it printed
+        #   [warn] ... week-18-.../terraform/environments/dev/variables.tf
+        # on every run from Week 18 onward, and the script then reported "All
+        # required checks passed". A real account id sat in a public repo for
+        # twelve days because the finding was true, visible, and ignorable.
+        #
+        # A warning nobody must act on is a warning nobody acts on.
+        check("no 12-digit numbers in this week's tracked text", not hits,
+              "; ".join(hits[:3]))
     except Exception:
         pass
+
+    # ---- the same leak check, across the WHOLE repo ---------------------
+    # Scoping the scan to one week means a leak is only ever found by someone
+    # who happens to run the check for that week. Week 18's leak was invisible
+    # from Week 19 and Week 20 runs for exactly that reason.
+    #
+    # The ids are NOT written here. The first version of this check hardcoded
+    # them and promptly flagged itself -- a leak detector that is itself the
+    # leak. They come from the live caller identity, and from an optional
+    # gitignored file for the other org accounts.
+    ids = set()
+    try:
+        who = subprocess.run(["aws", "sts", "get-caller-identity",
+                              "--query", "Account", "--output", "text"],
+                             capture_output=True, text=True, timeout=60)
+        v = (who.stdout or "").strip()
+        if len(v) == 12 and v.isdigit():
+            ids.add(v)
+    except Exception:
+        pass
+    extra = REPO / "scripts" / ".account-ids"
+    if extra.is_file():
+        for line in extra.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if len(line) == 12 and line.isdigit():
+                ids.add(line)
+
+    TEXT_GLOBS = ["*.md", "*.sh", "*.py", "*.tf", "*.sql", "*.json", "*.yml", "*.yaml", "*.html"]
+    if not ids:
+        check("account ids resolved for the repo-wide leak scan", False,
+              "no credentials and no scripts/.account-ids -- scan did NOT run",
+              required=False)
+    else:
+        try:
+            out = subprocess.run(
+                ["git", "grep", "-l", "-E", "|".join(sorted(ids)), "--"] + TEXT_GLOBS,
+                cwd=REPO, capture_output=True, text=True, timeout=180)
+            leaks = [l for l in out.stdout.splitlines() if l.strip()]
+            check("no real account id anywhere in the tracked repo", not leaks,
+                  "; ".join(leaks[:3]))
+        except Exception as exc:                                # noqa: BLE001
+            check("repo-wide leak scan ran", False, str(exc)[:60])
 
     # ---- published post -------------------------------------------------
     if args.published:

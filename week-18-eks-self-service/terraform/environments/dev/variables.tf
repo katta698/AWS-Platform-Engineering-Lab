@@ -40,7 +40,9 @@ variable "log_retention_days" {
 variable "cluster_admin_role_arns" {
   description = "Roles granted kubectl admin on the cluster, beyond the creator."
   type        = list(string)
-  default = [
-    "arn:aws:iam::684346483786:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_AdministratorAccess_1db8f9c8c3680bbd"
-  ]
+  # No default: this is an account-specific SSO role ARN, and a default meant a
+  # real account id sat in a public repo from Week 18 until 2026-09-24. Supply
+  # it per-environment, e.g.
+  #   cluster_admin_role_arns = ["arn:aws:iam::<ACCOUNT_ID>:role/aws-reserved/sso.amazonaws.com/<SSO_ROLE>"]
+  default = []
 }
