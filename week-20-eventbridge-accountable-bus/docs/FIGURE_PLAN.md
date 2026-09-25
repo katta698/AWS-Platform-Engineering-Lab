@@ -38,7 +38,8 @@ So the order is decided here, first, in narrative order. Capture fills these slo
 | 05 | `05-cloudtrail-record.png` | Step 5 | **Terminal.** The `PutEvents` record itself, caller identity and the redacted payload. The trail writes to S3 only, so no console view of a record exists | an event published |
 | 06 | `06-the-event-that-matched-nothing.png` | Verifying | **The money shot.** `PutEvents` returning HTTP 200 and an EventId, beside the consumer logs showing nothing arrived | the unmatched publish |
 | 07 | `07-detection-catches-it.png` | Verifying | The catch-all rule recording the event the specific rule ignored — and what that second delivery costs | detection deployed |
-| 08 | `08-replay-to-current-rules.png` | Challenges | A replay re-delivering to the rules that exist NOW, not the ones that existed when archived | archive + a rule change |
+| 08 | `08-replay-follows-current-rules.png` | Challenges | **AWS console.** The archive and its replay history: 13 events, two replays `Completed` | a replay |
+| 12 | `12-replay-delivered-through-a-new-rule.png` | Challenges | **Terminal.** The proof the console does not carry: the replay delivered through a rule created AFTER the event, under a new event id | archive + a rule change |
 | 09 | `09-dlq-caught-a-failure.png` | Challenges | A real failed delivery sitting in the DLQ, not a synthetic message | a deliberately broken target |
 | 10 | `10-cost-explorer.png` | Cost | Cost Explorer for the run window, by usage type | ~24h after teardown |
 | 11 | `11-alarm-email-consumer-errors.png` | Verifying | The OK -> ALARM notification a human actually receives | an alarm firing |
@@ -78,6 +79,13 @@ Every slot is at or below the deploy step — Week 20 has no genuine pre-deploy 
 state, so there is no `data-prereq` figure this week. `python scripts/check_figure_order.py
 week-20` against the finished post must return `[ ok ]`, and `check_week_complete.py` must
 report every capture either referenced or listed in `UNUSED.txt`.
+
+**Slot 12 was added on 2026-09-24, after capture, and that is a deviation from the
+rule at the bottom of this file.** Jay asked for 08 to be retaken from the console. The
+console records that a replay completed; it does not show that the replay followed a rule
+created after the event, or that the event id changed. Replacing the terminal output would
+have removed the only evidence for the week's fourth finding, so the console shot took 08
+and the proof took a new number rather than reusing a retired one.
 
 ## If the build deviates from this plan
 
