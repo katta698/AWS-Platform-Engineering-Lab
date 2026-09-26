@@ -42,7 +42,7 @@
 |------|---------|-----------------|--------|
 | [Week 18](./week-18-eks-self-service) | EKS Cluster Self-Service | EKS 1.36, managed node group + Fargate, **EKS Pod Identity and IRSA side by side** (the roadmap said IRSA; AWS now recommends Pod Identity, which cannot run on Fargate), ResourceQuota, NetworkPolicy, per-tenant S3 and IAM, EKS access entries | ✅ Complete |
 | Week 19 | [GitOps on EKS: managed Argo CD vs self-managed](week-19-gitops-argocd) | EKS Capability for Argo CD, Helm, drift detection, cluster-scoped CRDs | ✅ Complete |
-| Week 20 | [An accountable event bus](week-20-eventbridge-accountable-bus) | EventBridge custom bus, **`PutEvents` data-plane logging to CloudTrail** (opt-in, launched 4 May 2026), schema discovery, archive + replay, catch-all detection | 🚧 In review |
+| Week 20 | [An accountable event bus](week-20-eventbridge-accountable-bus) | EventBridge custom bus, **`PutEvents` data-plane logging to CloudTrail** (opt-in, launched 4 May 2026), schema discovery, archive + replay, catch-all detection | ✅ Complete |
 | Week 21 | Blue/Green Deployment Automation | CodeDeploy, traffic shifting, automated rollback | 📅 Planned |
 | Week 22 | Container Image Security Pipeline | ECR scanning, image signing, policy enforcement | 📅 Planned |
 | Week 23 | Service Networking with VPC Lattice | VPC Lattice service networks, cross-VPC/cross-account routing, auth policies (replaces App Mesh — shut down 2026-09-30) | 📅 Planned |
