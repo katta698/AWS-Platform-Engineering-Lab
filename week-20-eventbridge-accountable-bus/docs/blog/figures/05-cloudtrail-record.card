@@ -1,0 +1,42 @@
+title: Who published it - and the half CloudTrail will not tell you
+subtitle: A real PutEvents data event, 24 Sep 2026. Data-plane logging launched 4 May 2026 and is opt-in.
+width: 1100
+---
+# Data events are OFF by default. This trail logs exactly one thing:
+# PutEvents on one bus, scoped by ARN.
+
+  "eventName":     "PutEvents"
+  "eventCategory": "Data"
+  "eventTime":     "2026-09-24T18:48:59Z"
+  "sourceIPAddress": "<redacted>"
+
+  "userIdentity": {
+      "type":      "AssumedRole"
+      "accountId": "<account-id>"
+  }
+
+  "requestParameters": {
+      "entries": [{
+          "source":       "platform.orders"
+          "detailType":   "order.created"
+          "eventBusName": "week20-bus"
+          "detail":       "HIDDEN_DUE_TO_SECURITY_REASONS"    <-- the payload, redacted BY AWS
+      }]
+  }
+
+  "responseElements": {
+      "failedEntryCount": 0
+      "entries": [{ "eventId": "27b31be4-acbe-7a03-19ec-e2b5d72387bb" }]
+  }
+
+  "resources": [{
+      "type": "AWS::Events::EventBus"
+      "ARN":  "arn:aws:events:us-east-1:<account-id>:event-bus/week20-bus"
+  }]
+
+# WHO published it, WHEN, from where, and which event id.
+# NOT what was in it. CloudTrail redacts the payload itself --
+# "HIDDEN_DUE_TO_SECURITY_REASONS" is AWS's own text, not mine.
+#
+# The archive holds the payload and carries no identity.
+# Two systems, joined on that eventId. Neither answers alone.

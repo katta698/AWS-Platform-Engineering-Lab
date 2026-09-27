@@ -117,3 +117,8 @@ throwaway.png
 # Account ids for the repo-wide leak scan. Never committed -- the scan must
 # not be the thing that leaks them.
 scripts/.account-ids
+
+# Intermediate HTML from scripts/render_terminal_card.py -- the .card source is
+# what is committed; the HTML is regenerated on every render.
+week-*/docs/blog/figures/*.html
+week-*/docs/blog/figures/*.png

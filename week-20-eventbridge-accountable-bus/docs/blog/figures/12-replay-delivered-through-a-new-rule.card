@@ -1,0 +1,50 @@
+title: Replay is not a time machine
+subtitle: prove_replay.sh, week20-bus, 2026-09-24 - 9 passed, 0 failed, 0 BROKEN
+width: 1100
+---
+Preconditions
+  [ok]     archive week20-bus-archive is ENABLED
+  [ok]     consumer resolved
+
+1. Publish 'order.crated' -- no rule matches it today
+  [ok]     published EventId a977252b (archive held 12 events)
+     waiting 120s to confirm nobody consumes it and the archive takes it...
+  [ok]     nothing consumed it -- delivered to nobody, as expected
+  [ok]     archive grew 12 -> 13 -- it archived an event no rule wanted
+         The archive sits IN FRONT of the rules. It keeps what was
+         published, not what was delivered.
+
+2. Add a rule matching 'order.crated' -- created AFTER the event was published
+  [ok]     probe rule created and pointed at the consumer
+
+3. Replay the window containing that event
+  [ok]     replay week20-bus-replay-1790277422 started over 2026-09-24T19:12:38Z .. 2026-09-24T19:17:02Z
+     waiting 120s for it to complete and deliver...
+  [ok]     replay COMPLETED
+  [ok]     the consumer received a977252b -- ON REPLAY, via a rule that did not exist when it was published
+         A replay follows the rules that exist NOW. An event that was
+         delivered to nobody has now been delivered to somebody.
+         That is not a time machine -- it is re-publishing old events
+         into today's system, with today's consequences.
+
+----------------------------------------------------------------
+passed 9   failed 0   BROKEN 0
+All checks ran and behaved as described.
+
+
+# AND THE PART THE SCRIPT ALMOST MISSED.
+#
+# A REPLAYED EVENT ARRIVES WITH A NEW EVENT ID.
+#
+# An earlier run of this test grepped the consumer log for the ORIGINAL
+# event id, found nothing, and reported that replay had not delivered --
+# while the delivery had already happened, seconds earlier, under an id
+# nobody had asked for.
+#
+# That is not merely a test bug. The event id is the join key between
+# CloudTrail -- which records WHO published an event and redacts what was
+# in it -- and the archive, which holds the payload and no identity.
+#
+# Replay mints a fresh id. So a replayed event cannot be traced back to the
+# principal who originally published it. The attribution chain breaks at
+# exactly the moment an incident would need it: during the recovery.

@@ -87,6 +87,31 @@ created after the event, or that the event id changed. Replacing the terminal ou
 have removed the only evidence for the week's fourth finding, so the console shot took 08
 and the proof took a new number rather than reusing a retired one.
 
+
+## Card sources are committed (added 2026-09-26)
+
+Figures 05, 06 and 12 are terminal cards. Their sources live in
+`docs/blog/figures/*.card` and render with
+    python scripts/render_terminal_card.py         week-20-eventbridge-accountable-bus/docs/blog/figures/05-cloudtrail-record.card         --out week-20-eventbridge-accountable-bus/docs/blog/screenshots/05-cloudtrail-record.png
+
+The PNG is written straight into `screenshots/`, which is the one place figures
+live. Nothing is kept in `figures/` but the `.card` source.
+
+They exist because Jay asked what figure 05 was and where it came from, and the
+honest answer was that it had been typeset by hand from data held nowhere. That
+is the Week 16 failure repeated: a card generated ad hoc, its source discarded,
+and nothing to re-export when it needs changing -- which is why the LinkedIn
+card has committed HTML and `render_card.py`. The figure cards had neither, and
+the CloudTrail record behind 05 lived only in an S3 bucket that teardown deletes.
+
+The record in 05 is real and was re-read from that bucket before teardown:
+`PutEvents`, eventId `27b31be4-acbe-7a03-19ec-e2b5d72387bb`, 2026-09-24T18:48:59Z,
+one of the 13 `PutEvents` records the trail captured -- matching the archive's
+own EventCount of 13.
+
+A figure whose source is gone is a claim that can no longer be checked or
+corrected. Every future card ships with its `.card` source.
+
 ## If the build deviates from this plan
 
 Change this file first, then capture. A plan edited afterwards to match what was captured

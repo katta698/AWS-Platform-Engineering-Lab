@@ -1,0 +1,35 @@
+title: An event that matched nothing, and a target that failed
+subtitle: prove_unmatched.sh, week20-bus, 2026-09-24 - 11 passed, 0 failed, 0 BROKEN
+width: 1100
+---
+Preconditions
+  [ok]     bus week20-bus exists
+  [ok]     both log groups exist
+
+1. An event the rule matches
+  [ok]     published, EventId 27b31be4
+     waiting 45s for delivery...
+  [ok]     consumer received it -- delivery works
+
+2. An event NO rule matches (detail-type 'order.crated' vs 'order.created')
+  [ok]     PutEvents returned HTTP 200 and EventId 39da5e36 -- indistinguishable from success
+     waiting 45s to see whether anything consumes it...
+  [ok]     nothing consumed it -- the consumer never saw it
+  [ok]     the catch-all rule recorded it -- this is the ONLY reason it is visible
+         EventBridge publishes MatchedEvents per RULE. There is no
+         metric for 'matched no rule at all'. You buy that visibility
+         with a second delivery, and you pay for it.
+
+3. A target that accepts the event and then fails
+  [ok]     published a poison event, EventId 263770d7
+     EventBridge DLQ before: 0   function-failures before: 1
+     waiting 45s...
+  [ok]     the consumer received it and raised -- the failure is real
+  [ok]     EventBridge DLQ still 0 -- it saw no DELIVERY failure, because there was none
+  [ok]     Lambda on-failure destination 1 -> 2 -- THIS is what catches a target that fails
+         Two failure modes, two mechanisms. The queue every tutorial
+         shows you to configure catches only the other one.
+
+----------------------------------------------------------------
+passed 11   failed 0   BROKEN 0
+All checks ran and behaved as described.
