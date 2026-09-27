@@ -45,9 +45,26 @@ check "rules left on the default bus" "$(aws_ events list-rules \
 check "archives" "$(aws_ events list-archives \
   --query "Archives[?starts_with(ArchiveName,'${PREFIX}')].ArchiveName" --output text)"
 
-# A replay is a separate resource from the archive it came from.
-check "replays" "$(aws_ events list-replays \
-  --query "Replays[?starts_with(ReplayName,'${PREFIX}')].ReplayName" --output text)"
+# A replay is a separate resource from the archive, but a FINISHED one
+# cannot be deleted and does not bill. Verified 2026-09-26, after this check
+# reported NOT CLEAN on a teardown that was complete: there is no
+# delete-replay API at all, and cancel-replay on a COMPLETED replay returns
+# IllegalStatusException -- "not in a valid state for this operation". AWS
+# keeps them ~90 days and removes them itself.
+#
+# So only a replay still in flight is a finding. Reporting a completed one as
+# a leak makes a clean teardown read NOT CLEAN, and a teardown check that
+# cries wolf is one nobody reads to the end.
+QRUN="Replays[?starts_with(ReplayName,'${PREFIX}') && (State=='RUNNING' || State=='STARTING')].ReplayName"
+check "replays still running" "$(aws_ events list-replays --query "$QRUN" --output text)"
+
+# Recorded, not checked: completed replays linger by design.
+QALL="Replays[?starts_with(ReplayName,'${PREFIX}')].ReplayName"
+finished_replays="$(aws_ events list-replays --query "$QALL" --output text)"
+if [[ -n "$finished_replays" ]]; then
+  echo "  [note]  completed replays remain until AWS expires them (~90 days,"
+  echo "          not deletable, no charge): $finished_replays"
+fi
 
 # The discoverer meters against the 5M/month free tier while it exists.
 check "schema discoverers" "$(aws_ schemas list-discoverers \
