@@ -199,7 +199,12 @@ resource "aws_iam_role" "infrastructure" {
 
 resource "aws_iam_role_policy_attachment" "infrastructure" {
   role       = aws_iam_role.infrastructure.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSInfrastructureRolePolicyForLoadBalancers"
+  # NOT under /service-role/, unlike AmazonECSTaskExecutionRolePolicy above.
+  # Assuming both ECS policies shared a path cost an apply: IAM returns
+  # NoSuchEntity for the wrong path, and the ECS service then fails with the
+  # far less obvious "Unable to assume role and validate the specified
+  # targetGroupArn". Confirmed against iam list-policies, not from a doc page.
+  policy_arn = "arn:aws:iam::aws:policy/AmazonECSInfrastructureRolePolicyForLoadBalancers"
 }
 
 # ---------------------------------------------------------------------------
