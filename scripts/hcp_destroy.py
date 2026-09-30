@@ -18,6 +18,7 @@ import io, json, os, sys, urllib.request
 DEFAULT_MSG = "Teardown: scheduled destroy at end of build window"
 
 ORG = "Katta"
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def token():
@@ -41,6 +42,28 @@ def main():
         i = argv.index("--message")
         msg = argv[i + 1] if i + 1 < len(argv) else DEFAULT_MSG
         argv = argv[:i] + argv[i + 2:]
+
+    # Figures first. Teardown is the only irreversible step in a week, and an
+    # uncaptured figure becomes permanently uncapturable the moment it applies.
+    # Week 21 was destroyed before its post existed, so "what did we deploy?"
+    # had no screenshot and could never get one.
+    if "--force" not in sys.argv:
+        import subprocess, glob as _glob
+        for ws in argv:
+            wk = ws.rsplit("-", 1)[0]           # week-21-dev -> week-21
+            for folder in _glob.glob(os.path.join(REPO_ROOT, wk + "-*")):
+                if not os.path.isdir(folder):
+                    continue
+                rc = subprocess.run(
+                    [sys.executable,
+                     os.path.join(REPO_ROOT, "scripts", "check_figures_before_destroy.py"),
+                     os.path.basename(folder)],
+                    cwd=REPO_ROOT).returncode
+                if rc:
+                    print()
+                    print("REFUSING TO DESTROY. Capture the figures above, retire them in")
+                    print("UNUSED.txt, or pass --force if you genuinely mean to lose them.")
+                    sys.exit(1)
 
     tok = token()
     for ws in argv:
