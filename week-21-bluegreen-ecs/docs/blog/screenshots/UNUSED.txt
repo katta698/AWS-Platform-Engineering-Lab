@@ -1,0 +1,14 @@
+# Capture slots declared but not published, with the reason.
+# A number is never recycled.
+
+# 08 - the ECS cluster page.
+#      Retired deliberately. A cluster with one service in it looks like every
+#      other cluster page: it proves the cluster exists, which nobody doubts,
+#      and figure 02 already shows the service WITH its blue/green config,
+#      which is strictly more informative.
+#
+#      The rule this follows: screenshot a resource when the picture shows the
+#      week's IDEA, not to prove the resource existed. The HCP run already
+#      proves existence. By that test IAM roles, security groups and log
+#      groups will almost never earn a figure.
+08-ecs-cluster.png

@@ -21,8 +21,8 @@ two weeks before anyone noticed.
 | 02 | `02-ecs-service-blue-green.png` | apply | ECS service showing deployment strategy BLUE_GREEN, bake time, both target groups | **AWS console** | the apply |
 | 03 | `03-traffic-shifting.png` | testing | A deployment mid-shift: canary percentage, old and new task sets both live | **AWS console** | v2 deploy |
 | 04 | `04-client-view.png` | testing | What a client received across both deployments | **Terminal** - the only surface showing what a *client* got | during the shift |
-| 07 | `07-alb-target-groups.png` | apply | **What was deployed:** the ALB with both target groups and their health | **AWS console** | the apply |
-| 08 | `08-ecs-cluster.png` | apply | **What was deployed:** the ECS cluster, the service and its running task | **AWS console** | the apply |
+| 07 | `07-alb-target-groups.png` | apply | **What was deployed:** a target group with its registered task, 1 healthy / 0 unhealthy | **AWS console** | the apply |
+| 08 | `08-ecs-cluster.png` | apply | RETIRED -- see UNUSED.txt. A cluster page proves existence and shows nothing figure 02 does not | **AWS console** | n/a |
 | 05 | `05-failed-deploy-healthcheck.png` | testing | The bad version rejected at the target group -- `Target.ResponseCodeMismatch`, traffic never moved | **AWS console** | bad v3 deploy |
 | 06 | `06-cost-explorer.png` | Cost | Cost Explorer for the run window, by service | **AWS console** | ~24h after teardown |
 
