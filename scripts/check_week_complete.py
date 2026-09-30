@@ -104,6 +104,22 @@ def readme_status_mismatch(root_readme, week_no, is_published):
     return None
 
 
+
+def has_code_layout_figure(shot_names):
+    """Is there a figure showing the Terraform that built the week?
+
+    Why (2026-09-30, Jay): "it's good to have a specific screenshot that shows
+    what are the scripts leveraged to build this." Console figures show what
+    appeared in the account; none of them shows how the code is ORGANISED,
+    which is what a reader replicating the week actually needs.
+
+    It is also the only figure that needs no live resources, so it can never be
+    lost to a teardown and there is no excuse for it being absent.
+    """
+    return any(("terraform" in n.lower() and "layout" in n.lower())
+               or "code-layout" in n.lower() for n in shot_names)
+
+
 def self_test(quiet=False):
     """Prove each rule REJECTS a known-bad page. Run before trusting a green.
 
@@ -149,6 +165,16 @@ def self_test(quiet=False):
                   readme_status_mismatch(RM, "20", False) is None))
     cases.append(("roadmap check notices a missing row",
                   readme_status_mismatch(RM, "21", True) is not None))
+
+    # 6. the Terraform layout figure
+    cases.append(("code-layout check accepts 09-terraform-layout.png",
+                  has_code_layout_figure(["01-hcp.png", "09-terraform-layout.png"])))
+    cases.append(("code-layout check accepts a code-layout name",
+                  has_code_layout_figure(["07-code-layout.png"])))
+    cases.append(("code-layout check fails when no such figure exists",
+                  not has_code_layout_figure(["01-hcp.png", "02-console.png"])))
+    cases.append(("a terraform figure that is not a layout does not count",
+                  not has_code_layout_figure(["03-terraform-plan-output.png"])))
 
     bad_count = sum(1 for _, ok in cases if not ok)
     if quiet:
@@ -199,6 +225,14 @@ def main():
     # ---- repo-side artefacts -------------------------------------------
     check("README.md exists", (wk / "README.md").is_file())
     check("screenshots present", len(shots) >= 5, f"{len(shots)} found")
+    # From Week 21 onward. Weeks before that predate the rule and are published;
+    # failing them forever would make this check noise, and a check that is
+    # always red for reasons nobody will act on is a check people stop reading.
+    _wn = re.match(r"week-(\d+)", slug)
+    if _wn and int(_wn.group(1)) >= 21:
+        check("a figure shows the Terraform that built it",
+              has_code_layout_figure([s.name for s in shots]),
+              "expected a *terraform-layout* or *code-layout* figure")
 
     li = wk / "docs/linkedin"
     post_txt = li / "post.txt"
