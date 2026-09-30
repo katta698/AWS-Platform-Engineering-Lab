@@ -1,0 +1,34 @@
+title: The Terraform behind this week
+subtitle: week-21-bluegreen-ecs - what each file does, and how big it actually is
+width: 1050
+---
+week-21-bluegreen-ecs/
+│
+├── terraform/
+│   ├── environments/dev/          # what this environment is
+│   │   ├── main.tf          79    # HCP backend, provider pin, default VPC lookup,
+│   │   │                          # and the single call into the module
+│   │   ├── variables.tf     21    # app_version, serve_root, bake_time_in_minutes
+│   │   └── outputs.tf        8    # the ALB URL you curl
+│   │
+│   └── modules/service/           # HOW it is built -- all 16 resources live here
+│       ├── main.tf         347    # ALB + listener + rule, two target groups,
+│       │                          # ECS cluster/task/service, alarm, logs, IAM
+│       ├── variables.tf     74    # every knob, with a default
+│       └── outputs.tf        6
+│
+└── scripts/
+    ├── watch_shift.sh       76    # polls the ALB during a deployment and counts
+    │                              # responses by version -- the client's view
+    └── cleanup.sh           44    # teardown verification, run after the destroy
+
+
+# WHY IT IS SPLIT THIS WAY
+#
+# environments/dev answers "what am I deploying, and where does the state live".
+# modules/service answers "how is it built". Changing the version deployed is a
+# variable change in environments/dev; changing the ARCHITECTURE is a change in
+# modules/service. A reader replicating this only needs to read one of them.
+#
+# 347 lines is most of the week. The block that makes it blue/green rather than
+# a rolling update is nine of them.

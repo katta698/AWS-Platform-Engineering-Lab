@@ -23,6 +23,7 @@ two weeks before anyone noticed.
 | 04 | `04-client-view.png` | testing | What a client received across both deployments | **Terminal** - the only surface showing what a *client* got | during the shift |
 | 07 | `07-alb-target-groups.png` | apply | **What was deployed:** a target group with its registered task, 1 healthy / 0 unhealthy | **AWS console** | the apply |
 | 08 | `08-ecs-cluster.png` | apply | RETIRED -- see UNUSED.txt. A cluster page proves existence and shows nothing figure 02 does not | **AWS console** | n/a |
+| 09 | `09-terraform-layout.png` | How We Built It | **What scripts built this:** the file tree with each file's job and line count | **Terminal** -- a file listing is terminal-native | any time; needs no live resources |
 | 05 | `05-failed-deploy-healthcheck.png` | testing | The bad version rejected at the target group -- `Target.ResponseCodeMismatch`, traffic never moved | **AWS console** | bad v3 deploy |
 | 06 | `06-cost-explorer.png` | Cost | Cost Explorer for the run window, by service | **AWS console** | ~24h after teardown |
 
@@ -43,6 +44,18 @@ session from the CLI's temporary credentials, so a lapsed session is invisible a
 is asked to sign in.
 
 Jay's standing rule: **"I always want the screenshots from the real capture."**
+
+## Slot 09 -- show the code, not just the console (added 2026-09-30)
+
+Jay: *"it's good to have a specific screenshot that basically shows what are the scripts
+leveraged to build this."* He is right, and it fills a gap the console figures cannot:
+a reader who wants to replicate the week needs to see how the code is ORGANISED, not just
+what it produced in the account.
+
+It also needs no live resources, so unlike every other slot it can be captured or corrected
+at any point -- including after teardown.
+
+Every future week gets one.
 
 ## Deviation, recorded 2026-09-29 after the build
 
