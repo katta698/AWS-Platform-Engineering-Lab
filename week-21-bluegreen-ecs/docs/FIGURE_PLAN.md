@@ -21,7 +21,7 @@ two weeks before anyone noticed.
 | 02 | `02-ecs-service-blue-green.png` | apply | ECS service showing deployment strategy BLUE_GREEN, bake time, both target groups | **AWS console** | the apply |
 | 03 | `03-traffic-shifting.png` | testing | A deployment mid-shift: canary percentage, old and new task sets both live | **AWS console** | v2 deploy |
 | 04 | `04-curl-version-mix.png` | testing | A loop against the ALB returning a mix of v1 and v2 | **Terminal** — the only surface that shows what a *client* got | during the shift |
-| 05 | `05-alarm-rollback.png` | testing | The deployment rolled back automatically, with the alarm that caused it | **AWS console** | bad v3 deploy |
+| 05 | `05-failed-deploy-healthcheck.png` | testing | The bad version rejected at the target group -- `Target.ResponseCodeMismatch`, traffic never moved | **AWS console** | bad v3 deploy |
 | 06 | `06-cost-explorer.png` | Cost | Cost Explorer for the run window, by service | **AWS console** | ~24h after teardown |
 
 Six slots against Week 20's nine, deliberately.
@@ -34,6 +34,23 @@ session from the CLI's temporary credentials, so a lapsed session is invisible a
 is asked to sign in.
 
 Jay's standing rule: **"I always want the screenshots from the real capture."**
+
+## Deviation, recorded 2026-09-29 after the build
+
+Slot 05 was planned as "the deployment rolled back automatically, with the alarm that
+caused it." **That is not what happened, so it is not what the figure shows.**
+
+The deliberately bad version failed its target group health check -- 404 against a matcher
+of 200 -- so ECS stopped the tasks and traffic never moved. No client request reached the
+broken version, so the 4xx alarm never breached and never rolled anything back. 214 requests
+during the attempt, all served by the healthy version.
+
+Slot 04 also shifted meaning. It was planned as "a mix of v1 and v2". With one task and the
+plain BLUE_GREEN strategy there is no mix -- the listener rule switches and every subsequent
+request gets the new version. The capture shows the cutover instant instead, at t+182s.
+
+Both are better findings than the ones planned. Neither is a reason to relabel a figure as
+the thing it was supposed to be.
 
 ## If the build deviates from this plan
 

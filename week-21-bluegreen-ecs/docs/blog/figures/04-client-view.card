@@ -1,0 +1,43 @@
+title: What a client saw, during both deployments
+subtitle: watch_shift.sh against the ALB, 2026-09-29 - polling every 2s
+width: 1050
+---
+# DEPLOYMENT 1 -- v1 to v2, a normal release.
+
+  Responses seen
+    v1                       62
+    v2                       86
+
+  [ok]     traffic moved between versions during the window -- 2 distinct responses
+  [ok]     the shift became visible to a client at t+182s
+
+  passed 2   failed 0   BROKEN 0
+
+# No failed request, and no mix. With one task and the plain BLUE_GREEN
+# strategy the listener rule simply switches: every request after t+182s
+# got v2. A percentage split needs the canary or linear strategy and more
+# than one task.
+
+
+# DEPLOYMENT 2 -- v3, deliberately broken. No document root, so / is a 404.
+
+  Responses seen
+    v2                       214
+
+  [ok]     one version served throughout (214 requests) -- steady state
+
+  passed 1   failed 0   BROKEN 0
+
+# 214 requests. Every one served by the OLD version. Not one client saw
+# the broken release.
+#
+# And the alarm that exists to catch this never fired:
+#
+#   aws cloudwatch describe-alarm-history --alarm-name week21-bluegreen-target-4xx
+#     (no state change during the deployment)
+#
+# The target group rejected the new tasks before they ever received
+# traffic -- "Health checks failed with these codes: [404]" -- so there
+# were no client 4xx to alarm on.
+#
+# The users were protected. Just not by the mechanism built to protect them.
