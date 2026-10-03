@@ -43,7 +43,7 @@
 | [Week 18](./week-18-eks-self-service) | EKS Cluster Self-Service | EKS 1.36, managed node group + Fargate, **EKS Pod Identity and IRSA side by side** (the roadmap said IRSA; AWS now recommends Pod Identity, which cannot run on Fargate), ResourceQuota, NetworkPolicy, per-tenant S3 and IAM, EKS access entries | ✅ Complete |
 | Week 19 | [GitOps on EKS: managed Argo CD vs self-managed](week-19-gitops-argocd) | EKS Capability for Argo CD, Helm, drift detection, cluster-scoped CRDs | ✅ Complete |
 | Week 20 | [An accountable event bus](week-20-eventbridge-accountable-bus) | EventBridge custom bus, **`PutEvents` data-plane logging to CloudTrail** (opt-in, launched 4 May 2026), schema discovery, archive + replay, catch-all detection | ✅ Complete |
-| Week 21 | Blue/Green Deployment Automation | CodeDeploy, traffic shifting, automated rollback | 📅 Planned |
+| Week 21 | [Blue/green on ECS](week-21-bluegreen-ecs) | ECS native blue/green, ALB target-group switching, bake time, CloudWatch alarm rollback, Fargate | ✅ Complete |
 | Week 22 | Container Image Security Pipeline | ECR scanning, image signing, policy enforcement | 📅 Planned |
 | Week 23 | Service Networking with VPC Lattice | VPC Lattice service networks, cross-VPC/cross-account routing, auth policies (replaces App Mesh — shut down 2026-09-30) | 📅 Planned |
 | Week 24 | Chaos Engineering + Agent Evaluation | FIS fault injection, resilience testing, runbooks — plus measuring whether AWS DevOps Agent finds a fault you deliberately caused | 📅 Planned |
@@ -591,6 +591,39 @@ Every project follows the same enterprise pattern:
 - **Turning on archive and schema discovery silently installs one managed rule each.** Four rules on the bus, two not written by Terraform. A rule inventory listing things you did not write is the service working as designed.
 
 **Cost shape inverts Weeks 18–19:** no hourly meter anywhere — no control plane, no NAT, no node. It bills per event, per **64 KB chunk**. The only standing charge is archive storage, against **1,096 measured bytes**.
+
+
+---
+
+## Week 21 — Blue/green on ECS: the rollback that never had to happen
+
+**The story:** deploying a new version usually means a gap where the site is down and no
+easy way back. Blue/green runs both versions at once and moves a pointer. Everyone builds
+the pointer move; almost nobody tests the moving back. AWS also changed the answer here —
+ECS has done blue/green natively since July 2025, and as of March 2026 recommends it over
+CodeDeploy for new work, so there is no CodeDeploy in this build.
+
+**What it builds:** an ALB with two target groups, a Fargate service carrying
+`strategy = "BLUE_GREEN"` with a bake time, and a CloudWatch alarm wired to roll back. 16
+resources; only the two target groups exist because of blue/green.
+
+**What it found:**
+
+- **A deliberately broken release reached zero users, and the alarm never fired.** Its
+  tasks failed the target group health check, so no request reached them, so there were no
+  errors to alarm on. 214 requests during the attempt, all served by the old version.
+  **Testing rollback with a fault your health check catches tests the health check.**
+- **`deploymentCircuitBreaker` is off by default** — the failed deployment retried for over
+  ten minutes rather than reverting.
+- **`terraform apply` returned "applied"** with zero new tasks running and the old version
+  still serving. Gate a pipeline on that and you have gated on nothing.
+- **`AmazonECSInfrastructureRolePolicyForLoadBalancers` has no `/service-role/` path**,
+  unlike the task execution policy. ECS reports the missing attachment as "Unable to assume
+  role and validate the specified targetGroupArn", which sends you inspecting target groups.
+- The good release cut over at **t+182s** with zero failed requests — a straight switch, not
+  a percentage split, because one task plus plain `BLUE_GREEN` just flips the listener rule.
+
+**Billed $0.1552 for ~3 hours, 73% of it the load balancer.** Destroyed and verified.
 
 
 ---
