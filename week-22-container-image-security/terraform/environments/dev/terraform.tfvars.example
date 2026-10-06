@@ -1,0 +1,9 @@
+# Copy to terraform.tfvars for local runs, or set these as HCP workspace
+# variables. terraform.tfvars is gitignored.
+
+region        = "us-east-1"
+filter_prefix = "wk22"
+
+# Quarantine notices. Set this in HCP as a sensitive variable rather than
+# here, so the address is never written to a file in the repo.
+# alert_email = "you@example.com"

@@ -1,0 +1,6 @@
+# Flask 2.0.0 carries CVE-2023-30861: under a caching proxy, one client's
+# session cookie can be served to another. Fixed in 2.3.2.
+#
+# Pinned old on purpose. This is the finding that basic scanning cannot see.
+flask==2.0.0
+werkzeug==2.0.0

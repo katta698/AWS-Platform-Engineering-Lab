@@ -58,6 +58,12 @@ def missing_figures(plan_text, on_disk, declared_unused):
     return missing
 
 
+def week_number(week):
+    """Leading week number from a folder name, or 0 if it has none."""
+    m = re.match(r"week-(\d+)", week or "")
+    return int(m.group(1)) if m else 0
+
+
 def self_test():
     PLAN = (
         "| 01 | `01-hcp-run-applied.png` | apply | HCP run | console | the apply |\n"
@@ -79,8 +85,15 @@ def self_test():
         ("a fully captured week passes",
          missing_figures(PLAN, {"01-hcp-run-applied.png", "02-service.png"},
                          {"03-retired.png"}) == []),
-        ("an empty plan cannot accidentally pass a week with no figures",
-         missing_figures("", set(), set()) == []),   # documented: no plan, no claim
+        ("an empty plan declares no slots",
+         missing_figures("", set(), set()) == []),
+        ("week numbers parse out of folder names",
+         (week_number("week-22-container-image-security"), week_number("week-9-x"),
+          week_number("arch-001")) == (22, 9, 0)),
+        ("a week from 22 on is covered by the missing-plan rule",
+         week_number("week-22-container-image-security") >= 22),
+        ("an earlier week is not, so the check never goes permanently red",
+         week_number("week-21-bluegreen-ecs") < 22),
     ]
     bad = 0
     for label, ok in cases:
@@ -107,8 +120,23 @@ def main():
     shots_dir = os.path.join(REPO, week, "docs", "blog", "screenshots")
 
     if not os.path.isfile(plan_path):
-        # No plan means no declared slots, so nothing can be shown missing.
-        # Say that out loud rather than printing a reassuring pass.
+        # A missing plan used to return 0 here, on the reasoning that no
+        # declared slots means nothing can be shown missing. That made the
+        # gate silently vacuous: during the Week 22 scaffold the plan was
+        # written one directory off, at docs/blog/FIGURE_PLAN.md, and the gate
+        # reported "checked nothing" and exited 0 -- it would have waved
+        # through a teardown with every figure uncaptured.
+        #
+        # Weeks before 22 are published and torn down; failing them forever
+        # would make this a permanently red check, and those get ignored.
+        if week_number(week) >= 22:
+            print("  no FIGURE_PLAN.md for %s" % week)
+            print("  expected at: %s" % os.path.join(week, "docs", "FIGURE_PLAN.md"))
+            print()
+            print("  A week from 22 onward must declare its figures before it can be")
+            print("  destroyed. Without a plan this gate has nothing to check, and a")
+            print("  gate that checks nothing must not report success.")
+            return 1
         print("  no FIGURE_PLAN.md for %s -- this gate checked nothing" % week)
         return 0
 
