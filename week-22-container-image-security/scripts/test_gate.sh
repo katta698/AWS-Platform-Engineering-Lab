@@ -106,7 +106,10 @@ else
   aws inspector2 list-findings --region "$REGION" \
     --filter-criteria "{\"ecrImageHash\":[{\"comparison\":\"EQUALS\",\"value\":\"$LIB_D\"}]}" \
     --query 'findings[].{sev:severity,pkg:packageVulnerabilityDetails.vulnerablePackages[0].packageManager,id:packageVulnerabilityDetails.vulnerabilityId}' \
-    --output text 2>/dev/null | grep -iE 'pip|npm|maven' | head -5 | sed 's/^/     /' || echo "     (none reported yet)"
+    --output text 2>/dev/null | grep -iE 'PYTHON|NODEJS|JAVA|GOMOD|RUBY|DOTNET' | head -5 | sed 's/^/     /' || echo "     (none reported yet)"
+  # packageManager is PYTHON for a container image, not PIP. The Inspector
+  # docs show "packageManager": "PIP" in a Lambda example, and grepping for
+  # that reports "none reported yet" on a test that is actually passing.
 fi
 echo
 
