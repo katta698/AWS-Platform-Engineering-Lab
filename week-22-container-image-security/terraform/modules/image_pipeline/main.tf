@@ -287,6 +287,42 @@ resource "aws_cloudwatch_event_rule" "scan_complete" {
   tags = var.tags
 }
 
+# Second trigger, and the one that closes the real gap. Inspector emits
+# INITIAL_SCAN_COMPLETE only the first time it sees a digest -- re-pushing or
+# re-tagging an image it already knows produces no scan event at all, even if
+# the image was deleted from ECR in between. Promoting an existing image is the
+# ordinary case in a pipeline, so a gate keyed only on scan completion misses
+# most of what it is meant to catch.
+resource "aws_cloudwatch_event_rule" "image_pushed" {
+  name        = "${var.name}-image-pushed"
+  description = "Evaluate every successful push, including digests Inspector has already scanned."
+
+  event_pattern = jsonencode({
+    source        = ["aws.ecr"]
+    "detail-type" = ["ECR Image Action"]
+    detail = {
+      "action-type" = ["PUSH"]
+      result        = ["SUCCESS"]
+    }
+  })
+
+  tags = var.tags
+}
+
+resource "aws_cloudwatch_event_target" "gate_on_push" {
+  rule      = aws_cloudwatch_event_rule.image_pushed.name
+  target_id = "image-gate-push"
+  arn       = aws_lambda_function.gate.arn
+}
+
+resource "aws_lambda_permission" "events_push" {
+  statement_id  = "AllowEventBridgePush"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.gate.function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.image_pushed.arn
+}
+
 resource "aws_cloudwatch_event_target" "gate" {
   rule      = aws_cloudwatch_event_rule.scan_complete.name
   target_id = "image-gate"

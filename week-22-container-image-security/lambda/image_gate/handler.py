@@ -24,6 +24,7 @@ import boto3
 
 ecr = boto3.client("ecr")
 sns = boto3.client("sns")
+inspector = boto3.client("inspector2")
 
 BLOCKING = [s.strip().upper() for s in os.environ.get("BLOCKING_SEVERITIES", "CRITICAL,HIGH").split(",") if s.strip()]
 TOPIC_ARN = os.environ.get("SNS_TOPIC_ARN", "")
@@ -117,6 +118,30 @@ def quarantine(repo, digest, tags):
     return new_tag, removed
 
 
+def findings_for(digest):
+    """Blocking-severity count from findings Inspector ALREADY holds.
+
+    Returns None when Inspector knows nothing about this digest yet -- which is
+    not the same as "clean" and must never be treated as a pass.
+    """
+    sev = {}
+    paginator = inspector.get_paginator("list_findings")
+    seen = False
+    for page in paginator.paginate(
+        filterCriteria={"ecrImageHash": [{"comparison": "EQUALS", "value": digest}]},
+        PaginationConfig={"MaxItems": 500},
+    ):
+        for f in page.get("findings", []):
+            seen = True
+            if f.get("status") != "ACTIVE":
+                continue
+            s = (f.get("severity") or "").upper()
+            sev[s] = sev.get(s, 0) + 1
+    if not seen:
+        return None
+    return sev
+
+
 def notify(subject, body):
     if not TOPIC_ARN:
         print("NO_TOPIC_CONFIGURED subject=%s" % subject)
@@ -127,6 +152,53 @@ def notify(subject, body):
 def handler(event, context):
     print("event=%s" % json.dumps(event))
     detail = event.get("detail") or {}
+
+    # An image push. Inspector emits INITIAL_SCAN_COMPLETE only the FIRST time
+    # it sees a digest -- re-pushing or re-tagging an image it already knows
+    # produces no scan event at all, so a gate keyed only on that event never
+    # evaluates it. Promoting an existing image is the common case in a real
+    # pipeline, so that blind spot is most of the risk.
+    #
+    # This path handles the already-known digest using findings Inspector has
+    # on file. A digest it has never seen is left alone: the scan-complete
+    # event will arrive and decide it.
+    if event.get("detail-type") == "ECR Image Action":
+        if detail.get("action-type") != "PUSH" or detail.get("result") != "SUCCESS":
+            return {"verdict": "ignored", "reason": "not a successful push"}
+        repo = detail.get("repository-name") or ""
+        digest = detail.get("image-digest")
+        tag = detail.get("image-tag")
+        if not repo or not digest:
+            raise Undetermined("push event missing repository-name or image-digest")
+
+        sev = findings_for(digest)
+        if sev is None:
+            print("NEW_DIGEST repo=%s digest=%s -- leaving it to the scan event" % (repo, digest))
+            return {"verdict": "defer", "repository": repo, "digest": digest}
+
+        blocking = sum(sev.get(s, 0) for s in BLOCKING)
+        if blocking == 0:
+            print("ALLOW(push) repo=%s digest=%s tag=%s" % (repo, digest, tag))
+            return {"verdict": "allow", "repository": repo, "digest": digest}
+
+        tags = [tag] if tag else []
+        new_tag, removed = quarantine(repo, digest, tags)
+        print("QUARANTINE(push) repo=%s digest=%s removed=%s now=%s"
+              % (repo, digest, removed, new_tag))
+        notify(
+            "Image quarantined on push: %s" % repo,
+            "An image Inspector had already scanned was pushed again and failed"
+            " the gate. It was never re-scanned, so only the push event caught"
+            " it.\n\n"
+            "Repository: %s\n"
+            "Digest:     %s\n"
+            "Tags removed: %s\n"
+            "Now tagged:   %s\n"
+            "Counts: %s\n"
+            % (repo, digest, removed or "(none)", new_tag, json.dumps(sev)),
+        )
+        return {"verdict": "quarantine", "repository": repo, "digest": digest,
+                "removed_tags": removed, "quarantine_tag": new_tag}
 
     try:
         repo = repository_name(detail)
