@@ -47,7 +47,19 @@ def repository_name(detail):
     if raw.startswith("arn:"):
         if ":repository/" not in raw:
             raise Undetermined("unparseable repository ARN: %s" % raw)
-        return raw.split(":repository/", 1)[1]
+        raw = raw.split(":repository/", 1)[1]
+    # The real event appends the image digest to the repository path:
+    #   arn:aws:ecr:...:repository/wk22-app/sha256:1a62...
+    # The documented example does not -- it shows repository/inspector2 and
+    # stops. Taking everything after ":repository/" therefore yields
+    # "wk22-app/sha256:1a62...", which ECR rejects as a repository name, and
+    # every quarantine fails. Cut at the digest.
+    for sep in ("/sha256:", "@sha256:"):
+        if sep in raw:
+            raw = raw.split(sep, 1)[0]
+    raw = raw.strip("/")
+    if not raw:
+        raise Undetermined("repository name was empty after parsing")
     return raw
 
 
@@ -162,3 +174,57 @@ def handler(event, context):
         "removed_tags": removed,
         "quarantine_tag": new_tag,
     }
+
+
+def self_test():
+    """Run with: python handler.py --self-test"""
+    real_arn = ("arn:aws:ecr:us-east-1:111122223333:repository/wk22-app"
+                "/sha256:1a627f2e70e50c6a709379e6bc66aeef8dfac3214505a4e4a1dcb374eaa57912")
+    documented = "arn:aws:ecr:us-east-1:111122223333:repository/inspector2"
+
+    cases = [
+        ("the REAL event ARN (digest appended) yields a bare repository name",
+         repository_name({"repository-name": real_arn}) == "wk22-app"),
+        ("the DOCUMENTED ARN (no digest) still works",
+         repository_name({"repository-name": documented}) == "inspector2"),
+        ("a plain repository name passes through",
+         repository_name({"repository-name": "wk22-app"}) == "wk22-app"),
+        ("a namespaced repository keeps its slash",
+         repository_name({"repository-name": "team/app"}) == "team/app"),
+        ("a namespaced repository with a digest loses only the digest",
+         repository_name({"repository-name":
+                          "arn:aws:ecr:us-east-1:111122223333:repository/team/app"
+                          "/sha256:abc"}) == "team/app"),
+    ]
+    for label, fn in [("a missing repository-name is undetermined",
+                       lambda: repository_name({})),
+                      ("missing severity counts are undetermined",
+                       lambda: blocking_count({}))]:
+        try:
+            fn()
+            cases.append((label, False))
+        except Undetermined:
+            cases.append((label, True))
+
+    cases.append(("blocking severities are summed",
+                  blocking_count({"finding-severity-counts":
+                                  {"CRITICAL": 7, "HIGH": 17, "MEDIUM": 19}}) == 24))
+    cases.append(("a clean image counts zero",
+                  blocking_count({"finding-severity-counts":
+                                  {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0}}) == 0))
+
+    bad = 0
+    for label, ok in cases:
+        print("  [%s] %s" % ("PASS" if ok else "DEAD", label))
+        bad += not ok
+    print()
+    if bad:
+        print("%d case(s) DO NOT WORK." % bad)
+        return 1
+    print("All %d gate cases pass." % len(cases))
+    return 0
+
+
+if __name__ == "__main__":
+    import sys
+    sys.exit(self_test() if "--self-test" in sys.argv else 0)
