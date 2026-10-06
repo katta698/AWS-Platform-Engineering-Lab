@@ -43,7 +43,14 @@ SLOT = re.compile(r"^\|\s*(\d+)\s*\|\s*`([^`]+\.png)`\s*\|", re.M)
 # is about a day after the resources are gone. Requiring it before teardown
 # would make the gate impossible to satisfy, and an impossible gate gets
 # bypassed on every run until someone deletes it.
-COST_HINT = re.compile(r"cost", re.I)
+# A cost figure is taken from Cost Explorer once AWS posts the charges, and a
+# teardown-verification figure can only be taken AFTER the destroy this gate is
+# guarding. Both are impossible to satisfy beforehand, and an impossible gate
+# gets bypassed on every run until someone deletes it -- which would lose the
+# twelve slots it legitimately protects. Week 22 hit this with
+# "12-destroyed.png".
+POST_TEARDOWN = re.compile(r"cost|destroy|teardown|torn.?down", re.I)
+COST_HINT = POST_TEARDOWN  # kept: the original name is referenced below
 
 
 def missing_figures(plan_text, on_disk, declared_unused):
@@ -82,6 +89,14 @@ def self_test():
              PLAN, {"01-hcp-run-applied.png", "02-service.png"}, {"03-retired.png"})]),
         ("the cost slot is never required before teardown",
          "06-cost-explorer.png" not in [f for _, f in missing_figures(PLAN, set(), set())]),
+        ("a teardown-verification slot is not required before teardown either",
+         "12-destroyed.png" not in [f for _, f in missing_figures(
+             "| 12 | `12-destroyed.png` | Cleanup | zero resources | terminal |\n",
+             set(), set())]),
+        ("an ordinary slot is still required",
+         "04-service.png" in [f for _, f in missing_figures(
+             "| 04 | `04-service.png` | Build | the service | console |\n",
+             set(), set())]),
         ("a fully captured week passes",
          missing_figures(PLAN, {"01-hcp-run-applied.png", "02-service.png"},
                          {"03-retired.png"}) == []),
