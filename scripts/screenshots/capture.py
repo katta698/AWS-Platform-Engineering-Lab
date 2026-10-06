@@ -129,6 +129,35 @@ def shut_down(context, page, cdp_port):
         pass
 
 
+def console_identity_strings():
+    """Personal identifiers that the console paints into its header badge.
+
+    Returns [[needle, replacement], ...] for redact_strings(). Derived from the
+    caller's STS identity: for an Identity Center assumed role the ARN is
+    arn:aws:sts::<acct>:assumed-role/AWSReservedSSO_<Perms>_<id>/<user>, and the
+    trailing <user> is what the badge shows.
+    """
+    try:
+        arn = subprocess.run(
+            ["aws", "sts", "get-caller-identity", "--query", "Arn", "--output", "text"],
+            capture_output=True, text=True, timeout=30,
+        ).stdout.strip()
+    except Exception:
+        return []
+    if not arn or "/" not in arn:
+        return []
+    user = arn.rsplit("/", 1)[-1].strip()
+    # A bare role session name like "botocore-session-123" is not a person.
+    if not user or user.lower().startswith("botocore") or len(user) < 3:
+        return []
+    out = [[user, "<user>"]]
+    # The badge also shows the local part before any "@", and some pages show
+    # the full address. Cover both without ever writing either to disk.
+    if "@" in user:
+        out.append([user.split("@", 1)[0], "<user>"])
+    return out
+
+
 def settle(page, label=""):
     """
     Wait for the page to stop navigating before touching the DOM.
@@ -464,6 +493,51 @@ def assert_not_present(page, needle: str, label: str) -> None:
         )
 
 
+def redact_identity_badge(page, account_marker="<account-id>") -> None:
+    """Blank the signed-in name in the console header badge.
+
+    The badge renders "<display name> (<account id>)". The display name is the
+    Identity Center display name, which is NOT the role-session name in the STS
+    ARN -- on this account the ARN yields the GitHub handle while the badge
+    shows the local part of a personal email address. No API the capture path
+    calls returns it, so matching it by VALUE is impossible without writing a
+    personal identifier into this committed file.
+
+    Match it by SHAPE instead: once the account ID has been redacted, the badge
+    is the only text reading "... (<account-id>)". Rewrite that text node and
+    the name goes with it, whatever it happens to be.
+    """
+    page.evaluate(
+        """
+        (marker) => {
+            const needle = '(' + marker + ')';
+            const scrub = (doc) => {
+                const body = doc.body || doc.documentElement;
+                if (!body) return;
+                const walker = doc.createTreeWalker(body, NodeFilter.SHOW_TEXT);
+                const hits = [];
+                let node;
+                while (node = walker.nextNode()) {
+                    if (node.textContent && node.textContent.includes(needle)) hits.push(node);
+                }
+                hits.forEach(n => { n.textContent = '<user> ' + needle; });
+                body.querySelectorAll('[title],[aria-label]').forEach(el => {
+                    ['title', 'aria-label'].forEach(a => {
+                        const v = el.getAttribute(a);
+                        if (v && v.includes(needle)) el.setAttribute(a, '<user> ' + needle);
+                    });
+                });
+            };
+            scrub(document);
+            document.querySelectorAll('iframe').forEach(f => {
+                try { if (f.contentDocument) scrub(f.contentDocument); } catch (e) {}
+            });
+        }
+        """,
+        account_marker,
+    )
+
+
 def redact_strings(page, replacements: list) -> None:
     # Generic redactor for arbitrary secrets that capture.py can't resolve
     # itself (e.g. the subscriber email shown in an SNS subscriptions list).
@@ -725,6 +799,17 @@ def capture(url: str, output_path: Path, wait_selector: str | None, wait_ms: int
             for s in os.environ.get("REDACT_EXTRA", "").split(",")
             if s.strip()
         ]
+        # The signed-in console identity renders in the top-right badge of
+        # EVERY console page: "<user> (<account>)" over "<Role>/<idp-user>".
+        # The account ID was redacted from the day this tool was written; the
+        # USERNAME never was, because nobody looked at that corner of the
+        # frame. It is the local part of a personal email address and it is in
+        # every console screenshot of every published week.
+        #
+        # Resolved from STS at run time rather than hardcoded, so this keeps
+        # working if the identity changes and the name is never written into
+        # the repo.
+        extras = console_identity_strings() + extras
         # Member account IDs go through the same path as REDACT_EXTRA so they
         # inherit its assert_not_present() check for free.
         extras = [[a, "<member-account-id>"] for a in org_account_ids] + extras
@@ -784,6 +869,10 @@ def capture(url: str, output_path: Path, wait_selector: str | None, wait_ms: int
         if extras:
             redact_safely(redact_strings, page, extras, "final extra redaction")
             print(f"Redacted {len(extras)} extra string(s) from REDACT_EXTRA")
+        if account_id:
+            redact_safely(redact_identity_badge, page, "<account-id>",
+                          "identity badge redaction")
+            print("Redacted the signed-in name from the console header badge")
 
         # Verify the redaction actually worked rather than assuming it did.
         # Running the redactor and checking the result are different things --
