@@ -108,7 +108,23 @@ def quarantine(repo, digest, tags):
         # event can be redelivered, and a second run must not fail.
         pass
 
-    removed = [t for t in tags if t and not t.startswith(QUARANTINE_PREFIX)]
+    # Remove EVERY deployable tag on this digest, not just the ones named in
+    # the event. An image can carry several tags -- a release tag and a
+    # promotion tag, say -- and the event only reports the one that triggered
+    # it. Removing that one leaves the image quarantined in name and still
+    # pullable by its other tags, which is not quarantined at all.
+    live = set(t for t in tags if t)
+    try:
+        described = ecr.describe_images(
+            repositoryName=repo, imageIds=[{"imageDigest": digest}]
+        )["imageDetails"]
+        for d in described:
+            live.update(d.get("imageTags") or [])
+    except Exception as exc:
+        # Fall back to the event's tags rather than skipping the removal.
+        print("WARN could not list tags for %s@%s: %s" % (repo, digest, exc))
+
+    removed = sorted(t for t in live if not t.startswith(QUARANTINE_PREFIX))
     if removed:
         ecr.batch_delete_image(
             repositoryName=repo,
