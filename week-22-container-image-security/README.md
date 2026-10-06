@@ -24,7 +24,7 @@ Most writing on this topic stops after the first two and calls it a pipeline.
 | Terraform | >= 1.10 |
 | AWS provider | >= 6.67 — see the note on the signing resource below |
 | AWS CLI | >= 2.34 (`ecr get-signing-configuration` and friends are recent) |
-| Docker | Running. Images are built locally in this lab |
+| Docker | **Not needed.** Images are built in CodeBuild — see step 7 |
 | HCP Terraform | An org you can create a workspace in, with OIDC to AWS |
 | Inspector | **Not already enabled.** Check first: the free trial is once per account |
 
@@ -130,12 +130,24 @@ Code applying is not the same as a control being on. Look at both:
 
 → *Figures 06, 07.* **Check:** the console agrees with the code.
 
-### 7. Push the images and test — *laptop*
+### 7. Build the images and test — *CodeBuild, then laptop*
 
 ```bash
-bash scripts/push_images.sh          # builds and pushes three images
+aws codebuild start-build --project-name week22-imagesec-build
 bash scripts/test_gate.sh <stamp>    # runs the six tests in order
 ```
+
+**The build does not run on your machine, and that is the point.** The ECR
+console states it plainly: *"ECR will sign the image using the IAM credentials
+of the entity that pushed the image."* Push from a laptop and the signature
+attests to a laptop — precisely what image signing exists to replace. Push
+from a build role and "signed by my pipeline" is literally true.
+
+The consequence is a permission that is easy to miss: the build role needs
+`signer:SignPayload` on the signing profile **as well as** the ECR push
+actions. Without it the push still succeeds and the image is simply not
+signed — managed signing fails quietly rather than rejecting the push, so a
+role that can push but not sign produces unsigned images and no error.
 
 Three images, each isolating one variable:
 
@@ -227,11 +239,10 @@ Tests 3, 5 and 6 are the ones worth the week.
 
 Written down rather than silently skipped:
 
-- **Build in CI, not on a laptop.** Managed signing signs with the identity of
-  whoever pushed. Signing from a laptop produces a signature that attests to a
-  laptop — which is the thing image signing is meant to replace. In production
-  the push comes from a build role, and "signed by the pipeline" is then
-  literally true.
+- ~~Build in CI, not on a laptop.~~ **Done here** — see step 7. It was
+  written up as a production delta and became the real path when the lab
+  machine turned out to have no WSL distribution, so Docker could not run
+  locally at all. The better design won by accident, which is worth admitting.
 - **A customer-managed KMS key on the repository.** ~$1/month, and it buys a
   second lock independent of IAM plus an audit trail of every decrypt. This
   lab uses ECR's default `AES256` because the key would cost ten times the

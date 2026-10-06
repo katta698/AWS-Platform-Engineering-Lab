@@ -55,3 +55,19 @@ variable "alert_email" {
   type        = string
   default     = ""
 }
+
+variable "docker_dir" {
+  description = <<-DESC
+    Path to the directory holding the three image definitions. The build runs
+    with no source repository, so the Dockerfiles are passed into it as
+    environment variables -- read from these files, so the repo stays the one
+    place they are defined.
+  DESC
+  type        = string
+}
+
+variable "build_compute_type" {
+  description = "CodeBuild compute size. SMALL is $0.005/min and ample for three tiny images."
+  type        = string
+  default     = "BUILD_GENERAL1_SMALL"
+}

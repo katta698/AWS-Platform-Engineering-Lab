@@ -70,4 +70,5 @@ module "image_pipeline" {
   filter_prefix     = var.filter_prefix
   alert_email       = var.alert_email
   lambda_source_dir = "${path.root}/../../../lambda/image_gate"
+  docker_dir        = "${path.root}/../../../docker"
 }

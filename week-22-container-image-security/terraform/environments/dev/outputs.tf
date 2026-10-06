@@ -23,3 +23,8 @@ output "gate_log_group" {
 output "quarantine_topic_arn" {
   value = module.image_pipeline.quarantine_topic_arn
 }
+
+output "build_project_name" {
+  description = "Start this to build and push the test images."
+  value       = module.image_pipeline.build_project_name
+}

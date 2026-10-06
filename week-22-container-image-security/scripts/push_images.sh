@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
-# Build and push the three test images.
+# Build and push the three test images FROM THIS MACHINE.
+#
+# This is the local alternative, kept because it is the shorter path when
+# Docker is available. The lab itself builds in CodeBuild instead -- see
+# README step 7. The difference is not convenience: managed signing signs
+# with the identity of whoever pushed, so running this script produces a
+# signature that attests to your laptop rather than to a pipeline.
 #
 # Run after the HCP apply has finished. Reads the repository URL from the
 # workspace outputs rather than taking it as an argument, so there is nothing

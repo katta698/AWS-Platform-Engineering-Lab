@@ -35,3 +35,13 @@ output "gate_log_group" {
 output "quarantine_topic_arn" {
   value = aws_sns_topic.quarantine.arn
 }
+
+output "build_project_name" {
+  description = "CodeBuild project that builds, pushes and therefore signs the images."
+  value       = aws_codebuild_project.build.name
+}
+
+output "build_role_arn" {
+  description = "The identity the signature attests to."
+  value       = aws_iam_role.build.arn
+}
