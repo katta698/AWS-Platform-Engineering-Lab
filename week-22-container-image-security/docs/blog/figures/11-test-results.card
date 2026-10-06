@@ -1,0 +1,62 @@
+title: Six tests, run in order
+subtitle: Signing and scanning were right on the first apply. The enforcement took five goes.
+width: 1150
+---
+1. A clean image is signed and stays deployable
+   [ok]  signature COMPLETE
+   [ok]  ALLOW  digest=a366a833...  tags=['clean-20261006-053301']
+
+2. An OS-vulnerable image is quarantined
+   [ok]  QUARANTINE(push)  removed=['vuln-os-20261006-053301']
+         47 findings, 7 CRITICAL. Caught only after the SECOND trigger existed
+         - see the blind spot below.
+
+3. A SIGNED image with a vulnerable library is still quarantined
+   [ok]  signature COMPLETE  *and*  quarantined
+         This is the whole point. A valid signature says who built the image.
+         It says nothing about whether the image is safe to run.
+
+   What was in it - 16 findings on a CURRENT base image:
+     PYTHON  12   <- what you are paying Inspector for
+     OS       4
+
+     CRITICAL  CVE-2022-29361  werkzeug   fixed in 2.1.1
+     HIGH      CVE-2023-30861  flask      fixed in 2.3.2
+     HIGH      CVE-2023-25577  werkzeug   fixed in 2.2.3
+     HIGH      CVE-2024-34069  werkzeug   fixed in 3.0.3
+
+   ECR's free basic scanner reads OS packages only. It would have reported
+   4 findings on this image and called it a day.
+
+4. A repository outside the filter is neither signed nor scanned
+   [ok]  "signingStatuses": []
+         The filter is a real boundary, not decoration - which matters,
+         because every cost control this week rests on it.
+
+5. How long between push and enforcement
+   [ok]  pushed 04:32:42Z  ->  quarantined ~04:34
+         Scanning is asynchronous. There is a window, roughly 90 seconds here,
+         in which an unscanned image is pullable. "We scan on push" is weaker
+         than it sounds.
+
+6. The gate fails CLOSED
+   [ok]  observed for real, not simulated: the gate broke on a malformed
+         repository ARN, raised, and fired its error alarm. Nothing was
+         waved through.
+         [FAIL] but failing closed is not enforcing - the vulnerable images
+         were still deployable, and only test 2 caught that.
+
+--- what the tests found that review did not --------------------------------
+
+  [FAIL] the scan event's "repository-name" is an ARN WITH the digest appended;
+         the AWS docs show it without. Every quarantine failed.
+  [FAIL] HCP never deployed the fix: the Lambda lives outside the workspace's
+         working directory, so the push triggered no run. Committed, pushed,
+         green, and running the old code.
+  [FAIL] Inspector never re-scans a digest it has seen. Re-tagging an existing
+         image - how images normally reach production - produced no event and
+         no enforcement at all.
+  [FAIL] quarantine removed only the tag named in the event. An image with two
+         tags stayed pullable by the other one.
+  [FAIL] packageManager is PYTHON for a container image, not PIP. The check
+         looking for PIP reported "none found" on a passing test.

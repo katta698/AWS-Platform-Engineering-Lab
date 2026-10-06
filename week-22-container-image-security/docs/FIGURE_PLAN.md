@@ -18,9 +18,9 @@ deploy, so the post read as a tour of outcomes instead of a path to follow.
 | 06 | `06-ecr-signing-rule.png` | How We Built It | The managed signing rule and its repository filter | AWS console |
 | 07 | `07-ecr-scanning-enhanced.png` | How We Built It | Registry scanning on ENHANCED, scoped to the filter | AWS console |
 | 08 | `08-push-signed.png` | How We Built It | A push, and `describe-image-signing-status` confirming the signature | Terminal |
-| 09 | `09-inspector-language-finding.png` | Challenges | A **pip** finding on the vuln-lib image — what free basic scanning cannot see | AWS console |
+| 09 | `09-inspector-language-finding.png` | Challenges | Inspector's findings list — 95 findings, and every impacted resource is already a `quarantined-*` image | AWS console |
 | 10 | `10-quarantine-email.png` | Challenges | The quarantine notice as it arrives | Inbox |
-| 11 | `11-test-results.png` | Challenges | All six tests with pass/fail | Rendered card |
+| 11 | `11-test-results.png` | Challenges | All six tests with pass/fail, plus the PYTHON-vs-OS finding split that justifies paying for Inspector | Rendered card |
 | 12 | `12-destroyed.png` | Cleanup | Zero resources, Inspector back to disabled, scanning back to BASIC | Terminal |
 | 13 | `13-cost.png` | Cost | The billed figure | Cost Explorer, ~1 day after teardown |
 

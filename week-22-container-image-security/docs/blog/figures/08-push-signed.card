@@ -1,0 +1,46 @@
+title: Pushed by a build role, signed by the registry
+subtitle: The signature attests to the pipeline, not to a laptop - because signing follows whoever pushed
+width: 1100
+---
+$ aws codebuild start-build --project-name week22-imagesec-build
+
+  === pushing clean    at 04:32:27Z ===
+  === pushing vuln-os  at 04:32:31Z ===
+  === pushing vuln-lib at 04:32:42Z ===
+
+  [ok] build SUCCEEDED
+
+Nothing in the build signs anything. ECR does it, because the registry
+carries a signing rule and the pushing identity is allowed to use it.
+
+$ aws ecr describe-image-signing-status \
+      --repository-name wk22-app --image-id imageDigest=sha256:1fbdb597...
+
+  {
+    "signingProfileArn": ".../signing-profiles/wk22_4739d091f26b94721bddec3e9f",
+    "status": "COMPLETE"                                              [ok]
+  }
+
+The signature is a separate artifact in the same repository, untagged:
+
+$ aws ecr describe-images --repository-name wk22-app \
+      --query 'imageDetails[].{tags:imageTags,type:artifactMediaType}'
+
+  clean-20261006-053839    application/vnd.docker.container.image.v1+json
+  <untagged>               application/vnd.cncf.notary.signature         <- the signature
+  vuln-os-20261006-053839  application/vnd.docker.container.image.v1+json
+  <untagged>               application/vnd.cncf.notary.signature
+
+Each one counts against the repository's image quota. A lifecycle rule
+expiring untagged images does NOT delete them - reference artifacts are
+tied to their subject image. Confirmed with the preview API rather than
+assumed:
+
+$ aws ecr start-lifecycle-policy-preview --repository-name wk22-app
+$ aws ecr get-lifecycle-policy-preview   --repository-name wk22-app
+
+  "expiringImageTotalCount": 0                                        [ok]
+
+The permission that is easy to miss: the build role needs signer:SignPayload
+as well as the ECR push actions. Without it the push still succeeds and the
+image is simply never signed - no error, anywhere.

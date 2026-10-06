@@ -129,6 +129,45 @@ def shut_down(context, page, cdp_port):
         pass
 
 
+def hcp_identity_strings():
+    """Personal identifiers HCP Terraform paints into its pages.
+
+    HCP shows the acting username in run details ("<user> triggered a run from
+    API"), in the avatar menu and in commit attribution. The AWS badge redactor
+    cannot see it -- that one keys off "(<account-id>)", which HCP never
+    renders.
+
+    Resolved from the API token at run time so the name is never written into
+    this committed file. Returns [[needle, replacement], ...].
+    """
+    import json as _json
+    import urllib.request as _ur
+    cred = os.path.expandvars(r"%APPDATA%\terraform.d\credentials.tfrc.json")
+    if not os.path.exists(cred):
+        return []
+    try:
+        with open(cred, encoding="utf-8-sig") as fh:
+            tok = _json.load(fh)["credentials"]["app.terraform.io"]["token"]
+    except Exception:
+        return []
+    try:
+        req = _ur.Request("https://app.terraform.io/api/v2/account/details",
+                          headers={"Authorization": "Bearer " + tok})
+        attrs = _json.loads(_ur.urlopen(req, timeout=20).read())["data"]["attributes"]
+    except Exception:
+        return []
+    out = []
+    for key in ("display-name", "username", "email"):
+        val = (attrs.get(key) or "").strip()
+        if not val or len(val) < 3:
+            continue
+        out.append([val, "<user>"])
+        if "@" in val:
+            out.append([val.split("@", 1)[0], "<user>"])
+    # Longest first, so "a@b.com" is replaced before its local part "a".
+    return sorted(out, key=lambda kv: -len(kv[0]))
+
+
 def console_identity_strings():
     """Personal identifiers that the console paints into its header badge.
 
@@ -810,6 +849,8 @@ def capture(url: str, output_path: Path, wait_selector: str | None, wait_ms: int
         # working if the identity changes and the name is never written into
         # the repo.
         extras = console_identity_strings() + extras
+        if "app.terraform.io" in (url or ""):
+            extras = hcp_identity_strings() + extras
         # Member account IDs go through the same path as REDACT_EXTRA so they
         # inherit its assert_not_present() check for free.
         extras = [[a, "<member-account-id>"] for a in org_account_ids] + extras
