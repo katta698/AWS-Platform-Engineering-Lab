@@ -1,0 +1,37 @@
+title: The code behind this week
+subtitle: week-22-container-image-security - what each file does, and how big it actually is
+width: 1080
+---
+week-22-container-image-security/
+│
+├── terraform/
+│   ├── environments/dev/            # WHAT this environment is
+│   │   ├── main.tf           73     # HCP backend, three provider pins, one
+│   │   │                            # module call. awscc is here because the
+│   │   │                            # AWS provider has no signing resource
+│   │   ├── variables.tf      18     # region, filter_prefix, alert_email
+│   │   └── outputs.tf        25     # repo URLs, gate name, log group
+│   │
+│   └── modules/image_pipeline/      # HOW it is built -- all 17 resources
+│       ├── main.tf          321     # registry + lifecycle, Signer profile,
+│       │                            # signing config, Inspector, the gate,
+│       │                            # EventBridge rule, SNS, error alarm
+│       ├── variables.tf      57     # every knob, with a default
+│       └── outputs.tf        37
+│
+├── lambda/image_gate/
+│   └── handler.py           164     # the ONLY enforcing part of the week.
+│                                    # Quarantines rather than deletes, and
+│                                    # fails closed when it cannot decide
+│
+├── docker/                          # three images, one variable each
+│   ├── clean/Dockerfile      17     # current base, nothing added
+│   ├── vuln-os/Dockerfile    14     # Ubuntu 20.04 -- OS-package CVEs
+│   └── vuln-lib/Dockerfile   21     # current base + flask 2.0.0 -- the
+│                                    # finding free basic scanning cannot see
+│
+└── scripts/
+    ├── push_images.sh        59     # build and push all three
+    ├── test_gate.sh         167     # the six tests, in order, pass/fail
+    └── cleanup.sh           101     # teardown verification -- and disables
+                                     # Inspector, which destroy does not own
