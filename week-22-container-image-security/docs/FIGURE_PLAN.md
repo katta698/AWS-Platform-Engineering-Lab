@@ -21,8 +21,8 @@ deploy, so the post read as a tour of outcomes instead of a path to follow.
 | 09 | `09-inspector-language-finding.png` | Challenges | Inspector's findings list — 95 findings, and every impacted resource is already a `quarantined-*` image | AWS console |
 | 10 | `10-quarantine-email.png` | Challenges | The quarantine notice as it arrives | Inbox |
 | 11 | `11-test-results.png` | Challenges | All six tests with pass/fail, plus the PYTHON-vs-OS finding split that justifies paying for Inspector | Rendered card |
-| 12 | `12-destroyed.png` | Cleanup | Zero resources, Inspector back to disabled, scanning back to BASIC | Terminal |
-| 13 | `13-cost.png` | Cost | The billed figure | Cost Explorer, ~1 day after teardown |
+| 12 | `12-destroyed.png` | Cleanup | Zero resources, Inspector back to disabled, scanning back to BASIC | Rendered card |
+| 13 | `13-cost.png` | Cost | The billed figure, by usage type | Rendered card — see note |
 
 ## Rules carried forward
 
@@ -32,3 +32,17 @@ deploy, so the post read as a tour of outcomes instead of a path to follow.
 - `13-cost.png` cannot exist until roughly a day after teardown, which is why
   the pre-destroy gate treats cost slots as exempt.
 - Anything retired goes in `UNUSED.txt` with a reason, not deleted silently.
+
+## Why 13 is a card and not a console capture
+
+The console billing pages are **permission-denied** for the federated role these
+captures run under: Billing -> Bills returns *"You don't have permission to access
+billing information for this account."* Cost Explorer loads but opens on an
+unfiltered six-month view, and setting its date range, service filter and
+usage-type grouping is not something the capture tool can drive.
+
+The `ce get-cost-and-usage` API works under the same role and is the same data,
+so figure 13 is rendered from its real output with the command shown. This is a
+genuine inaccessibility, not a convenience substitution — the distinction
+matters, because the standing rule is that a card never stands in for a console
+view that could have been captured.

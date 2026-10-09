@@ -1,0 +1,36 @@
+title: The bill, and what dominated it
+subtitle: Week 22 - read from Cost Explorer by usage type on 2026-10-09, not from a rate card
+width: 1080
+---
+$ aws ce get-cost-and-usage --granularity DAILY \
+      --filter '{"Dimensions":{"Key":"SERVICE","Values":["Amazon EC2 Container Registry (ECR)"]}}' \
+      --group-by Type=DIMENSION,Key=USAGE_TYPE
+
+  2026-10-06   USE1-AsyncActions-ImageSigning   $0.2400   qty 12
+  2026-10-06   TimedStorage-ByteHrs             $0.0002
+  2026-10-07   TimedStorage-ByteHrs             $0.0003
+  2026-10-08   TimedStorage-ByteHrs             $0.0003
+  2026-10-09   TimedStorage-ByteHrs             $0.0001   (destroyed 14:21)
+
+  TOTAL                                         $0.2409
+
+  signing   $0.2400   ###############################################  99.7%
+  storage   $0.0009   #                                                 0.3%
+
+$ ... --group-by Type=DIMENSION,Key=SERVICE  | grep -E 'Inspector|CodeBuild'
+
+  Amazon Inspector   0      [ok] 15-day free trial, started 2026-10-05
+  CodeBuild          0      [ok] free tier
+
+--- the part that is not on any pricing page -----------------------------
+
+ECR bills managed signing as USE1-AsyncActions-ImageSigning at $0.02 per
+signature. Twelve signatures, because four builds each signed three images:
+every rebuild re-signs.
+
+AWS Signer's pricing page says "no additional charge" with ECR. That is true
+of Signer. The charge is ECR's, and ECR's pricing page carries a "Managed
+Signing" heading with no figure under it.
+
+I wrote "signing is free" in the draft of this post. The bill is the only
+place the number appeared.

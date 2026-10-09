@@ -71,8 +71,8 @@ docker/{clean,vuln-os,vuln-lib}/
 **The one thing that will surprise you.** ECR managed signing shipped on
 21 November 2025 and still has **no resource in the AWS provider** —
 [hashicorp/terraform-provider-aws#47527](https://github.com/hashicorp/terraform-provider-aws/pull/47527)
-was open against 6.67.0, the latest release. Confirm it yourself rather than
-trusting this file:
+is still open, and 6.68.0 shipped on 7 October 2026 without it. Confirm it
+yourself rather than trusting this file:
 
 ```bash
 terraform validate
@@ -155,10 +155,12 @@ Three images, each isolating one variable:
 |---|---|---|
 | `clean` | Current Alpine, nothing added | Signed, 0 blocking findings, stays deployable |
 | `vuln-os` | Ubuntu 20.04 (end of support, May 2025) | Quarantined on OS findings |
-| `vuln-lib` | **Current** Python + `flask==2.0.0` | Quarantined on a **pip** finding |
+| `vuln-lib` | **Current** Python + `flask==2.0.0` | Quarantined on a **PYTHON** package finding |
 
 `vuln-lib` is the one that justifies the money. ECR's free basic scanner reads
-OS packages only; it cannot see an outdated pip, npm or Maven dependency. Its
+OS packages only; it cannot see an outdated Python, npm or Maven dependency. (Inspector labels the
+package manager `PYTHON`, not `PIP` -- the docs show `PIP` in a Lambda example,
+and a check grepping for that reports nothing found on a passing test.) Its
 base is deliberately current so the only findings come from the library — an
 end-of-life Python would produce OS findings too and the experiment would stop
 isolating anything.
@@ -264,8 +266,43 @@ Written down rather than silently skipped:
 
 ## Cost
 
-To be read from the bill after teardown, not estimated from a rate card.
+**Billed $0.2409**, and 99.7% of it was signing.
+
+| Line | Cost |
+|---|---|
+| ECR managed signing — 12 signatures at $0.02 | $0.2400 |
+| ECR storage, 6-9 October | $0.0009 |
+| Amazon Inspector | $0.00 — 15-day free trial, started 2026-10-05, expires 2026-10-20 |
+| CodeBuild, Lambda, EventBridge, SNS | $0.00 — free tier |
+
+**ECR bills managed signing at $0.02 per signature**, as usage type
+`AsyncActions-ImageSigning`. AWS Signer's pricing page says "no additional
+charge" and is correct about Signer; the charge is on ECR's side, and the ECR
+pricing page carries a "Managed Signing" heading with no figure under it. The
+bill was the only place the number appeared.
+
+Twelve signatures rather than three, because **every rebuild re-signs**. Four
+builds during one night of debugging cost four times a single build. On a busy
+pipeline that is the line to watch, not storage — which came to eight
+hundredths of a cent.
 
 ## Teardown
 
-Destroyed and verified — details once the week has run.
+**Destroyed 2026-10-09**: 24 resources via HCP run `run-UcvQxgEL4N2Ym11T`, then
+`scripts/cleanup.sh` verified the account-level state.
+
+| Checked | Result |
+|---|---|
+| Registry scanning | `BASIC` |
+| Inspector — all five scan types | `DISABLED` |
+| ECR repositories | none remaining |
+| Signer signing profiles | none active |
+| Signing configuration | none |
+| Log groups | none remaining |
+
+Worth recording: **`terraform destroy` had already removed the Inspector
+enabler and the scanning configuration** — the cleanup script found both
+already clean, with no "still enabled" branch taken. In this build they are
+Terraform resources, so destroy owns them. The script still checks, because
+account-level settings are where an unowned leftover bills quietly, but the
+risk here was smaller than anticipated.

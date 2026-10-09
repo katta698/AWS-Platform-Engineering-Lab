@@ -1,0 +1,46 @@
+title: Destroyed, and checked rather than assumed
+subtitle: week-22-container-image-security - the teardown verification, run after terraform destroy
+width: 1050
+---
+$ python scripts/hcp_destroy.py week-22-dev
+
+  week-22-container-image-security: 13 slot(s) declared, 11 captured
+  every declared figure is captured or retired -- safe to destroy.   [ok]
+  week-22-dev: 26 resources -> destroy run run-UcvQxgEL4N2Ym11T
+
+  to destroy: 24
+  FINAL: applied                                                      [ok]
+
+$ bash scripts/cleanup.sh
+
+  == 1. Registry scanning configuration ==
+     scanType: BASIC                                                  [ok]
+
+  == 2. Amazon Inspector (separate service, separate bill) ==
+     ec2:             DISABLED                                        [ok]
+     ecr:             DISABLED                                        [ok]
+     lambda:          DISABLED                                        [ok]
+     lambdaCode:      DISABLED                                        [ok]
+     codeRepository:  DISABLED                                        [ok]
+
+  == 3. ECR repositories ==
+     none remaining                                                   [ok]
+
+  == 4. Signer signing profiles ==
+     none active                                                      [ok]
+
+  == 5. Signing configuration ==
+     none                                                             [ok]
+
+  == 6. Log groups ==
+     none remaining                                                   [ok]
+
+Note what is NOT printed: no "still ENHANCED -- resetting" and no "still
+ENABLED -- disabling". terraform destroy had already removed both, because
+aws_inspector2_enabler and the scanning configuration are Terraform resources
+in this build.
+
+The script checks anyway. In an earlier week a CloudWatch anomaly detector
+survived a destroy and kept billing for days, because nothing in the state
+file owned it. Account-level settings are exactly where "the destroy probably
+handled it" should be turned into a command that looks.
