@@ -1,0 +1,463 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxGraphModel dx="1422" dy="762" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1654" pageHeight="900" math="0" shadow="0">
+  <root>
+    <mxCell id="0" />
+    <mxCell id="1" parent="0" />
+
+    <!-- ══ TITLE ══════════════════════════════════════════════════════ -->
+    <mxCell id="title" value="Phase 1 — Identity &amp; Data Flow (No IAM Users · No Human Credentials)"
+      style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=18;fontStyle=1;fontColor=#232F3E;"
+      vertex="1" parent="1">
+      <mxGeometry x="40" y="20" width="1000" height="30" as="geometry" />
+    </mxCell>
+    <mxCell id="subtitle" value="Every action is performed by IAM Roles with temporary credentials · CUR data only · No EC2 API calls"
+      style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=11;fontColor=#687078;"
+      vertex="1" parent="1">
+      <mxGeometry x="40" y="52" width="900" height="20" as="geometry" />
+    </mxCell>
+
+    <!-- ══ SECTION LABELS ════════════════════════════════════════════ -->
+    <mxCell id="lbl-you" value="YOU"
+      style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=10;fontStyle=1;fontColor=#0972D3;"
+      vertex="1" parent="1">
+      <mxGeometry x="60" y="85" width="120" height="20" as="geometry" />
+    </mxCell>
+    <mxCell id="lbl-cdn" value="CDN"
+      style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=10;fontStyle=1;fontColor=#8C29BB;"
+      vertex="1" parent="1">
+      <mxGeometry x="260" y="85" width="120" height="20" as="geometry" />
+    </mxCell>
+    <mxCell id="lbl-api" value="API"
+      style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=10;fontStyle=1;fontColor=#C45500;"
+      vertex="1" parent="1">
+      <mxGeometry x="460" y="85" width="120" height="20" as="geometry" />
+    </mxCell>
+    <mxCell id="lbl-compute" value="COMPUTE"
+      style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=10;fontStyle=1;fontColor=#C45500;"
+      vertex="1" parent="1">
+      <mxGeometry x="660" y="85" width="200" height="20" as="geometry" />
+    </mxCell>
+    <mxCell id="lbl-analytics" value="ANALYTICS"
+      style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=10;fontStyle=1;fontColor=#8C4FFF;"
+      vertex="1" parent="1">
+      <mxGeometry x="960" y="85" width="120" height="20" as="geometry" />
+    </mxCell>
+    <mxCell id="lbl-data" value="DATA"
+      style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=10;fontStyle=1;fontColor=#3F8624;"
+      vertex="1" parent="1">
+      <mxGeometry x="1160" y="85" width="120" height="20" as="geometry" />
+    </mxCell>
+    <mxCell id="lbl-result" value="RESULT"
+      style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=10;fontStyle=1;fontColor=#1D8348;"
+      vertex="1" parent="1">
+      <mxGeometry x="1360" y="85" width="120" height="20" as="geometry" />
+    </mxCell>
+
+    <!-- ══ NODE: Browser ════════════════════════════════════════════ -->
+    <mxCell id="browser-box" value=""
+      style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F4FD;strokeColor=#0972D3;strokeWidth=2;arcSize=8;"
+      vertex="1" parent="1">
+      <mxGeometry x="60" y="108" width="120" height="110" as="geometry" />
+    </mxCell>
+    <mxCell id="browser-icon" value="&#128100;"
+      style="text;html=1;align=center;fontSize=28;strokeColor=none;fillColor=none;"
+      vertex="1" parent="1">
+      <mxGeometry x="60" y="118" width="120" height="36" as="geometry" />
+    </mxCell>
+    <mxCell id="browser-name" value="Browser"
+      style="text;html=1;align=center;fontSize=12;fontStyle=1;fontColor=#232F3E;strokeColor=none;fillColor=none;"
+      vertex="1" parent="1">
+      <mxGeometry x="60" y="154" width="120" height="20" as="geometry" />
+    </mxCell>
+    <mxCell id="browser-sub" value="Engineer / FinOps team"
+      style="text;html=1;align=center;fontSize=9;fontColor=#687078;strokeColor=none;fillColor=none;"
+      vertex="1" parent="1">
+      <mxGeometry x="60" y="174" width="120" height="36" as="geometry" />
+    </mxCell>
+    <mxCell id="browser-note" value="No AWS identity&#xa;Just a browser"
+      style="text;html=1;align=center;fontSize=9;fontColor=#687078;strokeColor=none;fillColor=none;"
+      vertex="1" parent="1">
+      <mxGeometry x="50" y="222" width="140" height="28" as="geometry" />
+    </mxCell>
+
+    <!-- ══ NODE: CloudFront ═════════════════════════════════════════ -->
+    <mxCell id="cf-box" value=""
+      style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3E8FD;strokeColor=#8C29BB;strokeWidth=2;arcSize=8;"
+      vertex="1" parent="1">
+      <mxGeometry x="260" y="108" width="120" height="110" as="geometry" />
+    </mxCell>
+    <mxCell id="cf-icon" value="&#9889;"
+      style="text;html=1;align=center;fontSize=28;fontColor=#E7742A;strokeColor=none;fillColor=none;"
+      vertex="1" parent="1">
+      <mxGeometry x="260" y="118" width="120" height="36" as="geometry" />
+    </mxCell>
+    <mxCell id="cf-name" value="CloudFront"
+      style="text;html=1;align=center;fontSize=12;fontStyle=1;fontColor=#232F3E;strokeColor=none;fillColor=none;"
+      vertex="1" parent="1">
+      <mxGeometry x="260" y="154" width="120" height="20" as="geometry" />
+    </mxCell>
+    <mxCell id="cf-sub" value="d2gop1c7y82ckf&#xa;.cloudfront.net"
+      style="text;html=1;align=center;fontSize=9;fontColor=#687078;strokeColor=none;fillColor=none;"
+      vertex="1" parent="1">
+      <mxGeometry x="260" y="174" width="120" height="36" as="geometry" />
+    </mxCell>
+    <mxCell id="cf-note" value="Serves React app&#xa;from S3 via OAC"
+      style="text;html=1;align=center;fontSize=9;fontColor=#687078;strokeColor=none;fillColor=none;"
+      vertex="1" parent="1">
+      <mxGeometry x="250" y="222" width="140" height="28" as="geometry" />
+    </mxCell>
+
+    <!-- ══ NODE: API Gateway ════════════════════════════════════════ -->
+    <mxCell id="apigw-box" value=""
+      style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF4E5;strokeColor=#E7742A;strokeWidth=2;arcSize=8;"
+      vertex="1" parent="1">
+      <mxGeometry x="460" y="108" width="120" height="110" as="geometry" />
+    </mxCell>
+    <mxCell id="apigw-icon" value="&#128268;"
+      style="text;html=1;align=center;fontSize=28;strokeColor=none;fillColor=none;"
+      vertex="1" parent="1">
+      <mxGeometry x="460" y="118" width="120" height="36" as="geometry" />
+    </mxCell>
+    <mxCell id="apigw-name" value="API Gateway"
+      style="text;html=1;align=center;fontSize=12;fontStyle=1;fontColor=#232F3E;strokeColor=none;fillColor=none;"
+      vertex="1" parent="1">
+      <mxGeometry x="460" y="154" width="120" height="20" as="geometry" />
+    </mxCell>
+    <mxCell id="apigw-sub" value="REST · /ebs-savings"
+      style="text;html=1;align=center;fontSize=9;fontColor=#687078;strokeColor=none;fillColor=none;"
+      vertex="1" parent="1">
+      <mxGeometry x="460" y="174" width="120" height="36" as="geometry" />
+    </mxCell>
+    <mxCell id="apigw-note" value="Browser calls this&#xa;with fetch()"
+      style="text;html=1;align=center;fontSize=9;fontColor=#687078;strokeColor=none;fillColor=none;"
+      vertex="1" parent="1">
+      <mxGeometry x="450" y="222" width="140" height="28" as="geometry" />
+    </mxCell>
+
+    <!-- ══ NODE: Lambda ══════════════════════════════════════════════ -->
+    <!-- Role badge -->
+    <mxCell id="lambda-badge" value="runs as ebsp1-lambda-role"
+      style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DD344C;strokeColor=none;fontSize=9;fontStyle=1;fontColor=#FFFFFF;arcSize=50;"
+      vertex="1" parent="1">
+      <mxGeometry x="675" y="100" width="170" height="20" as="geometry" />
+    </mxCell>
+    <mxCell id="lambda-box" value=""
+      style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF4E5;strokeColor=#E7742A;strokeWidth=2;arcSize=8;"
+      vertex="1" parent="1">
+      <mxGeometry x="660" y="122" width="200" height="110" as="geometry" />
+    </mxCell>
+    <mxCell id="lambda-icon" value="λ"
+      style="text;html=1;align=center;fontSize=32;fontStyle=1;fontColor=#232F3E;strokeColor=none;fillColor=none;"
+      vertex="1" parent="1">
+      <mxGeometry x="660" y="128" width="200" height="36" as="geometry" />
+    </mxCell>
+    <mxCell id="lambda-name" value="AWS Lambda"
+      style="text;html=1;align=center;fontSize=12;fontStyle=1;fontColor=#232F3E;strokeColor=none;fillColor=none;"
+      vertex="1" parent="1">
+      <mxGeometry x="660" y="164" width="200" height="20" as="geometry" />
+    </mxCell>
+    <mxCell id="lambda-sub" value="handler_phase1.py · No IAM user · No keys"
+      style="text;html=1;align=center;fontSize=9;fontColor=#687078;strokeColor=none;fillColor=none;"
+      vertex="1" parent="1">
+      <mxGeometry x="660" y="184" width="200" height="40" as="geometry" />
+    </mxCell>
+
+    <!-- Lambda calls box -->
+    <mxCell id="lambda-calls-box" value=""
+      style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF4E5;strokeColor=#E7742A;strokeWidth=1.5;arcSize=6;"
+      vertex="1" parent="1">
+      <mxGeometry x="660" y="244" width="200" height="160" as="geometry" />
+    </mxCell>
+    <mxCell id="lambda-calls-title" value="Lambda calls:"
+      style="text;html=1;align=left;fontSize=10;fontStyle=1;fontColor=#C45500;strokeColor=none;fillColor=none;"
+      vertex="1" parent="1">
+      <mxGeometry x="672" y="252" width="176" height="18" as="geometry" />
+    </mxCell>
+    <!-- Athena call row -->
+    <mxCell id="call-athena" value="&#128269;  Athena query"
+      style="text;html=1;align=left;fontSize=10;fontColor=#232F3E;strokeColor=none;fillColor=none;"
+      vertex="1" parent="1">
+      <mxGeometry x="672" y="276" width="110" height="20" as="geometry" />
+    </mxCell>
+    <mxCell id="call-athena-badge" value="✓ Phase 1"
+      style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1D8348;strokeColor=none;fontSize=8;fontStyle=1;fontColor=#FFFFFF;arcSize=50;"
+      vertex="1" parent="1">
+      <mxGeometry x="790" y="278" width="60" height="16" as="geometry" />
+    </mxCell>
+    <!-- S3 call row -->
+    <mxCell id="call-s3" value="&#128187;  S3 results"
+      style="text;html=1;align=left;fontSize=10;fontColor=#232F3E;strokeColor=none;fillColor=none;"
+      vertex="1" parent="1">
+      <mxGeometry x="672" y="304" width="110" height="20" as="geometry" />
+    </mxCell>
+    <mxCell id="call-s3-badge" value="✓ Phase 1"
+      style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1D8348;strokeColor=none;fontSize=8;fontStyle=1;fontColor=#FFFFFF;arcSize=50;"
+      vertex="1" parent="1">
+      <mxGeometry x="790" y="306" width="60" height="16" as="geometry" />
+    </mxCell>
+    <!-- STS call row (greyed) -->
+    <mxCell id="call-sts" value="&#128273;  STS AssumeRole"
+      style="text;html=1;align=left;fontSize=10;fontColor=#AABBBB;strokeColor=none;fillColor=none;"
+      vertex="1" parent="1">
+      <mxGeometry x="672" y="332" width="116" height="20" as="geometry" />
+    </mxCell>
+    <mxCell id="call-sts-badge" value="Phase 2"
+      style="rounded=1;whiteSpace=wrap;html=1;fillColor=#AABBBB;strokeColor=none;fontSize=8;fontStyle=1;fontColor=#FFFFFF;arcSize=50;"
+      vertex="1" parent="1">
+      <mxGeometry x="792" y="334" width="58" height="16" as="geometry" />
+    </mxCell>
+    <!-- EC2 call row (greyed) -->
+    <mxCell id="call-ec2" value="&#128187;  EC2 Describe*"
+      style="text;html=1;align=left;fontSize=10;fontColor=#AABBBB;strokeColor=none;fillColor=none;"
+      vertex="1" parent="1">
+      <mxGeometry x="672" y="360" width="116" height="20" as="geometry" />
+    </mxCell>
+    <mxCell id="call-ec2-badge" value="Phase 2"
+      style="rounded=1;whiteSpace=wrap;html=1;fillColor=#AABBBB;strokeColor=none;fontSize=8;fontStyle=1;fontColor=#FFFFFF;arcSize=50;"
+      vertex="1" parent="1">
+      <mxGeometry x="792" y="362" width="58" height="16" as="geometry" />
+    </mxCell>
+
+    <!-- ══ NODE: Athena ══════════════════════════════════════════════ -->
+    <mxCell id="athena-box" value=""
+      style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDE8FD;strokeColor=#8C4FFF;strokeWidth=2;arcSize=8;"
+      vertex="1" parent="1">
+      <mxGeometry x="960" y="108" width="120" height="110" as="geometry" />
+    </mxCell>
+    <mxCell id="athena-icon" value="&#128269;"
+      style="text;html=1;align=center;fontSize=28;strokeColor=none;fillColor=none;"
+      vertex="1" parent="1">
+      <mxGeometry x="960" y="118" width="120" height="36" as="geometry" />
+    </mxCell>
+    <mxCell id="athena-name" value="Amazon Athena"
+      style="text;html=1;align=center;fontSize=12;fontStyle=1;fontColor=#232F3E;strokeColor=none;fillColor=none;"
+      vertex="1" parent="1">
+      <mxGeometry x="960" y="154" width="120" height="20" as="geometry" />
+    </mxCell>
+    <mxCell id="athena-sub" value="Engine v3&#xa;Query Result Reuse"
+      style="text;html=1;align=center;fontSize=9;fontColor=#687078;strokeColor=none;fillColor=none;"
+      vertex="1" parent="1">
+      <mxGeometry x="960" y="174" width="120" height="36" as="geometry" />
+    </mxCell>
+    <mxCell id="athena-note" value="Queries CUR Parquet&#xa;No separate identity"
+      style="text;html=1;align=center;fontSize=9;fontColor=#687078;strokeColor=none;fillColor=none;"
+      vertex="1" parent="1">
+      <mxGeometry x="950" y="222" width="140" height="28" as="geometry" />
+    </mxCell>
+
+    <!-- ══ NODE: S3 CUR ══════════════════════════════════════════════ -->
+    <mxCell id="s3-box" value=""
+      style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F5E9;strokeColor=#3F8624;strokeWidth=2;arcSize=8;"
+      vertex="1" parent="1">
+      <mxGeometry x="1160" y="108" width="120" height="110" as="geometry" />
+    </mxCell>
+    <mxCell id="s3-icon" value="&#129695;"
+      style="text;html=1;align=center;fontSize=28;strokeColor=none;fillColor=none;"
+      vertex="1" parent="1">
+      <mxGeometry x="1160" y="118" width="120" height="36" as="geometry" />
+    </mxCell>
+    <mxCell id="s3-name" value="S3 — CUR"
+      style="text;html=1;align=center;fontSize=12;fontStyle=1;fontColor=#232F3E;strokeColor=none;fillColor=none;"
+      vertex="1" parent="1">
+      <mxGeometry x="1160" y="154" width="120" height="20" as="geometry" />
+    </mxCell>
+    <mxCell id="s3-sub" value="ebsp1-cur-*&#xa;Parquet billing data"
+      style="text;html=1;align=center;fontSize=9;fontColor=#687078;strokeColor=none;fillColor=none;"
+      vertex="1" parent="1">
+      <mxGeometry x="1160" y="174" width="120" height="36" as="geometry" />
+    </mxCell>
+    <mxCell id="s3-note" value="Glue catalog&#xa;provides schema"
+      style="text;html=1;align=center;fontSize=9;fontColor=#687078;strokeColor=none;fillColor=none;"
+      vertex="1" parent="1">
+      <mxGeometry x="1150" y="222" width="140" height="28" as="geometry" />
+    </mxCell>
+
+    <!-- ══ NODE: Dashboard (Result) ══════════════════════════════════ -->
+    <mxCell id="result-box" value=""
+      style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F5E9;strokeColor=#1D8348;strokeWidth=2;arcSize=8;"
+      vertex="1" parent="1">
+      <mxGeometry x="1360" y="108" width="120" height="110" as="geometry" />
+    </mxCell>
+    <mxCell id="result-icon" value="&#128202;"
+      style="text;html=1;align=center;fontSize=28;strokeColor=none;fillColor=none;"
+      vertex="1" parent="1">
+      <mxGeometry x="1360" y="118" width="120" height="36" as="geometry" />
+    </mxCell>
+    <mxCell id="result-name" value="Dashboard"
+      style="text;html=1;align=center;fontSize=12;fontStyle=1;fontColor=#232F3E;strokeColor=none;fillColor=none;"
+      vertex="1" parent="1">
+      <mxGeometry x="1360" y="154" width="120" height="20" as="geometry" />
+    </mxCell>
+    <mxCell id="result-sub" value="KPIs · Trends&#xa;By Account / Region"
+      style="text;html=1;align=center;fontSize=9;fontColor=#687078;strokeColor=none;fillColor=none;"
+      vertex="1" parent="1">
+      <mxGeometry x="1360" y="174" width="120" height="36" as="geometry" />
+    </mxCell>
+    <mxCell id="result-note" value="Savings data&#xa;displayed ✓"
+      style="text;html=1;align=center;fontSize=9;fontColor=#1D8348;fontStyle=1;strokeColor=none;fillColor=none;"
+      vertex="1" parent="1">
+      <mxGeometry x="1350" y="222" width="140" height="28" as="geometry" />
+    </mxCell>
+
+    <!-- ══ ARROWS (top row, left to right) ══════════════════════════ -->
+    <!-- Browser → CloudFront -->
+    <mxCell id="arr1" value="HTTPS opens URL"
+      style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#0972D3;strokeWidth=2;fontSize=9;fontColor=#0972D3;endArrow=block;endFill=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;"
+      edge="1" source="browser-box" target="cf-box" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+
+    <!-- CloudFront → API Gateway -->
+    <mxCell id="arr2" value="React app loads in browser"
+      style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#0972D3;strokeWidth=2;fontSize=9;fontColor=#0972D3;endArrow=block;endFill=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;"
+      edge="1" source="cf-box" target="apigw-box" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+
+    <!-- API Gateway → Lambda -->
+    <mxCell id="arr3" value="invokes"
+      style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#545B64;strokeWidth=2;fontSize=9;fontColor=#545B64;endArrow=block;endFill=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;"
+      edge="1" source="apigw-box" target="lambda-box" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+
+    <!-- Lambda → Athena -->
+    <mxCell id="arr4" value="StartQueryExecution"
+      style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#545B64;strokeWidth=2;fontSize=9;fontColor=#545B64;endArrow=block;endFill=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;"
+      edge="1" source="lambda-box" target="athena-box" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+
+    <!-- Athena → S3 -->
+    <mxCell id="arr5" value="reads Parquet"
+      style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#545B64;strokeWidth=2;fontSize=9;fontColor=#545B64;endArrow=block;endFill=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;"
+      edge="1" source="athena-box" target="s3-box" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+
+    <!-- S3 → Dashboard (JSON result) -->
+    <mxCell id="arr6" value="JSON response back to browser"
+      style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#1D8348;strokeWidth=2;fontSize=9;fontColor=#1D8348;endArrow=block;endFill=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;"
+      edge="1" source="s3-box" target="result-box" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+
+    <!-- ══ BOTTOM PANELS ══════════════════════════════════════════════ -->
+    <!-- EXISTS panel -->
+    <mxCell id="exists-box" value=""
+      style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F5E9;strokeColor=#1D8348;strokeWidth=2;arcSize=4;"
+      vertex="1" parent="1">
+      <mxGeometry x="40" y="440" width="740" height="160" as="geometry" />
+    </mxCell>
+    <mxCell id="exists-title" value="✅  What EXISTS in Phase 1"
+      style="text;html=1;align=left;fontSize=12;fontStyle=1;fontColor=#1D8348;strokeColor=none;fillColor=none;"
+      vertex="1" parent="1">
+      <mxGeometry x="56" y="452" width="360" height="22" as="geometry" />
+    </mxCell>
+    <mxCell id="exists-1" value="• &lt;b&gt;ebsp1-lambda-role&lt;/b&gt; — Lambda runs as this IAM Role"
+      style="text;html=1;align=left;fontSize=10;fontColor=#232F3E;strokeColor=none;fillColor=none;"
+      vertex="1" parent="1">
+      <mxGeometry x="56" y="478" width="700" height="18" as="geometry" />
+    </mxCell>
+    <mxCell id="exists-2" value="• &lt;b&gt;S3 bucket policy&lt;/b&gt; — allows Lambda role to read CUR files"
+      style="text;html=1;align=left;fontSize=10;fontColor=#232F3E;strokeColor=none;fillColor=none;"
+      vertex="1" parent="1">
+      <mxGeometry x="56" y="500" width="700" height="18" as="geometry" />
+    </mxCell>
+    <mxCell id="exists-3" value="• &lt;b&gt;Athena workgroup policy&lt;/b&gt; — allows Lambda role to query"
+      style="text;html=1;align=left;fontSize=10;fontColor=#232F3E;strokeColor=none;fillColor=none;"
+      vertex="1" parent="1">
+      <mxGeometry x="56" y="522" width="700" height="18" as="geometry" />
+    </mxCell>
+    <mxCell id="exists-4" value="• &lt;b&gt;CloudFront OAC&lt;/b&gt; — allows CloudFront to read S3 frontend bucket"
+      style="text;html=1;align=left;fontSize=10;fontColor=#232F3E;strokeColor=none;fillColor=none;"
+      vertex="1" parent="1">
+      <mxGeometry x="56" y="544" width="700" height="18" as="geometry" />
+    </mxCell>
+    <mxCell id="exists-5" value="• &lt;b&gt;STS temp credentials&lt;/b&gt; — auto-issued to Lambda at runtime, expire in 15 min"
+      style="text;html=1;align=left;fontSize=10;fontColor=#232F3E;strokeColor=none;fillColor=none;"
+      vertex="1" parent="1">
+      <mxGeometry x="56" y="566" width="700" height="18" as="geometry" />
+    </mxCell>
+
+    <!-- DOES NOT EXIST panel -->
+    <mxCell id="noexist-box" value=""
+      style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FDE8E8;strokeColor=#D91515;strokeWidth=2;arcSize=4;"
+      vertex="1" parent="1">
+      <mxGeometry x="800" y="440" width="740" height="160" as="geometry" />
+    </mxCell>
+    <mxCell id="noexist-title" value="❌  What does NOT EXIST"
+      style="text;html=1;align=left;fontSize=12;fontStyle=1;fontColor=#D91515;strokeColor=none;fillColor=none;"
+      vertex="1" parent="1">
+      <mxGeometry x="816" y="452" width="360" height="22" as="geometry" />
+    </mxCell>
+    <mxCell id="noexist-1" value="• IAM users with access keys"
+      style="text;html=1;align=left;fontSize=10;fontColor=#232F3E;strokeColor=none;fillColor=none;"
+      vertex="1" parent="1">
+      <mxGeometry x="816" y="478" width="700" height="18" as="geometry" />
+    </mxCell>
+    <mxCell id="noexist-2" value="• Passwords stored anywhere"
+      style="text;html=1;align=left;fontSize=10;fontColor=#232F3E;strokeColor=none;fillColor=none;"
+      vertex="1" parent="1">
+      <mxGeometry x="816" y="500" width="700" height="18" as="geometry" />
+    </mxCell>
+    <mxCell id="noexist-3" value="• EBSDashboardReadRole (that is Phase 2)"
+      style="text;html=1;align=left;fontSize=10;fontColor=#232F3E;strokeColor=none;fillColor=none;"
+      vertex="1" parent="1">
+      <mxGeometry x="816" y="522" width="700" height="18" as="geometry" />
+    </mxCell>
+    <mxCell id="noexist-4" value="• STS AssumeRole cross-account (that is Phase 2)"
+      style="text;html=1;align=left;fontSize=10;fontColor=#232F3E;strokeColor=none;fillColor=none;"
+      vertex="1" parent="1">
+      <mxGeometry x="816" y="544" width="700" height="18" as="geometry" />
+    </mxCell>
+    <mxCell id="noexist-5" value="• EC2 DescribeVolumes calls (that is Phase 2)"
+      style="text;html=1;align=left;fontSize=10;fontColor=#232F3E;strokeColor=none;fillColor=none;"
+      vertex="1" parent="1">
+      <mxGeometry x="816" y="566" width="700" height="18" as="geometry" />
+    </mxCell>
+    <mxCell id="noexist-6" value="• Any human identity touching the data"
+      style="text;html=1;align=left;fontSize=10;fontColor=#232F3E;strokeColor=none;fillColor=none;"
+      vertex="1" parent="1">
+      <mxGeometry x="816" y="588" width="700" height="18" as="geometry" />
+    </mxCell>
+
+    <!-- ══ LEGEND ══════════════════════════════════════════════════════ -->
+    <mxCell id="leg-title" value="LEGEND:"
+      style="text;html=1;align=left;fontSize=9;fontStyle=1;fontColor=#687078;strokeColor=none;fillColor=none;"
+      vertex="1" parent="1">
+      <mxGeometry x="40" y="622" width="60" height="18" as="geometry" />
+    </mxCell>
+    <mxCell id="leg-blue" value="" style="ellipse;fillColor=#0972D3;strokeColor=none;" vertex="1" parent="1">
+      <mxGeometry x="106" y="626" width="12" height="12" as="geometry" />
+    </mxCell>
+    <mxCell id="leg-blue-lbl" value="Browser / HTTPS request" style="text;html=1;align=left;fontSize=9;fontColor=#545B64;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+      <mxGeometry x="124" y="622" width="160" height="18" as="geometry" />
+    </mxCell>
+    <mxCell id="leg-grey" value="" style="ellipse;fillColor=#545B64;strokeColor=none;" vertex="1" parent="1">
+      <mxGeometry x="296" y="626" width="12" height="12" as="geometry" />
+    </mxCell>
+    <mxCell id="leg-grey-lbl" value="AWS service-to-service call" style="text;html=1;align=left;fontSize=9;fontColor=#545B64;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+      <mxGeometry x="314" y="622" width="170" height="18" as="geometry" />
+    </mxCell>
+    <mxCell id="leg-green" value="" style="ellipse;fillColor=#1D8348;strokeColor=none;" vertex="1" parent="1">
+      <mxGeometry x="496" y="626" width="12" height="12" as="geometry" />
+    </mxCell>
+    <mxCell id="leg-green-lbl" value="JSON response back to browser" style="text;html=1;align=left;fontSize=9;fontColor=#545B64;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+      <mxGeometry x="514" y="622" width="180" height="18" as="geometry" />
+    </mxCell>
+    <mxCell id="leg-red" value="" style="ellipse;fillColor=#DD344C;strokeColor=none;" vertex="1" parent="1">
+      <mxGeometry x="706" y="626" width="12" height="12" as="geometry" />
+    </mxCell>
+    <mxCell id="leg-red-lbl" value="IAM Role identity (not a user)" style="text;html=1;align=left;fontSize=9;fontColor=#545B64;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+      <mxGeometry x="724" y="622" width="180" height="18" as="geometry" />
+    </mxCell>
+    <mxCell id="leg-gry2" value="" style="ellipse;fillColor=#AABBBB;strokeColor=none;" vertex="1" parent="1">
+      <mxGeometry x="916" y="626" width="12" height="12" as="geometry" />
+    </mxCell>
+    <mxCell id="leg-gry2-lbl" value="Greyed = Phase 2 only, not in Phase 1" style="text;html=1;align=left;fontSize=9;fontColor=#545B64;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+      <mxGeometry x="934" y="622" width="220" height="18" as="geometry" />
+    </mxCell>
+
+  </root>
+</mxGraphModel>
