@@ -44,7 +44,7 @@
 | Week 19 | [GitOps on EKS: managed Argo CD vs self-managed](week-19-gitops-argocd) | EKS Capability for Argo CD, Helm, drift detection, cluster-scoped CRDs | ✅ Complete |
 | Week 20 | [An accountable event bus](week-20-eventbridge-accountable-bus) | EventBridge custom bus, **`PutEvents` data-plane logging to CloudTrail** (opt-in, launched 4 May 2026), schema discovery, archive + replay, catch-all detection | ✅ Complete |
 | Week 21 | [Blue/green on ECS](week-21-bluegreen-ecs) | ECS native blue/green, ALB target-group switching, bake time, CloudWatch alarm rollback, Fargate | ✅ Complete |
-| Week 22 | Container Image Security Pipeline | ECR scanning, image signing, policy enforcement | 📅 Planned |
+| Week 22 | [Container image security](week-22-container-image-security) | ECR **managed signing** (Nov 2025), Amazon Inspector enhanced scanning, and a Lambda gate that quarantines what the other two only describe | ✅ Complete |
 | Week 23 | Service Networking with VPC Lattice | VPC Lattice service networks, cross-VPC/cross-account routing, auth policies (replaces App Mesh — shut down 2026-09-30) | 📅 Planned |
 | Week 24 | Chaos Engineering + Agent Evaluation | FIS fault injection, resilience testing, runbooks — plus measuring whether AWS DevOps Agent finds a fault you deliberately caused | 📅 Planned |
 | Week 25 | Serverless Microservices | API Gateway + Lambda, DynamoDB, SAM, local testing | 📅 Planned |
@@ -594,6 +594,40 @@ Every project follows the same enterprise pattern:
 
 
 ---
+
+## Week 22 — Container image security: a signature says who, not whether
+
+**The story:** you ship a version of an app, and a month later nobody can say who built it
+or what was inside it. AWS answers both questions with features that are close to one
+click: ECR signs every image as it arrives, Amazon Inspector scans it for known flaws.
+Neither of them stops anything. Signing writes a signature, scanning writes findings, and
+a flawed image ends up signed, scanned, documented and still deployable.
+
+**What it builds:** a signed-and-scanned ECR repository, a second one deliberately outside
+the filter as a control, Inspector enhanced scanning, and the part that actually enforces
+— a Lambda gate on two EventBridge triggers that strips the deployable tags off anything
+with blocking findings. 24 resources; only four of them are the signing and scanning.
+
+**What it found:**
+
+- **A valid signature on an image the gate refused.** Signature complete, 16 findings,
+  one critical. **A signature says who built an image, not whether it is safe** —
+  different questions, and only one has "signing" in the name.
+- **Inspector never re-scans a digest it has already seen.** An identical rebuild, even
+  after deleting the image, produces no scan event. Promoting an image by re-tagging it is
+  how most things reach production, and a gate keyed on first scans misses all of it.
+- **The gate failed closed, which is not the same as working.** When it broke it raised
+  and alarmed rather than allowing — correct, and the vulnerable images were still
+  deployable. Only the test for enforcement caught that.
+- **Signing is billed per signature and the rate is not on the pricing page.** $0.02 each,
+  `AsyncActions-ImageSigning`, 99.7% of a $0.2409 week. AWS Signer's pricing page says "no
+  additional charge" and is correct about Signer. Every rebuild re-signs.
+- **`aws_ecr_signing_configuration` does not exist** in the AWS provider — still absent
+  in 6.68.0, eleven months after the feature shipped. Cloud Control carries it, so `awscc`
+  manages it today.
+
+Signing and scanning were correct on the first apply. The enforcement took five attempts,
+and every fault was found by a test rather than by reading the code.
 
 ## Week 21 — Blue/green on ECS: the rollback that never had to happen
 

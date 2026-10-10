@@ -21,6 +21,12 @@ import re
 import subprocess
 import sys
 
+# The roadmap rows carry emoji status markers. On Windows the default
+# console codec is cp1252, which cannot encode them, so printing a result
+# line crashed the run -- and every check after it never ran. A reporting
+# crash in a checker is worse than a failing check: it looks like noise.
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 REPO = pathlib.Path(__file__).resolve().parents[1]
 BLOG = pathlib.Path(r"C:/Projects/Engineering/katta698.github.io")
 
@@ -191,6 +197,26 @@ def self_test(quiet=False):
     return 0
 
 
+PLACEHOLDER_ACCOUNT_IDS = {
+    "111122223333",   # used throughout the AWS documentation
+    "123456789012",   # the other reserved example id
+    "000000000000",
+}
+
+
+def only_placeholder_ids(path):
+    """True when every 12-digit number in the file is a documented placeholder.
+
+    Pure except for the read, so --self-test can drive the set logic directly.
+    """
+    try:
+        text = open(path, encoding="utf-8", errors="replace").read()
+    except OSError:
+        return False
+    found = set(re.findall(r"[0-9]{12}", text))
+    return bool(found) and found <= PLACEHOLDER_ACCOUNT_IDS
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("week", nargs="?", help="week folder name, e.g. week-15-cloudtrail-audit-forensics")
@@ -289,6 +315,16 @@ def main():
              f"{slug}/*.py", f"{slug}/*.tf", f"{slug}/*.sql"],
             cwd=REPO, capture_output=True, text=True, timeout=60)
         hits = [l for l in out.stdout.splitlines() if l.strip()]
+        # AWS publishes reserved placeholder account ids and uses them
+        # throughout its own documentation. A file whose ONLY 12-digit numbers
+        # are those placeholders is quoting the docs, not leaking anything --
+        # Week 22's gate quotes a documented event ARN in a docstring and in
+        # its self-test cases.
+        #
+        # Narrow on purpose: a file is excused only if every 12-digit number in
+        # it is a known placeholder. One real id anywhere in the file and it
+        # still fails.
+        hits = [h for h in hits if not only_placeholder_ids(REPO / h)]
         # BLOCKING, not advisory. This rule was advisory until 2026-09-24, and it
         # worked perfectly the whole time: it printed
         #   [warn] ... week-18-.../terraform/environments/dev/variables.tf
