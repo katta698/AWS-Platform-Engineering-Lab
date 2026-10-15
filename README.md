@@ -1,13 +1,13 @@
 # AWS Platform Engineering Lab
 
-**53-week hands-on AWS lab series — building production-grade cloud infrastructure from scratch.**
+**52-week hands-on AWS lab series — building production-grade cloud infrastructure from scratch.**
 
 > 14 years as a DBA → transitioning to Cloud Architecture.
 > Every week: real code, real bugs, real fixes. No tutorials. No sandboxes.
 
 ---
 
-## Roadmap — Year 1 planned, Year 2 themed
+## Roadmap — 52 weeks planned
 
 ### Phase 1 — Self-Service Platforms (Weeks 1–9)
 
@@ -36,7 +36,7 @@
 | [Week 16](./week-16-devops-agent-investigations) | AWS DevOps Agent — Investigations, Graded | AWS DevOps Agent (agent space + associations) via the `awscc` provider, ServiceNow OAuth `client_credentials`, Lambda, EventBridge, SSM, S3, CloudWatch alarm, graded against Week 15's CloudTrail trail (planned as *Health Event Triage*; became an evaluation of whether the agent's conclusions can be trusted) | ✅ Complete |
 | [Week 17](./week-17-mcp-platform-ops) | MCP Server for Platform Operations | MCP server over **live** AWS control-plane state (Cost Explorer, Resource Groups Tagging, CloudWatch) on Lambda + Function URL with SigV4, DynamoDB TTL cache, read-only per-tool IAM (planned over Weeks 10–16's stored data; that data was destroyed on 2026-08-30, so the source changed and the topic did not) | ✅ Complete |
 
-### Phase 3 — Containers & Modern Patterns (Weeks 18–25)
+### Phase 3 — Containers & Service Connectivity (Weeks 18–25)
 
 | Week | Project | Key AWS Services | Status |
 |------|---------|-----------------|--------|
@@ -92,9 +92,11 @@
 | Week 52 | Platform Reliability Engineering | SLOs, error budgets, agent-assisted incident response end to end | 📅 Planned |
 | Week 53 | Capstone: Full Cloud Platform | Everything integrated — self-service, GitOps, AI, FinOps, DR | 📅 Planned |
 
-## Year 2 — Weeks 54+ (themed backlog, not a fixed schedule)
+## Beyond week 52 — optional, not committed
 
-Year 1 is planned week by week. **Year 2 deliberately is not.**
+The 52 weeks are planned week by week. **Anything past them deliberately is not** — and is not
+a commitment. The series is 52 weeks; carrying on afterwards is a decision to take at the time,
+not a promise made now.
 
 That is a lesson, not laziness. The Year 1 roadmap was written in early 2026 and by Week 15 two
 of its topics had become unbuildable — CloudTrail Lake closed to new customers, App Mesh was

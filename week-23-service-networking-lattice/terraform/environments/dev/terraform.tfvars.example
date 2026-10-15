@@ -1,0 +1,8 @@
+# Copy to terraform.tfvars for local runs, or set as HCP workspace variables.
+# terraform.tfvars is gitignored.
+
+region = "us-east-1"
+
+# Left at AWS_IAM for every test but the fifth, which flips it to NONE to show
+# an attached policy going inert.
+# service_auth_type = "AWS_IAM"

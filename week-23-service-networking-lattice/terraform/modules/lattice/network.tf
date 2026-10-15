@@ -1,0 +1,65 @@
+# Week 23 -- Service networking with VPC Lattice
+#
+# The goal: one service that only a named identity can call, where the check
+# happens before the request reaches any code.
+#
+# A security group cannot express "only the orders service may call rates" --
+# it can only say "this IP range may connect". Both Lambdas here sit in the
+# same subnet behind the same security group. The only thing that differs is
+# which IAM role signs the request, and that is the whole point.
+
+data "aws_caller_identity" "current" {}
+data "aws_region" "current" {}
+
+locals {
+  account_id = data.aws_caller_identity.current.account_id
+  region     = data.aws_region.current.region
+}
+
+# ---------------------------------------------------------------------------
+# The consumer network
+# ---------------------------------------------------------------------------
+#
+# No internet gateway and no NAT gateway. The client reaches the service over
+# the service network association, which is free; a NAT would have cost more
+# per hour than everything else here combined.
+
+resource "aws_vpc" "consumer" {
+  cidr_block           = var.vpc_cidr
+  enable_dns_support   = true
+  enable_dns_hostnames = true
+
+  tags = merge(var.tags, { Name = "${var.name}-consumer" })
+}
+
+resource "aws_subnet" "consumer" {
+  count = var.subnet_count
+
+  vpc_id            = aws_vpc.consumer.id
+  cidr_block        = cidrsubnet(var.vpc_cidr, 4, count.index)
+  availability_zone = data.aws_availability_zones.available.names[count.index]
+
+  tags = merge(var.tags, { Name = "${var.name}-consumer-${count.index}" })
+}
+
+data "aws_availability_zones" "available" {
+  state = "available"
+}
+
+# Deliberately permissive, and deliberately shared by both callers. If the
+# security group were doing the authorisation, both would get the same answer.
+resource "aws_security_group" "client" {
+  name        = "${var.name}-client"
+  description = "Shared by both callers on purpose -- it cannot tell them apart."
+  vpc_id      = aws_vpc.consumer.id
+
+  egress {
+    description = "Anywhere inside the VPC and out to the service network."
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = var.tags
+}
