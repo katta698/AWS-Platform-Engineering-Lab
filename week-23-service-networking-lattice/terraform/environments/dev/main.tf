@@ -20,6 +20,12 @@ terraform {
       source  = "hashicorp/archive"
       version = ">= 2.4"
     }
+
+    # Only for the IAM propagation wait before the auth policy is written.
+    time = {
+      source  = "hashicorp/time"
+      version = ">= 0.11"
+    }
   }
 
   cloud {

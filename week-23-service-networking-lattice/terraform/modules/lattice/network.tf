@@ -42,8 +42,22 @@ resource "aws_subnet" "consumer" {
   tags = merge(var.tags, { Name = "${var.name}-consumer-${count.index}" })
 }
 
+# zone-type matters. This account has an opted-in Local Zone
+# (us-east-1-dfw-1a), which describe-availability-zones returns alongside the
+# ordinary ones. A subnet landed in it and Lambda refused to attach:
+#
+#   InvalidParameterValueException: The provided subnets contain availability
+#   zone Lambda doesn't support.
+#
+# Filtering on zone-type keeps this to standard AZs and is region-portable --
+# excluding the zone by name would only fix this account.
 data "aws_availability_zones" "available" {
   state = "available"
+
+  filter {
+    name   = "zone-type"
+    values = ["availability-zone"]
+  }
 }
 
 # Deliberately permissive, and deliberately shared by both callers. If the

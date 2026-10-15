@@ -104,7 +104,20 @@ resource "aws_vpclattice_auth_policy" "network" {
 # The fine boundary, and the one a security group cannot express: a named role,
 # and only the GET method. Both callers sit in the same subnet behind the same
 # security group; this is the only thing that tells them apart.
+# IAM is eventually consistent, and an auth policy naming a brand-new role as a
+# Principal is rejected outright rather than retried:
+#
+#   ValidationException: Policy principal is not found.
+#
+# The role exists in Terraform state and not yet everywhere IAM needs it. A
+# short wait is the documented remedy; there is no "wait for propagation" API.
+resource "time_sleep" "iam_propagation" {
+  depends_on      = [aws_iam_role.client, aws_iam_role_policy.client]
+  create_duration = "20s"
+}
+
 resource "aws_vpclattice_auth_policy" "rates" {
+  depends_on          = [time_sleep.iam_propagation]
   resource_identifier = aws_vpclattice_service.rates.arn
 
   policy = jsonencode({
