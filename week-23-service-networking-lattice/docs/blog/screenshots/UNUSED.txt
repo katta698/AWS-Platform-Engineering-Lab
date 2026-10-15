@@ -1,0 +1,9 @@
+# Figures declared in FIGURE_PLAN.md that were deliberately not captured,
+# and why. Retiring a slot here is a decision; deleting it silently is not.
+
+09-refused-call.png
+  Merged into 08. The point is the COMPARISON -- the same code in the same
+  subnet behind the same security group getting 200 and 403 -- and splitting
+  it across two figures makes the reader hold one in their head while
+  looking at the other. 08 now shows the allowed call, the refused call, the
+  wrong-method call and the unsigned call together.

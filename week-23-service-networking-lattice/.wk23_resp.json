@@ -1,1 +1,1 @@
-{"status": 403, "signed": true, "body": "InvalidSignatureException: Signed payloads are not supported"}
+{"status": 403, "signed": true, "body": "AccessDeniedException: User: arn:aws:sts::684346483786:assumed-role/week23-lattice-orders-client/week23-lattice-client is not authorized to perform: vpc-lattice-svcs:Invoke on resource: arn:aws:vpc-lattice:us-east-1:684346483786:service/svc-0a1eedbdb164b813e/rates because no service-based policy allows the vpc-lattice-svcs:Invoke action"}

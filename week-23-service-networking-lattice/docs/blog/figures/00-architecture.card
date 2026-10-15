@@ -1,0 +1,40 @@
+title: Who may call this service
+subtitle: week-23 - two identical callers, two authorisation layers, one switch that decides whether either is read
+width: 1100
+---
+  CONSUMER VPC  (no NAT, no internet gateway)
+  ┌──────────────────────────────────────────────┐
+  │  subnet us-east-1a      subnet us-east-1b    │
+  │  ┌────────────────────────────────────────┐  │
+  │  │   ONE security group, shared           │  │
+  │  │                                        │  │
+  │  │   client Lambda        intruder Lambda │  │
+  │  │   role: orders-client  role: stranger  │  │
+  │  │   ── identical code, identical net ──  │  │
+  │  └────────────────────────────────────────┘  │
+  └───────────────────┬──────────────────────────┘
+                      │  VPC association (free)
+                      ▼
+  ╔══════════════════════════════════════════════╗
+  ║  SERVICE NETWORK     authType: AWS_IAM       ║
+  ║                                              ║
+  ║  auth policy #1  ── this org, this VPC,      ║
+  ║                     not anonymous            ║
+  ╚═══════════════════┬══════════════════════════╝
+                      ▼
+  ╔══════════════════════════════════════════════╗
+  ║  SERVICE "rates"     authType: AWS_IAM       ║
+  ║                                              ║
+  ║  auth policy #2  ── role orders-client,      ║
+  ║                     method GET only          ║
+  ╚═══════════════════┬══════════════════════════╝
+                      ▼
+            listener :80  ──▶  target group (LAMBDA)
+                                      │
+                                      ▼
+                            backend Lambda
+                            performs NO auth of its own
+
+  BOTH policies must allow. Either authType set to NONE makes its layer
+  wave everything through -- while the policy stays attached, stays in the
+  console, and reports state: Inactive.

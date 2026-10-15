@@ -1,1 +1,0 @@
-{"status": 403, "signed": true, "body": "IncompleteSignatureException: Missing the 'x-amz-content-sha256' in canonical headers"}

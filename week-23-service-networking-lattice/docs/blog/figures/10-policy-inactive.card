@@ -1,0 +1,47 @@
+title: The policy that was attached, visible, and inert
+subtitle: One word changed. Nothing else. The policy document is identical.
+width: 1120
+---
+WITH auth_type = AWS_IAM                    WITH auth_type = NONE
+
+$ aws vpc-lattice get-auth-policy --resource-identifier <service-arn>
+
+  state: Active                      [ok]     state: Inactive         [FAIL]
+
+  policy: {                                   policy: {
+    "Sid": "OnlyTheOrdersClient...              "Sid": "OnlyTheOrdersClient...
+    "Principal": {                              "Principal": {
+      "AWS": ".../orders-client"                  "AWS": ".../orders-client"
+    },                                          },
+    "Condition": {                              "Condition": {
+      "RequestMethod": "GET"                      "RequestMethod": "GET"
+    }                                           }
+  }                                           }
+
+                         IDENTICAL DOCUMENT
+
+--- the intruder, wrong role AND wrong method -----------------------------
+
+$ aws lambda invoke --function-name week23-lattice-intruder \
+      --payload '{"mode":"signed","method":"POST","path":"/rates"}'
+
+  status: 200                                                       [FAIL]
+  {"service": "rates", "method": "POST", "rate": 42.5}
+
+The wrong identity, using the wrong method, served happily. The policy
+naming one role and one method is still attached and still visible in the
+console.
+
+--- but the system still looks healthy ------------------------------------
+
+$ ... --payload '{"mode":"unsigned","method":"POST","path":"/rates"}'
+
+  status: 403
+  User: anonymous ... no NETWORK-BASED policy allows this action
+
+The SERVICE policy went silent. The SERVICE NETWORK policy did not. So the
+system kept refusing anonymous callers the whole time.
+
+Spot-check from outside the VPC and you get a 403 and conclude the controls
+are working. A half-disabled two-layer control looks healthier than a fully
+disabled one, because something is still saying no.

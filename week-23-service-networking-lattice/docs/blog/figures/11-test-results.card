@@ -1,0 +1,45 @@
+title: Six tests, run in order
+subtitle: Test 2 must pass before any refusal below it means anything
+width: 1150
+---
+1. An unsigned request is refused
+   [ok]  403 -- "User: anonymous ... no network-based policy allows this"
+
+2. A signed request from the named role succeeds
+   [ok]  200 -- the allowed identity, the allowed method
+         Nothing below means anything until this passes. Every call would
+         be refused if the plumbing were simply broken, and a broken build
+         produces a perfect-looking set of denials.
+
+3. The SAME code, signed as a different role, is refused
+   [ok]  403 -- arn:...assumed-role/week23-lattice-stranger/...
+         Same VPC. Same two subnets. Same security group. Both roles are
+         granted vpc-lattice-svcs:Invoke in their own IAM policy, so the
+         refusal can only have come from the auth policy.
+         This is the week.
+
+4. The allowed role, using a method the policy does not permit
+   [ok]  403 -- the RequestMethod condition is enforced, not decorative
+
+5. A restrictive policy on a service whose auth type is NONE
+   [FAIL] 200 -- wrong role, wrong method, served anyway
+   [FAIL] the policy reports state: Inactive while still attached
+          and the service network policy kept refusing anonymous callers
+          throughout, so the system never looked broken
+
+6. Auth type AWS_IAM with the policy deleted
+   [ok]  403 -- "no service-based policy allows this action"
+         Fails closed. Note "service-based" here against "network-based"
+         in test 1: the error names which layer refused.
+
+--- what the tests found that reading the code did not --------------------
+
+  [FAIL] the service DNS resolves to IPv6; an IPv4-only VPC gets
+         "Cannot assign requested address", which reads like routing
+  [FAIL] the VPC association security group needs INBOUND rules, even
+         though the client is making an outbound call. Egress-only
+         produces a silent timeout, no error anywhere
+  [FAIL] Lattice requires x-amz-content-sha256 inside the signature, set
+         to the literal UNSIGNED-PAYLOAD. A real hash is rejected with
+         "Signed payloads are not supported" -- a 403 from a service
+         whose whole job is issuing 403s

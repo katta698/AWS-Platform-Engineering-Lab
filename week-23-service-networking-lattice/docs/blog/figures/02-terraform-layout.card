@@ -1,0 +1,39 @@
+title: The code behind this week
+subtitle: week-23-service-networking-lattice - what each file does, and how big it actually is
+width: 1080
+---
+week-23-service-networking-lattice/
+│
+├── terraform/
+│   ├── environments/dev/            # WHAT this environment is
+│   │   ├── main.tf           65     # HCP backend, provider pins, one module
+│   │   │                            # call. service_auth_type is a VARIABLE,
+│   │   │                            # because test 5 flips it to NONE
+│   │   ├── variables.tf      14
+│   │   └── outputs.tf        32     # service DNS, both function names
+│   │
+│   └── modules/lattice/             # HOW it is built -- 24 resources
+│       ├── network.tf        98     # VPC, two subnets, ONE security group
+│       │                            # shared by both callers on purpose.
+│       │                            # No NAT, no internet gateway.
+│       ├── lattice.tf       138     # service network, service, listener,
+│       │                            # target group, and BOTH auth policies
+│       ├── compute.tf       260     # two caller Lambdas, the backend, and
+│       │                            # three IAM roles
+│       ├── variables.tf      46
+│       └── outputs.tf        43
+│
+├── lambda/
+│   ├── backend/handler.py    32     # the protected service. Performs NO
+│   │                                # authorisation of its own -- that is
+│   │                                # the entire argument
+│   └── client/handler.py    190     # the caller. Signs with SigV4, forces
+│                                    # IPv4, sends UNSIGNED-PAYLOAD. Ten
+│                                    # self-tests, all earned the hard way
+│
+└── scripts/
+    ├── test_auth.sh         149     # the six tests, in order, pass/fail
+    └── cleanup.sh            76     # teardown verification
+
+The two callers are 2 of those 24 resources and differ in exactly one
+attribute: the IAM role attached to them.

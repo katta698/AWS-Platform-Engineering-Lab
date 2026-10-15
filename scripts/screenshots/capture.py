@@ -713,7 +713,7 @@ def redact_account_id(page, account_id: str) -> None:
 
 def capture(url: str, output_path: Path, wait_selector: str | None, wait_ms: int | None,
             headed: bool, login_wait_seconds: int, height: int,
-            click_text: str | None = None, click_wait_ms: int = 5000,
+            click_texts: list | None = None, click_wait_ms: int = 5000,
             allow_unresolved_account: bool = False, cdp_port: int | None = None, scroll_to: str | None = None):
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -876,7 +876,13 @@ def capture(url: str, output_path: Path, wait_selector: str | None, wait_ms: int
         # rewrite in place), so the only way to reach a tab is to click it.
         # Added 2026-08-05 for Week 13 after guessing tab slugs silently landed
         # on the default tab and produced convincingly-wrong screenshots.
-        if click_text:
+        # click_text may be given more than once. Some consoles bury a page
+        # several hops deep with no addressable URL for any of them: VPC
+        # Lattice needs sidebar -> service -> the auth policy tab, three
+        # clicks, none of which has a hash you can navigate to directly.
+        # Added 2026-10-15 for Week 23 rather than substituting a typeset card
+        # for a console view that was genuinely reachable, just not in one hop.
+        for click_text in (click_texts or []):
             # Try the tab role FIRST, then a link, then raw text. Plain text
             # matching is last because console side-nav items frequently reuse
             # a tab's label (CloudFront has both a "Security" nav section and a
@@ -884,10 +890,19 @@ def capture(url: str, output_path: Path, wait_selector: str | None, wait_ms: int
             # leaves you on the default tab, producing a convincingly-wrong
             # screenshot with no error at all. Learned the hard way, Week 13.
             clicked = False
+            # Exact first, then relaxed. A console link's ACCESSIBLE name
+            # often carries more than its visible text -- a resource id, an
+            # "opens in a new tab" suffix -- so an exact match on what you can
+            # read on screen misses it. The relaxed passes come last so a
+            # precise match still wins and the Week 13 wrong-tab trap stays
+            # shut.
             for locator in (
                 page.get_by_role("tab", name=click_text, exact=True),
                 page.get_by_role("link", name=click_text, exact=True),
                 page.get_by_text(click_text, exact=True),
+                page.get_by_role("link", name=click_text, exact=False),
+                page.locator("a", has_text=click_text),
+                page.get_by_text(click_text, exact=False),
             ):
                 try:
                     locator.first.click(timeout=5000)
@@ -902,6 +917,7 @@ def capture(url: str, output_path: Path, wait_selector: str | None, wait_ms: int
                     "screenshot of the wrong tab. Check the exact visible label."
                 )
             page.wait_for_timeout(click_wait_ms)
+            settle(page, "after click")
 
         settle(page, "pre-capture")
         if account_id:
@@ -977,7 +993,7 @@ if __name__ == "__main__":
     parser.add_argument("--headed", action="store_true", help="Show the browser window (needed for first-time login)")
     parser.add_argument("--login-wait-seconds", type=int, default=90, help="Fixed wait window for manual login in --headed mode")
     parser.add_argument("--height", type=int, default=900, help="Viewport height in px - increase for pages with real content below the fold")
-    parser.add_argument("--click-text", default=None, help="Exact visible text to click before capturing (for SPA tabs with no addressable URL). Fails loudly rather than capturing the wrong tab.")
+    parser.add_argument("--click-text", action="append", default=None, dest="click_text", help="Exact visible text to click before capturing (for SPA tabs with no addressable URL). Repeat to click through several hops in order. Fails loudly rather than capturing the wrong tab.")
     parser.add_argument("--click-wait-ms", type=int, default=5000, help="Wait after the click before capturing")
     parser.add_argument("--scroll-to", default=None, metavar="TEXT",
                         help="scroll the element containing this exact visible text "

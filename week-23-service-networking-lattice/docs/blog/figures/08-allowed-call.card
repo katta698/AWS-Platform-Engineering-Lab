@@ -1,0 +1,46 @@
+title: The same call, from two identities
+subtitle: Same code, same subnets, same security group. One attribute differs.
+width: 1120
+---
+Both callers are Lambda functions in the SAME VPC, the SAME two subnets,
+behind the SAME security group, running BYTE-IDENTICAL code. Both are
+granted vpc-lattice-svcs:Invoke by their own IAM policy.
+
+The only difference is the role attached to the function.
+
+$ aws lambda invoke --function-name week23-lattice-client \
+      --payload '{"mode":"signed","method":"GET","path":"/rates"}'
+
+  status: 200                                                        [ok]
+  {"service": "rates", "method": "GET", "rate": 42.5,
+   "note": "this function performed no authorisation of its own"}
+
+$ aws lambda invoke --function-name week23-lattice-intruder \
+      --payload '{"mode":"signed","method":"GET","path":"/rates"}'
+
+  status: 403                                                        [ok]
+  AccessDeniedException: User:
+    arn:aws:sts::<account>:assumed-role/week23-lattice-stranger/...
+  is not authorized to perform: vpc-lattice-svcs:Invoke
+
+--- and the right caller, using a method the policy does not allow ---------
+
+$ aws lambda invoke --function-name week23-lattice-client \
+      --payload '{"mode":"signed","method":"POST","path":"/rates"}'
+
+  status: 403                                                        [ok]
+  arn:aws:sts::<account>:assumed-role/week23-lattice-orders-client/...
+  is not authorized to perform: vpc-lattice-svcs:Invoke
+
+--- and an unsigned caller -------------------------------------------------
+
+  status: 403                                                        [ok]
+  User: anonymous ... because no NETWORK-BASED policy allows the
+  vpc-lattice-svcs:Invoke action
+
+Note the wording of that last one. It names which of the two layers
+refused -- the service network policy, not the service policy. That
+distinction becomes important in the next figure.
+
+A security group cannot produce these four different answers. It sees one
+subnet, one set of rules, and four identical packets.
