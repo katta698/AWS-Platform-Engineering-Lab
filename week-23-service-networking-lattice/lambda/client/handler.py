@@ -16,6 +16,7 @@ the first is the data plane (calling through one). Sign with the wrong name and
 you get a 403 that looks exactly like a policy denial.
 """
 
+import hashlib
 import json
 import os
 import socket
@@ -72,6 +73,17 @@ def build_request(url, method, body, creds):
     data = body.encode() if body else None
     req = AWSRequest(method=method, url=url, data=data)
     if creds is not None:
+        # VPC Lattice requires x-amz-content-sha256 to be part of the signed
+        # canonical headers. botocore's SigV4Auth does not add it for a generic
+        # service -- it is S3-style payload signing -- so a correctly signed
+        # request is rejected with:
+        #
+        #   403 IncompleteSignatureException: Missing the
+        #   'x-amz-content-sha256' in canonical headers
+        #
+        # which looks like an authorisation failure and is a signing one. Set
+        # it BEFORE add_auth so it is covered by the signature.
+        req.headers["x-amz-content-sha256"] = hashlib.sha256(data or b"").hexdigest()
         SigV4Auth(creds, SIGV4_SERVICE, REGION).add_auth(req)
     headers = dict(req.headers)
     if data and "content-type" not in {k.lower() for k in headers}:
@@ -138,7 +150,18 @@ def self_test():
                   SIGV4_SERVICE in h_signed.get("Authorization", "")
                   and "/vpc-lattice/" not in h_signed.get("Authorization", "")))
 
+    cases.append(("a signed request carries x-amz-content-sha256",
+                  "x-amz-content-sha256" in {k.lower() for k in h_signed}))
+    cases.append(("and it is the sha256 of an empty body for a GET",
+                  h_signed.get("x-amz-content-sha256") ==
+                  __import__("hashlib").sha256(b"").hexdigest()))
+    cases.append(("the payload hash is inside the signed headers",
+                  "x-amz-content-sha256" in h_signed.get("Authorization", "")))
+
     h_post, d_post = build_request(url, "POST", '{"a":1}', FakeCreds())
+    cases.append(("a POST hashes its actual body",
+                  h_post.get("x-amz-content-sha256") ==
+                  __import__("hashlib").sha256(b'{"a":1}').hexdigest()))
     cases.append(("a POST body is encoded", d_post == b'{"a":1}'))
     cases.append(("a POST sets a content type",
                   "content-type" in {k.lower() for k in h_post}))
