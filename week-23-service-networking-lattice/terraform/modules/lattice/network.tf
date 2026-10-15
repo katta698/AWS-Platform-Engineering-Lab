@@ -67,6 +67,25 @@ resource "aws_security_group" "client" {
   description = "Shared by both callers on purpose -- it cannot tell them apart."
   vpc_id      = aws_vpc.consumer.id
 
+  # INBOUND, not outbound, and that is not a typo.
+  #
+  # This security group is attached to the service network VPC association, and
+  # AWS is explicit about the direction: "For traffic to flow from client VPCs
+  # to the services associated with the service network, you must create
+  # inbound rules for the listener ports and listener protocols", with the VPC
+  # CIDR as the source.
+  #
+  # It reads backwards -- the client is making an outbound call -- and an
+  # egress-only group produces no error at all. Requests simply time out, which
+  # looks like a routing problem rather than a firewall one.
+  ingress {
+    description = "Clients in this VPC reaching the service network listener."
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = [var.vpc_cidr]
+  }
+
   egress {
     description = "Anywhere inside the VPC and out to the service network."
     from_port   = 0
