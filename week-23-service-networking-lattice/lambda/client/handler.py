@@ -18,7 +18,27 @@ you get a 403 that looks exactly like a policy denial.
 
 import json
 import os
+import socket
 import urllib.request
+
+# VPC Lattice publishes both an A and an AAAA record for a service. This VPC is
+# IPv4-only, so when the resolver hands back the AAAA first the connection dies
+# with:
+#
+#   URLError: <urlopen error [Errno 99] Cannot assign requested address>
+#
+# which reads like a routing or permissions problem and is neither. Forcing
+# AF_INET makes the client match the network it is actually in. The alternative
+# is giving the VPC and its subnets IPv6, which is the right answer for a
+# dual-stack estate and more than this lab needs.
+_getaddrinfo = socket.getaddrinfo
+
+
+def _ipv4_only(host, port, family=0, type=0, proto=0, flags=0):
+    return _getaddrinfo(host, port, socket.AF_INET, type, proto, flags)
+
+
+socket.getaddrinfo = _ipv4_only
 
 import boto3
 from botocore.auth import SigV4Auth

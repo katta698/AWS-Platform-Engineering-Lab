@@ -16,15 +16,29 @@ cd "$(dirname "$0")/.."
 REGION="${AWS_REGION:-us-east-1}"
 TF=terraform/environments/dev
 
-out() { (cd "$TF" && terraform output -raw "$1" 2>/dev/null); }
+# Values are discovered from AWS by name prefix rather than read from
+# terraform output. The outputs are the obvious source, but they need HCP
+# reachable on every run -- a TLS timeout to app.terraform.io stopped these
+# tests once already, which is a silly reason to be unable to test live
+# infrastructure that is sitting right there.
+PREFIX="${NAME_PREFIX:-week23-lattice}"
 
-FN=$(out client_function_name)
-STRANGER=$(out stranger_role_arn)
-SERVICE_ARN=$(out service_arn)
-if [ -z "$FN" ]; then
-  echo "No Terraform outputs. Has the apply run?" >&2
+FN=$(aws lambda list-functions --region "$REGION"       --query "Functions[?FunctionName=='${PREFIX}-client'].FunctionName" --output text 2>/dev/null)
+SERVICE_ARN=$(aws vpc-lattice list-services --region "$REGION"       --query "items[?name=='${PREFIX}-rates'].arn" --output text 2>/dev/null)
+STRANGER=$(aws iam get-role --role-name "${PREFIX}-stranger"       --query 'Role.Arn' --output text 2>/dev/null)
+
+# Falls back to the outputs if the names ever change.
+out() { (cd "$TF" && terraform output -raw "$1" 2>/dev/null); }
+[ -z "$FN" ]          && FN=$(out client_function_name)
+[ -z "$SERVICE_ARN" ] && SERVICE_ARN=$(out service_arn)
+[ -z "$STRANGER" ]    && STRANGER=$(out stranger_role_arn)
+
+if [ -z "$FN" ] || [ -z "$SERVICE_ARN" ]; then
+  echo "Could not find the deployed resources. Has the apply run?" >&2
   exit 2
 fi
+
+AUTH_NOW=$(aws vpc-lattice get-service --region "$REGION"       --service-identifier "$SERVICE_ARN" --query 'authType' --output text 2>/dev/null)
 
 PASS=0; FAIL=0
 result() {
@@ -50,7 +64,7 @@ except Exception as e:
 echo
 echo "Week 23 -- VPC Lattice authorisation tests"
 echo "service: $SERVICE_ARN"
-echo "auth type on the service: $(out service_auth_type)"
+echo "auth type on the service: $AUTH_NOW"
 echo
 
 # ---------------------------------------------------------------------------
@@ -83,7 +97,7 @@ echo
 # ---------------------------------------------------------------------------
 echo "5. THE TRAP: a restrictive policy on a service whose auth type is NONE"
 echo "   Flip the variable, apply, and the policy is still attached."
-AUTH=$(out service_auth_type)
+AUTH="$AUTH_NOW"
 if [ "$AUTH" = "NONE" ]; then
   S=$(call "{\"mode\":\"signed\",\"role_arn\":\"$STRANGER\",\"method\":\"POST\",\"path\":\"/rates\"}")
   [ "$S" = "200" ] && result ok "200 -- the wrong role, the wrong method, allowed anyway" \
