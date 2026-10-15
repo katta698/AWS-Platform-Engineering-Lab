@@ -26,3 +26,7 @@ output "stranger_role_arn" {
 output "consumer_vpc_id" {
   value = module.lattice.consumer_vpc_id
 }
+
+output "intruder_function_name" {
+  value = module.lattice.intruder_function_name
+}

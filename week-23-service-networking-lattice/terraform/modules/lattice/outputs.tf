@@ -36,3 +36,8 @@ output "stranger_role_arn" {
 output "consumer_vpc_id" {
   value = aws_vpc.consumer.id
 }
+
+output "intruder_function_name" {
+  description = "Same code, same subnets, same security group, different role."
+  value       = aws_lambda_function.intruder.function_name
+}

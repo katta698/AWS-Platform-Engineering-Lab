@@ -25,13 +25,12 @@ PREFIX="${NAME_PREFIX:-week23-lattice}"
 
 FN=$(aws lambda list-functions --region "$REGION"       --query "Functions[?FunctionName=='${PREFIX}-client'].FunctionName" --output text 2>/dev/null)
 SERVICE_ARN=$(aws vpc-lattice list-services --region "$REGION"       --query "items[?name=='${PREFIX}-rates'].arn" --output text 2>/dev/null)
-STRANGER=$(aws iam get-role --role-name "${PREFIX}-stranger"       --query 'Role.Arn' --output text 2>/dev/null)
-
+INTRUDER=$(aws lambda list-functions --region "$REGION" --query "Functions[?FunctionName=='${PREFIX}-intruder'].FunctionName" --output text 2>/dev/null)
 # Falls back to the outputs if the names ever change.
 out() { (cd "$TF" && terraform output -raw "$1" 2>/dev/null); }
 [ -z "$FN" ]          && FN=$(out client_function_name)
 [ -z "$SERVICE_ARN" ] && SERVICE_ARN=$(out service_arn)
-[ -z "$STRANGER" ]    && STRANGER=$(out stranger_role_arn)
+[ -z "$INTRUDER" ]    && INTRUDER=$(out intruder_function_name)
 
 if [ -z "$FN" ] || [ -z "$SERVICE_ARN" ]; then
   echo "Could not find the deployed resources. Has the apply run?" >&2
@@ -46,20 +45,40 @@ result() {
   else FAIL=$((FAIL+1)); echo "  [FAIL] $2"; fi
 }
 
-# call <json-payload> -> echoes the HTTP status the service returned
-call() {
-  aws lambda invoke --region "$REGION" --function-name "$FN" \
-    --cli-binary-format raw-in-base64-out --payload "$1" \
-    /tmp/wk23_out.json >/dev/null 2>&1
-  python -c "
-import json
+# call <json-payload> -> echoes the HTTP status the service returned.
+#
+# The response file is written beside this script rather than in /tmp. Under
+# Git Bash on Windows a /tmp path is translated for the native aws.exe but not
+# for the interpreter that reads it back, so the file lands somewhere the
+# parser is not looking and every test reports an unreadable result -- which
+# says nothing about the service and sends you debugging the wrong layer.
+RESP="$(pwd)/.wk23_resp.json"
+
+call_fn() {
+  local fn="$1"; shift
+  rm -f "$RESP"
+  aws lambda invoke --region "$REGION" --function-name "$fn"     --cli-binary-format raw-in-base64-out --payload "$1"     "$RESP" >/dev/null 2>&1
+  if [ ! -s "$RESP" ]; then echo "NO_RESPONSE_FILE"; return; fi
+  python - "$RESP" <<'PARSE'
+import json, sys
+raw = open(sys.argv[1], encoding="utf-8", errors="replace").read()
 try:
-    d=json.load(open('/tmp/wk23_out.json'))
-    print(d.get('status') if d.get('status') is not None else 'ERR:'+str(d.get('error'))[:60])
-except Exception as e:
-    print('UNREADABLE')
-" 2>/dev/null
+    d = json.loads(raw)
+except Exception:
+    # Never swallow this. An unparseable body is a finding, not a blank.
+    print("UNPARSEABLE:" + " ".join(raw[:120].split()))
+    raise SystemExit
+if d.get("status") is not None:
+    print(d["status"])
+elif d.get("errorMessage"):
+    print("LAMBDA_ERROR:" + str(d["errorMessage"])[:90])
+else:
+    print("ERR:" + str(d.get("error"))[:90])
+PARSE
 }
+
+# The ordinary caller.
+call() { call_fn "$FN" "$1"; }
 
 echo
 echo "Week 23 -- VPC Lattice authorisation tests"
@@ -83,7 +102,7 @@ echo
 
 echo "3. The SAME function, signed as a different role, is refused"
 echo "   Same VPC, same subnet, same security group. Only the identity differs."
-S=$(call "{\"mode\":\"signed\",\"role_arn\":\"$STRANGER\",\"method\":\"GET\",\"path\":\"/rates\"}")
+S=$(call_fn "$INTRUDER" '{"mode":"signed","method":"GET","path":"/rates"}')
 [ "$S" = "403" ] && result ok "403 -- identity is what was checked, not network position" \
                  || result no "expected 403, got $S"
 echo
@@ -99,7 +118,7 @@ echo "5. THE TRAP: a restrictive policy on a service whose auth type is NONE"
 echo "   Flip the variable, apply, and the policy is still attached."
 AUTH="$AUTH_NOW"
 if [ "$AUTH" = "NONE" ]; then
-  S=$(call "{\"mode\":\"signed\",\"role_arn\":\"$STRANGER\",\"method\":\"POST\",\"path\":\"/rates\"}")
+  S=$(call_fn "$INTRUDER" '{"mode":"signed","method":"POST","path":"/rates"}')
   [ "$S" = "200" ] && result ok "200 -- the wrong role, the wrong method, allowed anyway" \
                    || result no "expected 200 (policy inert), got $S"
   STATE=$(aws vpc-lattice get-auth-policy --region "$REGION" \

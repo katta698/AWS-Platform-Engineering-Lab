@@ -1,0 +1,1 @@
+{"status": 403, "signed": true, "body": "InvalidSignatureException: Signed payloads are not supported"}

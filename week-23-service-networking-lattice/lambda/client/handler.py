@@ -46,6 +46,7 @@ from botocore.auth import SigV4Auth
 from botocore.awsrequest import AWSRequest
 
 SIGV4_SERVICE = "vpc-lattice-svcs"
+UNSIGNED_PAYLOAD = "UNSIGNED-PAYLOAD"
 
 SERVICE_URL = os.environ.get("SERVICE_URL", "")
 REGION = os.environ.get("AWS_REGION", "us-east-1")
@@ -83,7 +84,15 @@ def build_request(url, method, body, creds):
         #
         # which looks like an authorisation failure and is a signing one. Set
         # it BEFORE add_auth so it is covered by the signature.
-        req.headers["x-amz-content-sha256"] = hashlib.sha256(data or b"").hexdigest()
+        #
+        # The VALUE must be the literal "UNSIGNED-PAYLOAD", not a real hash.
+        # Sending an actual sha256 of the body gets:
+        #
+        #   403 InvalidSignatureException: Signed payloads are not supported
+        #
+        # So Lattice requires the header, requires it signed, and requires it
+        # to say the payload is NOT signed.
+        req.headers["x-amz-content-sha256"] = UNSIGNED_PAYLOAD
         SigV4Auth(creds, SIGV4_SERVICE, REGION).add_auth(req)
     headers = dict(req.headers)
     if data and "content-type" not in {k.lower() for k in headers}:
@@ -152,16 +161,14 @@ def self_test():
 
     cases.append(("a signed request carries x-amz-content-sha256",
                   "x-amz-content-sha256" in {k.lower() for k in h_signed}))
-    cases.append(("and it is the sha256 of an empty body for a GET",
-                  h_signed.get("x-amz-content-sha256") ==
-                  __import__("hashlib").sha256(b"").hexdigest()))
+    cases.append(("the value is UNSIGNED-PAYLOAD, not a real hash",
+                  h_signed.get("x-amz-content-sha256") == UNSIGNED_PAYLOAD))
     cases.append(("the payload hash is inside the signed headers",
                   "x-amz-content-sha256" in h_signed.get("Authorization", "")))
 
     h_post, d_post = build_request(url, "POST", '{"a":1}', FakeCreds())
-    cases.append(("a POST hashes its actual body",
-                  h_post.get("x-amz-content-sha256") ==
-                  __import__("hashlib").sha256(b'{"a":1}').hexdigest()))
+    cases.append(("a POST says UNSIGNED-PAYLOAD too, body notwithstanding",
+                  h_post.get("x-amz-content-sha256") == UNSIGNED_PAYLOAD))
     cases.append(("a POST body is encoded", d_post == b'{"a":1}'))
     cases.append(("a POST sets a content type",
                   "content-type" in {k.lower() for k in h_post}))

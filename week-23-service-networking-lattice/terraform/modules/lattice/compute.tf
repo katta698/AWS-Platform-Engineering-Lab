@@ -94,8 +94,8 @@ resource "aws_iam_role" "client" {
 
 # ---- the caller that must be refused ---------------------------------------
 #
-# Assumable by the client function, so one function can call as either identity.
-# Nothing else differs: same VPC, same subnet, same security group.
+# Its own Lambda runs as this role. Nothing else differs between the two
+# callers: same code, same VPC, same subnets, same security group.
 resource "aws_iam_role" "stranger" {
   name = "${var.name}-stranger"
 
@@ -103,12 +103,51 @@ resource "aws_iam_role" "stranger" {
     Version = "2012-10-17"
     Statement = [{
       Effect    = "Allow"
-      Principal = { AWS = aws_iam_role.client.arn }
+      Principal = { Service = "lambda.amazonaws.com" }
       Action    = "sts:AssumeRole"
     }]
   })
 
   tags = var.tags
+}
+
+resource "aws_cloudwatch_log_group" "intruder" {
+  name              = "/aws/lambda/${var.name}-intruder"
+  retention_in_days = 7
+  tags              = var.tags
+}
+
+# The same code, the same subnets, the same security group, a different role.
+#
+# The first attempt had one function assume the stranger role at run time, and
+# it hung: a Lambda in private subnets with no NAT and no STS interface
+# endpoint cannot reach STS, so sts:AssumeRole simply times out. Running a
+# second function AS the stranger removes that dependency -- and makes the
+# comparison cleaner, because now nothing differs between the two callers
+# except the role attached to them.
+resource "aws_lambda_function" "intruder" {
+  function_name = "${var.name}-intruder"
+  role          = aws_iam_role.stranger.arn
+  handler       = "handler.handler"
+  runtime       = "python3.13"
+  timeout       = 30
+
+  filename         = data.archive_file.client.output_path
+  source_code_hash = data.archive_file.client.output_base64sha256
+
+  vpc_config {
+    subnet_ids         = aws_subnet.consumer[*].id
+    security_group_ids = [aws_security_group.client.id]
+  }
+
+  environment {
+    variables = {
+      SERVICE_URL = "http://${aws_vpclattice_service.rates.dns_entry[0].domain_name}"
+    }
+  }
+
+  depends_on = [aws_cloudwatch_log_group.intruder]
+  tags       = var.tags
 }
 
 resource "aws_cloudwatch_log_group" "client" {
@@ -168,11 +207,29 @@ resource "aws_iam_role_policy" "stranger" {
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [{
-      Effect   = "Allow"
-      Action   = "vpc-lattice-svcs:Invoke"
-      Resource = "${aws_vpclattice_service.rates.arn}/*"
-    }]
+    Statement = [
+      {
+        Sid      = "Logs"
+        Effect   = "Allow"
+        Action   = ["logs:CreateLogStream", "logs:PutLogEvents"]
+        Resource = "${aws_cloudwatch_log_group.intruder.arn}:*"
+      },
+      {
+        Sid      = "Eni"
+        Effect   = "Allow"
+        Action   = ["ec2:CreateNetworkInterface", "ec2:DescribeNetworkInterfaces", "ec2:DeleteNetworkInterface"]
+        Resource = "*"
+      },
+      {
+        # Deliberate. If the stranger lacked this, a refusal would only prove
+        # its identity policy said no. With it, the only thing left to refuse
+        # the call is the auth policy -- which is what the test is for.
+        Sid      = "CallTheService"
+        Effect   = "Allow"
+        Action   = "vpc-lattice-svcs:Invoke"
+        Resource = "${aws_vpclattice_service.rates.arn}/*"
+      },
+    ]
   })
 }
 
