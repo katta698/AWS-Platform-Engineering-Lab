@@ -45,7 +45,7 @@
 | Week 20 | [An accountable event bus](week-20-eventbridge-accountable-bus) | EventBridge custom bus, **`PutEvents` data-plane logging to CloudTrail** (opt-in, launched 4 May 2026), schema discovery, archive + replay, catch-all detection | ✅ Complete |
 | Week 21 | [Blue/green on ECS](week-21-bluegreen-ecs) | ECS native blue/green, ALB target-group switching, bake time, CloudWatch alarm rollback, Fargate | ✅ Complete |
 | Week 22 | [Container image security](week-22-container-image-security) | ECR **managed signing** (Nov 2025), Amazon Inspector enhanced scanning, and a Lambda gate that quarantines what the other two only describe | ✅ Complete |
-| Week 23 | Service Networking with VPC Lattice | VPC Lattice service networks, cross-VPC/cross-account routing, auth policies (replaces App Mesh — shut down 2026-09-30) | 📅 Planned |
+| Week 23 | [Service networking with VPC Lattice](week-23-service-networking-lattice) | VPC Lattice service networks, two layers of auth policy, SigV4 between services, and the switch that decides whether either policy is read | 🚧 In progress |
 | Week 24 | Chaos Engineering + Agent Evaluation | FIS fault injection, resilience testing, runbooks — plus measuring whether AWS DevOps Agent finds a fault you deliberately caused | 📅 Planned |
 | Week 25 | Serverless Microservices | API Gateway + Lambda, DynamoDB, SAM, local testing | 📅 Planned |
 
@@ -596,6 +596,47 @@ Every project follows the same enterprise pattern:
 
 
 ---
+
+## Week 23 — Service networking with VPC Lattice: a policy that is attached but not read
+
+**The story:** a security group answers one question — may this address reach that port.
+It cannot answer the question anyone actually asks about a service, which is *who* is
+calling and *what* are they asking it to do. VPC Lattice puts that question in front of
+the service and answers it with an IAM policy. The policy is the easy part. What is not
+obvious is that there are two of them, on two different objects, and a separate switch on
+each deciding whether its policy is consulted at all.
+
+**What it builds:** a Lattice service network with a VPC association, a service with a
+listener and a Lambda target group, an auth policy on each of the two layers, and three
+Lambdas — the protected service, and two callers running byte-identical code in the same
+subnets behind the same security group, differing only in the role attached. 25 resources;
+nine of them are Lattice.
+
+**What it found:**
+
+- **The same code, in the same subnet, behind the same security group, got 200 and 403.**
+  Both callers hold `vpc-lattice-svcs:Invoke` in their own IAM policy, so the refusal came
+  from the auth policy and nothing else. **This is the line a security group cannot
+  write.**
+- **A policy can be attached, visible in the console, and never read.** Set the service's
+  `auth_type` to `NONE` and the restrictive policy stays exactly where it was, serving
+  every caller, quietly reporting `state: Inactive`. The network policy kept refusing
+  anonymous callers throughout — so the system never looked broken. **A half-disabled
+  two-layer control looks healthier than a fully disabled one.**
+- **The denial message names which layer refused** — "no network-based policy" against
+  "no service-based policy". It is the only signal that tells you which of the two to go
+  and read.
+- **Lattice requires `x-amz-content-sha256` inside the signature**, set to the literal
+  `UNSIGNED-PAYLOAD`. A real hash is rejected with "Signed payloads are not supported" —
+  a 403 from a service whose entire job is issuing 403s. The data-plane SigV4 service
+  name is `vpc-lattice-svcs`, not `vpc-lattice`.
+- **The VPC association security group needs inbound rules**, even though the client is
+  making an outbound call. Egress-only produces a silent timeout with no error anywhere.
+- **The service DNS resolves to IPv6.** In an IPv4-only VPC that surfaces as "Cannot
+  assign requested address", which reads like a routing fault and is not one.
+
+The authorisation worked on the first apply. Everything above was found by a test that
+tried the call, not by reading the configuration — which in every case looked correct.
 
 ## Week 22 — Container image security: a signature says who, not whether
 
