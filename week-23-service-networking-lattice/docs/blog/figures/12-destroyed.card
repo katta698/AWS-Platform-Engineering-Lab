@@ -1,0 +1,36 @@
+title: Nothing left
+subtitle: week-23 - destroy run run-F6yePbXRy6hMQK3m, applied 16 Oct 2026 15:20 CDT, 32 resources
+width: 1100
+---
+# The run says applied. That is Terraform's account of itself.
+# These are the same questions asked of AWS instead.
+
+$ aws vpc-lattice list-services              --query 'length(items)'
+  0
+$ aws vpc-lattice list-service-networks      --query 'length(items)'
+  0
+$ aws vpc-lattice list-target-groups         --query 'length(items)'
+  0
+
+$ aws lambda list-functions \
+      --query "length(Functions[?starts_with(FunctionName,'week23')])"
+  0
+$ aws iam list-roles \
+      --query "length(Roles[?starts_with(RoleName,'week23')])"
+  0
+$ aws ec2 describe-vpcs --filters Name=tag:Name,Values='week23*' \
+      --query 'length(Vpcs)'
+  0
+$ aws logs describe-log-groups \
+      --query "length(logGroups[?contains(logGroupName,'week23')])"
+  0
+
+# And one question that does not name the week's resources at all,
+# in case something was created without the naming convention:
+
+$ aws resourcegroupstaggingapi get-resources --tag-filters Key=Week,Values=23 \
+      --query 'length(ResourceTagMappingList)'
+  0
+
+The service was the only thing billing by the hour, at $0.025. The VPC
+association was free, and stayed free. Nothing here survives to bill again.
