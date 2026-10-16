@@ -122,3 +122,6 @@ scripts/.account-ids
 # what is committed; the HTML is regenerated on every render.
 week-*/docs/blog/figures/*.html
 week-*/docs/blog/figures/*.png
+
+# test_auth.sh writes its response beside itself; it contains the account id
+week-*/.wk*_resp.json
