@@ -7,3 +7,11 @@
   it across two figures makes the reader hold one in their head while
   looking at the other. 08 now shows the allowed call, the refused call, the
   wrong-method call and the unsigned call together.
+
+00-architecture.png
+  Retired. The architecture diagram must be an inline SVG in the post, not a
+  rendered card -- an ASCII schematic put through the card pipeline comes out
+  as a picture of a command prompt, which is what this was and which is not a
+  diagram. The .card is kept in figures/ because its text is the source the
+  SVG was drawn from. check_lab_post_shape.py now rejects an <img> under the
+  architecture heading so the substitution cannot be made again.
