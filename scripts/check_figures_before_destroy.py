@@ -53,6 +53,34 @@ POST_TEARDOWN = re.compile(r"cost|destroy|teardown|torn.?down", re.I)
 COST_HINT = POST_TEARDOWN  # kept: the original name is referenced below
 
 
+# The plan's last column names the capture SOURCE for each slot. A slot that
+# says "AWS console" / "HCP" / "inbox" must be a real capture of that surface;
+# a typeset card is never a stand-in for it. That rule was written down after
+# Week 20 shipped 04-cloudtrail-data-event.png as a card against a console
+# plan -- and Week 23 then did exactly the same thing with 07 and 10, the two
+# figures carrying its entire proof. Written guidance did not hold, so this is
+# the mechanical version: if a slot plans a real surface and a .card of the
+# same name exists in figures/, the card was rendered instead of captured.
+ROW = re.compile(r"^\|\s*(\d+)\s*\|\s*`([^`]+\.png)`\s*\|(.*)$", re.M)
+REAL_SURFACE = re.compile(r"console|hcp|inbox|gmail", re.I)
+
+
+def typeset_standins(plan_text, card_stems):
+    """Slots planned as a real screen but produced as a rendered card.
+
+    card_stems is the set of figure basenames (no extension) that have a
+    .card source -- i.e. that were typeset rather than captured.
+    """
+    bad = []
+    for num, filename, rest in ROW.findall(plan_text):
+        source = rest.rsplit("|", 2)[-2] if rest.count("|") >= 2 else rest
+        if not REAL_SURFACE.search(source):
+            continue
+        if filename[:-4] in card_stems:
+            bad.append((num, filename, source.strip()))
+    return bad
+
+
 def missing_figures(plan_text, on_disk, declared_unused):
     """Slots that must exist and do not. Pure, so --self-test can drive it."""
     missing = []
@@ -109,6 +137,23 @@ def self_test():
          week_number("week-22-container-image-security") >= 22),
         ("an earlier week is not, so the check never goes permanently red",
          week_number("week-21-bluegreen-ecs") < 22),
+        ("a console slot produced as a card is caught",
+         [f for _, f, _ in typeset_standins(
+             "| 07 | `07-auth.png` | Build | the policy | AWS console |" + chr(10),
+             {"07-auth"})] == ["07-auth.png"]),
+        ("a console slot that really was captured passes",
+         typeset_standins(
+             "| 07 | `07-auth.png` | Build | the policy | AWS console |" + chr(10),
+             set()) == []),
+        ("a slot planned as a card may legitimately be a card",
+         typeset_standins(
+             "| 11 | `11-tests.png` | Testing | results | Rendered card |" + chr(10),
+             {"11-tests"}) == []),
+        ("HCP and inbox count as real surfaces too",
+         len(typeset_standins(
+             "| 03 | `03-vars.png` | Build | vars | HCP |" + chr(10) +
+             "| 09 | `09-mail.png` | Alarm | the email | inbox |" + chr(10),
+             {"03-vars", "09-mail"})) == 2),
     ]
     bad = 0
     for label, ok in cases:
@@ -176,6 +221,21 @@ def main():
         print("  Teardown is the only irreversible step in a week. Every one of")
         print("  these becomes permanently uncapturable the moment it applies.")
         print("  Capture them, or retire them in UNUSED.txt with a reason.")
+        return 1
+
+    figures_dir = os.path.join(REPO, week, "docs", "blog", "figures")
+    card_stems = set()
+    if os.path.isdir(figures_dir):
+        card_stems = {f[:-5] for f in os.listdir(figures_dir) if f.endswith(".card")}
+    standins = typeset_standins(plan, card_stems)
+    if standins:
+        print("  %d TYPESET STAND-IN(S) for a planned real screen:" % len(standins))
+        for num, f, source in standins:
+            print("        slot %s  %s  (plan says: %s)" % (num, f, source))
+        print()
+        print("  A typeset card is never a substitute for a console view the plan")
+        print("  asked for. Capture the real screen, or change the plan's source")
+        print("  column and say why in UNUSED.txt.")
         return 1
 
     print("  every declared figure is captured or retired -- safe to destroy.")
