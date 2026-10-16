@@ -890,20 +890,47 @@ def capture(url: str, output_path: Path, wait_selector: str | None, wait_ms: int
             # leaves you on the default tab, producing a convincingly-wrong
             # screenshot with no error at all. Learned the hard way, Week 13.
             clicked = False
+            # Search the page AND every frame in it. Several AWS consoles
+            # render their whole content pane inside an iframe named
+            # "mercury-frame" -- the VPC console's Lattice pages do -- and a
+            # page-level locator finds NOTHING there, however long you wait.
+            # Found on 2026-10-15 for Week 23: the services grid was plainly
+            # visible in a screenshot while every locator reported zero
+            # matches, because the rows live in the iframe and the search
+            # never descended into it. Scoping to the main page only is
+            # indistinguishable from "the page has not loaded yet", which is
+            # why it reads as a timing problem and survives being retried.
+            roots = [page] + list(page.frames)
             # Exact first, then relaxed. A console link's ACCESSIBLE name
             # often carries more than its visible text -- a resource id, an
-            # "opens in a new tab" suffix -- so an exact match on what you can
-            # read on screen misses it. The relaxed passes come last so a
-            # precise match still wins and the Week 13 wrong-tab trap stays
-            # shut.
-            for locator in (
-                page.get_by_role("tab", name=click_text, exact=True),
-                page.get_by_role("link", name=click_text, exact=True),
-                page.get_by_text(click_text, exact=True),
-                page.get_by_role("link", name=click_text, exact=False),
-                page.locator("a", has_text=click_text),
-                page.get_by_text(click_text, exact=False),
-            ):
+            # "opens in a new tab" suffix -- so an exact match on what you
+            # can read on screen misses it. The relaxed passes come last so
+            # a precise match still wins and the Week 13 wrong-tab trap
+            # stays shut.
+            #
+            # PRECISION outranks which root we are looking in. Sweeping one
+            # root through all six strategies before trying the next root
+            # reopens that trap from the other side: clicking "Access" on a
+            # Lattice service matched the top-level sidebar's "AWS Verified
+            # Access" by relaxed text and captured the Verified Access splash
+            # page, while the exact tab named "Access" sat unexamined in the
+            # iframe. Try the strictest strategy everywhere first.
+            strategies = (
+                lambda r: r.get_by_role("tab", name=click_text, exact=True),
+                lambda r: r.get_by_role("link", name=click_text, exact=True),
+                lambda r: r.get_by_text(click_text, exact=True),
+                lambda r: r.get_by_role("link", name=click_text, exact=False),
+                lambda r: r.locator("a", has_text=click_text),
+                lambda r: r.get_by_text(click_text, exact=False),
+            )
+            candidates = []
+            for make in strategies:
+                for root in roots:
+                    try:
+                        candidates.append(make(root))
+                    except Exception:
+                        continue
+            for locator in candidates:
                 try:
                     locator.first.click(timeout=5000)
                     clicked = True
