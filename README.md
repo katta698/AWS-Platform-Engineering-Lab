@@ -45,7 +45,7 @@
 | Week 20 | [An accountable event bus](week-20-eventbridge-accountable-bus) | EventBridge custom bus, **`PutEvents` data-plane logging to CloudTrail** (opt-in, launched 4 May 2026), schema discovery, archive + replay, catch-all detection | ✅ Complete |
 | Week 21 | [Blue/green on ECS](week-21-bluegreen-ecs) | ECS native blue/green, ALB target-group switching, bake time, CloudWatch alarm rollback, Fargate | ✅ Complete |
 | Week 22 | [Container image security](week-22-container-image-security) | ECR **managed signing** (Nov 2025), Amazon Inspector enhanced scanning, and a Lambda gate that quarantines what the other two only describe | ✅ Complete |
-| Week 23 | [Service networking with VPC Lattice](week-23-service-networking-lattice) | VPC Lattice service networks, two layers of auth policy, SigV4 between services, and the switch that decides whether either policy is read | 🚧 In progress |
+| Week 23 | [Service networking with VPC Lattice](week-23-service-networking-lattice) | VPC Lattice service networks, two layers of auth policy, SigV4 between services, and the switch that decides whether either policy is read | ✅ Complete |
 | Week 24 | Chaos Engineering + Agent Evaluation | FIS fault injection, resilience testing, runbooks — plus measuring whether AWS DevOps Agent finds a fault you deliberately caused | 📅 Planned |
 | Week 25 | Serverless Microservices | API Gateway + Lambda, DynamoDB, SAM, local testing | 📅 Planned |
 

@@ -1,0 +1,38 @@
+title: What the week actually cost
+subtitle: week-23 - Cost Explorer, 14-18 Oct 2026, grouped by usage type
+width: 1120
+---
+$ aws ce get-cost-and-usage --time-period Start=2026-10-14,End=2026-10-19 \
+      --granularity DAILY --metrics UnblendedCost UsageQuantity \
+      --group-by Type=DIMENSION,Key=USAGE_TYPE
+
+  USE1-VPCLattice-Service-Hourly        21 hrs  15 Oct     $0.525000
+  USE1-VPCLattice-Service-Hourly        19 hrs  16 Oct     $0.475000
+  USE1-VPCLattice-RequestCount-Free     35 requests        $0.000000
+  USE1-VPCLattice-DataProcessing-Bytes                     $0.000001
+                                                        -----------
+                                                           $1.000001
+
+# 40 hours at $0.025. The service was created at 22:11 on the 14th and
+# destroyed at 15:20 on the 16th; AWS folded the first evening's hours
+# into the 16th rather than posting them against the 14th.
+
+--- what is NOT in this number ------------------------------------------
+
+Lambda and CloudWatch for this week fell inside the free tier. Their usage
+types cannot be separated from the rest of the account -- Lambda-GB-Second
+and Request keep accruing on the 17th and 18th, after everything here was
+destroyed -- so attributing any part of them to this week would be a guess.
+
+The Lattice lines are unambiguous: nothing else in the account uses it.
+
+--- the shape of the bill ------------------------------------------------
+
+  99.9999% of it            the service existing, per hour
+  0.0001%                   data through it
+  0%                        the 35 requests the tests made
+
+A Lattice service bills for being reachable, not for being called. An idle
+service network costs exactly what a busy one does. The variable that moves
+this number is how long it is left standing, which is why the week ends
+with a destroy run and not a quiet weekend.
