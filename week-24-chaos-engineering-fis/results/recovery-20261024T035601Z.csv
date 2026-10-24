@@ -1,0 +1,4 @@
+elapsed_s,fis_state,healthy,unhealthy,alarm_fast,alarm_typical
+0,initiating,4,0,OK,OK
+16,running,4,0,OK,OK
+32,completed,4,0,OK,OK
