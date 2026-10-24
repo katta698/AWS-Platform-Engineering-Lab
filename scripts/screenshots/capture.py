@@ -711,12 +711,58 @@ def redact_account_id(page, account_id: str) -> None:
     """)
 
 
+# Hosts that authenticate through Google. Google refuses to sign in inside an
+# automation-launched browser ("this browser or app may not be secure"), so the
+# default Playwright Chromium can NEVER reach these pages once its session
+# lapses -- it can only ever arrive at the login form.
+#
+# This guard exists because that failure is indistinguishable from "you were
+# logged out". On 2026-10-23 a capture was run without --cdp, hit the HCP login
+# page, and the conclusion drawn was that HCP had expired the session and the
+# user needed to sign in again -- when the real cause was launching the wrong
+# browser. The person was asked to go and log in for nothing.
+#
+# Worse, it has shipped bad figures before: two Week 15 figures went out as
+# pictures of the HCP login form, because nothing checked that the captured
+# page was the page requested. The sign-in detector catches that now; this
+# catches it one step earlier, before a browser is even started.
+GOOGLE_SSO_HOSTS = ("app.terraform.io",)
+
+
+def require_cdp_for_google_sso(url: str, cdp_port: int | None) -> None:
+    """Refuse to launch a browser that provably cannot sign in."""
+    from urllib.parse import urlparse
+
+    host = (urlparse(url).hostname or "").lower()
+    if not any(host == h or host.endswith("." + h) for h in GOOGLE_SSO_HOSTS):
+        return
+    if cdp_port:
+        return
+
+    raise SystemExit(
+        f"\n{host} signs in through Google, and Google refuses to authenticate\n"
+        "inside an automation-launched browser. This run would reach the login\n"
+        "page and nothing else -- it is not that you are logged out.\n"
+        "\n"
+        "Use the Chrome you started yourself:\n"
+        "\n"
+        "    1. double-click scripts/screenshots/start-capture-chrome.bat\n"
+        "       (first time only: sign in to HCP in that window, then leave it open)\n"
+        "    2. re-run this command with  --cdp 9222\n"
+        "\n"
+        "That login persists for weeks -- see scripts/screenshots/START_CHROME.md.\n"
+        "If you genuinely want to capture the login form, pass --allow-login-page\n"
+        "together with --cdp.\n")
+
+
 def capture(url: str, output_path: Path, wait_selector: str | None, wait_ms: int | None,
             headed: bool, login_wait_seconds: int, height: int,
             click_texts: list | None = None, click_wait_ms: int = 5000,
             allow_unresolved_account: bool = False, cdp_port: int | None = None, scroll_to: str | None = None):
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    require_cdp_for_google_sso(url, cdp_port)
 
     with sync_playwright() as p:
         # Persistent context = cookies/localStorage survive between runs,
