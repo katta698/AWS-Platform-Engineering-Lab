@@ -73,9 +73,36 @@ data "aws_iam_policy_document" "fis" {
     actions   = ["cloudwatch:DescribeAlarms"]
     resources = ["*"]
   }
+  # FIS does not write experiment logs the way an application does. It sets up
+  # a VENDED LOG DELIVERY, which needs the logs:*LogDelivery family and the
+  # ability to put a resource policy on the destination log group -- not the
+  # CreateLogStream/PutLogEvents pair you would reach for by instinct.
+  #
+  # Getting this wrong fails the experiment at START, before any fault is
+  # injected, with "does not have sufficient privileges to perform
+  # logs:CreateLogDelivery". Clear once you read it, and invisible until you
+  # run one.
+  #
+  # The delivery actions do not accept a resource ARN -- they are account-level
+  # operations, so "*" is required rather than lax. The log group itself is
+  # still pinned on the statement below.
   statement {
-    sid       = "ExperimentLogsToCloudWatch"
-    actions   = ["logs:CreateLogStream", "logs:PutLogEvents", "logs:PutRetentionPolicy"]
+    sid = "SetUpVendedLogDelivery"
+    actions = [
+      "logs:CreateLogDelivery",
+      "logs:GetLogDelivery",
+      "logs:UpdateLogDelivery",
+      "logs:DeleteLogDelivery",
+      "logs:ListLogDeliveries",
+      "logs:DescribeResourcePolicies",
+      "logs:DescribeLogGroups",
+    ]
+    resources = ["*"]
+  }
+
+  statement {
+    sid       = "WriteIntoThisLogGroupOnly"
+    actions   = ["logs:PutResourcePolicy", "logs:CreateLogStream", "logs:PutLogEvents", "logs:PutRetentionPolicy"]
     resources = ["${aws_cloudwatch_log_group.fis.arn}:*"]
   }
 }
