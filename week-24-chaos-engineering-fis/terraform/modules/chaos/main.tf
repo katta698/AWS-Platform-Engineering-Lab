@@ -96,13 +96,19 @@ data "aws_iam_policy_document" "fis" {
       "logs:ListLogDeliveries",
       "logs:DescribeResourcePolicies",
       "logs:DescribeLogGroups",
+      # PutResourcePolicy is ACCOUNT-level. Scoping it to the log group ARN
+      # looks tighter and simply does not work: the second attempt failed with
+      # "does not have sufficient privileges to set up logging for the
+      # specified CloudWatch LogGroup", which is the same wall wearing a
+      # different hat.
+      "logs:PutResourcePolicy",
     ]
     resources = ["*"]
   }
 
   statement {
     sid       = "WriteIntoThisLogGroupOnly"
-    actions   = ["logs:PutResourcePolicy", "logs:CreateLogStream", "logs:PutLogEvents", "logs:PutRetentionPolicy"]
+    actions   = ["logs:CreateLogStream", "logs:PutLogEvents", "logs:PutRetentionPolicy"]
     resources = ["${aws_cloudwatch_log_group.fis.arn}:*"]
   }
 }
