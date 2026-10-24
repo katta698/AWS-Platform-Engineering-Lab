@@ -36,7 +36,11 @@ def first_where(rows, pred):
 
 
 def fmt(v):
-    return "never" if v is None else f"{v}s"
+    if v is None:
+        return "never"
+    if isinstance(v, str):
+        return v
+    return f"{v}s"
 
 
 def summarise(path):
@@ -58,6 +62,13 @@ def summarise(path):
     damage = None
     if impact is not None and ended is not None:
         damage = ended - impact
+        if damage < 0:
+            # The fault landed after FIS reported terminal. That is not a
+            # measurement, it is the recorder having stopped watching too
+            # early -- report it as such rather than printing a negative
+            # number that a reader would take for a real duration.
+            damage = "LATE"
+
 
     recovered = first_where(
         [r for r in rows if int(r["elapsed_s"]) > (impact or 0)],
@@ -99,7 +110,8 @@ def main():
     by_guard = {r["guard"]: r for r in results}
     if "fast" in by_guard and "typical" in by_guard:
         f, t = by_guard["fast"], by_guard["typical"]
-        if f["damage"] is not None and t["damage"] is not None:
+        numeric = all(isinstance(x["damage"], int) for x in (f, t))
+        if numeric:
             delta = t["damage"] - f["damage"]
             print(f"  Same fault, same duration. The only difference is the alarm.")
             print(f"  fast alarm   : {f['damage']}s of damage")

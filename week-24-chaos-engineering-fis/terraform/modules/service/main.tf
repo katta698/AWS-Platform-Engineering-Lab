@@ -219,10 +219,9 @@ resource "aws_ecs_service" "this" {
 # ---------------------------------------------------------------------------
 # The two alarms. Same metric, same target group, different patience.
 #
-# UnHealthyHostCount rather than 5xx: when FIS stops a task the ALB sees the
-# target go away, which is the signal a real operator would watch. Counting
-# 5xx would depend on traffic arriving during the window, and this lab has no
-# load generator running continuously.
+# Host counts rather than 5xx: counting 5xx would depend on traffic arriving
+# during the window, and this lab runs no continuous load generator. Which
+# host-count metric is the subtle part -- see the block below the locals.
 # ---------------------------------------------------------------------------
 
 locals {
@@ -232,34 +231,63 @@ locals {
   }
 }
 
+# WHY HealthyHostCount AND NOT UnHealthyHostCount
+# ----------------------------------------------
+# The obvious metric for "tasks are dying" is UnHealthyHostCount. It does not
+# work for this fault, and the reason is worth knowing before you build a
+# safety net on it.
+#
+# UnHealthyHostCount counts targets that are REGISTERED with the target group
+# and failing their health check. When FIS stops an ECS task, ECS deregisters
+# that task from the target group first. A deregistered target is not
+# unhealthy -- it is absent. So capacity halves while UnHealthyHostCount sits
+# at exactly zero, for the entire fault, forever.
+#
+# This was measured, not reasoned about. During the baseline run the service
+# went from 4 tasks to 2 and back; UnHealthyHostCount reported 0.0 for every
+# single one-minute datapoint across the window, while HealthyHostCount
+# reported the dip to 2.
+#
+# An alarm on UnHealthyHostCount would have been a stop condition that can
+# never fire, attached to an experiment that would have reported success.
+# HealthyHostCount < desired count is the condition that actually describes
+# "I have lost capacity", regardless of whether the capacity failed or left.
+#
+# Minimum, not Average: over a 300s window a one-minute dip averages out to
+# roughly 3.6 and would not cross a threshold of 4. Minimum asks "did we dip
+# at all in this window", which is the question a safety net should ask.
+
 resource "aws_cloudwatch_metric_alarm" "unhealthy_fast" {
   alarm_name          = "${var.name}-unhealthy-fast"
-  alarm_description   = "1 datapoint of 60s. Can fire about a minute after impact."
+  alarm_description   = "HealthyHostCount < ${var.desired_count}. 1 datapoint of 60s -- can fire about a minute after impact."
   namespace           = "AWS/ApplicationELB"
-  metric_name         = "UnHealthyHostCount"
-  statistic           = "Maximum"
+  metric_name         = "HealthyHostCount"
+  statistic           = "Minimum"
   dimensions          = local.alarm_dimensions
   period              = 60
   evaluation_periods  = 1
   datapoints_to_alarm = 1
-  threshold           = 0
-  comparison_operator = "GreaterThanThreshold"
+  threshold           = var.desired_count
+  comparison_operator = "LessThanThreshold"
   treat_missing_data  = "notBreaching"
   tags                = var.tags
 }
 
+# Identical to the alarm above in every respect except period and
+# datapoints_to_alarm. That is deliberate: if anything else differed, the
+# experiment would not be measuring the cost of the evaluation window.
 resource "aws_cloudwatch_metric_alarm" "unhealthy_typical" {
   alarm_name          = "${var.name}-unhealthy-typical"
-  alarm_description   = "2 datapoints of 300s. Cannot fire in under ten minutes."
+  alarm_description   = "HealthyHostCount < ${var.desired_count}. 2 datapoints of 300s -- cannot fire in under ten minutes."
   namespace           = "AWS/ApplicationELB"
-  metric_name         = "UnHealthyHostCount"
-  statistic           = "Maximum"
+  metric_name         = "HealthyHostCount"
+  statistic           = "Minimum"
   dimensions          = local.alarm_dimensions
   period              = 300
   evaluation_periods  = 2
   datapoints_to_alarm = 2
-  threshold           = 0
-  comparison_operator = "GreaterThanThreshold"
+  threshold           = var.desired_count
+  comparison_operator = "LessThanThreshold"
   treat_missing_data  = "notBreaching"
   tags                = var.tags
 }

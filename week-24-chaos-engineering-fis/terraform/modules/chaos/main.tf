@@ -132,6 +132,45 @@ locals {
     resource_type  = "aws:ecs:task"
     selection_mode = "PERCENT(${var.fault_percent})"
   }
+
+  # WHY THE FAULT REPEATS
+  # ---------------------
+  # aws:ecs:stop-task is instantaneous. Measured: the action started at
+  # 22:56:30.862 and ended at 22:56:31.235 -- 373 milliseconds. An experiment
+  # that is already over cannot be halted by a stop condition, so a single
+  # stop-task makes BOTH stop conditions decorative. They would never fire,
+  # the experiment would report success, and the week's comparison would be
+  # two identical null results.
+  #
+  # So the fault is delivered in rounds: kill, wait, kill, wait. Each round
+  # removes ${var.fault_percent}% of whatever is running at that moment, which
+  # ECS then replaces. Now the damage is ongoing and, crucially, FUTURE --
+  # stopping the experiment early genuinely prevents rounds that would
+  # otherwise have landed. That is the only arrangement in which "the faster
+  # alarm saved you N minutes" is a true statement rather than a slogan.
+  #
+  # aws:fis:wait has a one-minute floor and needs no IAM permissions.
+  kill_actions = [
+    for i in range(var.kill_rounds) : {
+      name        = "stop-tasks-${i + 1}"
+      action_id   = "aws:ecs:stop-task"
+      start_after = i == 0 ? [] : ["wait-${i}"]
+      parameters  = {}
+      targeted    = true
+    }
+  ]
+
+  wait_actions = [
+    for i in range(var.kill_rounds - 1) : {
+      name        = "wait-${i + 1}"
+      action_id   = "aws:fis:wait"
+      start_after = ["stop-tasks-${i + 1}"]
+      parameters  = { duration = var.round_gap }
+      targeted    = false
+    }
+  ]
+
+  fault_sequence = { for a in concat(local.kill_actions, local.wait_actions) : a.name => a }
 }
 
 # ---------------------------------------------------------------------------
@@ -166,12 +205,28 @@ resource "aws_fis_experiment_template" "recovery" {
     }
   }
 
-  action {
-    name      = "stop-tasks"
-    action_id = "aws:ecs:stop-task"
-    target {
-      key   = "Tasks"
-      value = "tasks"
+  dynamic "action" {
+    for_each = local.fault_sequence
+    content {
+      name        = action.value.name
+      action_id   = action.value.action_id
+      start_after = action.value.start_after
+
+      dynamic "parameter" {
+        for_each = action.value.parameters
+        content {
+          key   = parameter.key
+          value = parameter.value
+        }
+      }
+
+      dynamic "target" {
+        for_each = action.value.targeted ? [1] : []
+        content {
+          key   = "Tasks"
+          value = "tasks"
+        }
+      }
     }
   }
 
@@ -219,12 +274,28 @@ resource "aws_fis_experiment_template" "guarded" {
     }
   }
 
-  action {
-    name      = "stop-tasks"
-    action_id = "aws:ecs:stop-task"
-    target {
-      key   = "Tasks"
-      value = "tasks"
+  dynamic "action" {
+    for_each = local.fault_sequence
+    content {
+      name        = action.value.name
+      action_id   = action.value.action_id
+      start_after = action.value.start_after
+
+      dynamic "parameter" {
+        for_each = action.value.parameters
+        content {
+          key   = parameter.key
+          value = parameter.value
+        }
+      }
+
+      dynamic "target" {
+        for_each = action.value.targeted ? [1] : []
+        content {
+          key   = "Tasks"
+          value = "tasks"
+        }
+      }
     }
   }
 

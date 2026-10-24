@@ -23,7 +23,9 @@ LABEL="${1:?usage: run-experiment.sh <recovery|fast|typical>}"
 TF="$(cd "$(dirname "$0")/../terraform/environments/dev" && pwd)"
 OUT="$(cd "$(dirname "$0")/.." && pwd)/results"
 REGION="${REGION:-us-east-1}"
-MAX_SECONDS="${MAX_SECONDS:-900}"
+MAX_SECONDS="${MAX_SECONDS:-1500}"
+SETTLE_SECONDS="${SETTLE_SECONDS:-300}"   # how long to keep watching after FIS ends
+DESIRED="${DESIRED:-4}"                   # healthy targets that mean "whole"
 
 mkdir -p "$OUT"
 
@@ -47,49 +49,136 @@ echo "experiment : $LABEL ($TEMPLATE_ID)"
 echo "recording  : $CSV"
 echo
 
-ID="$(aws fis start-experiment --experiment-template-id "$TEMPLATE_ID" \
-      --region "$REGION" --query 'experiment.id' --output text)"
+alarm_state() {
+  aws cloudwatch describe-alarms --alarm-names "$1" --region "$REGION"     --query 'MetricAlarms[0].StateValue' --output text 2>/dev/null || echo "?"
+}
+
+# PRE-FLIGHT: refuse to start against an alarm that is already tripped.
+#
+# A stop condition already in ALARM stops the experiment at t=0. FIS reports
+# "stopped", the CSV has one row, and the run looks like an instant, heroic
+# save. It is nothing of the kind -- it measured a stale alarm.
+#
+# This matters because the alarms do not reset quickly. The typical alarm
+# needs two clean 300s datapoints, so it stays in ALARM for ten minutes after
+# the service has fully recovered. Back-to-back runs are exactly the case
+# where this bites.
+GUARD=""
+case "$LABEL" in
+  fast)    GUARD="$ALARM_FAST" ;;
+  typical) GUARD="$ALARM_TYPICAL" ;;
+esac
+if [ -n "$GUARD" ]; then
+  GS="$(alarm_state "$GUARD")"
+  if [ "$GS" != "OK" ]; then
+    echo "REFUSING TO START."
+    echo "  guarding alarm : $GUARD"
+    echo "  current state  : $GS  (needs to be OK)"
+    echo
+    echo "  Starting now would stop the experiment immediately and record a"
+    echo "  measurement of the previous run, not this one. Wait for the alarm"
+    echo "  to clear -- the typical alarm takes ~10 minutes -- and retry."
+    exit 2
+  fi
+  echo "pre-flight : $LABEL guard is OK"
+fi
+
+# Baseline health, so "impact" is measured against a service that was
+# actually whole when the experiment began.
+BASE="$(aws elbv2 describe-target-health --target-group-arn "$TG_ARN" --region "$REGION"         --query 'length(TargetHealthDescriptions[?TargetHealth.State==`healthy`])' --output text)"
+echo "pre-flight : $BASE healthy targets before injection"
+if [ "$BASE" -lt "$DESIRED" ]; then
+  echo "REFUSING TO START: expected $DESIRED healthy targets, found $BASE."
+  echo "  The service has not finished recovering from an earlier run."
+  exit 2
+fi
+echo
+
+ID="$(aws fis start-experiment --experiment-template-id "$TEMPLATE_ID"       --region "$REGION" --query 'experiment.id' --output text)"
 START_EPOCH="$(date -u +%s)"
 echo "started    : $ID"
 echo
 
-echo "elapsed_s,fis_state,healthy,unhealthy,alarm_fast,alarm_typical" > "$CSV"
+echo "elapsed_s,phase,fis_state,healthy,unhealthy,alarm_fast,alarm_typical" > "$CSV"
 
-alarm_state() {
-  aws cloudwatch describe-alarms --alarm-names "$1" --region "$REGION" \
-    --query 'MetricAlarms[0].StateValue' --output text 2>/dev/null || echo "?"
-}
+# WHY THE LOOP DOES NOT END WHEN FIS DOES
+# ---------------------------------------
+# FIS reports "completed" when its last action RETURNS, not when the fault has
+# finished playing out. Measured on the baseline run: FIS said completed at
+# 22:56:31; ECS started replacement tasks at 22:57:08 and the original tasks
+# did not reach STOPPED until 22:57:41 -- seventy seconds after the experiment
+# was officially over.
+#
+# A loop that exits on the terminal state therefore stops watching slightly
+# BEFORE the damage it exists to measure. The first version of this script did
+# exactly that and recorded a flat line of four healthy targets through a run
+# that demonstrably halved the service.
+#
+# So: keep sampling until the service is observed whole again for three
+# consecutive polls, or until the settle cap expires.
+RECOVERED_STREAK=0
+TERMINAL_AT=""
+PHASE="experiment"
 
-printf '%8s  %-12s  %7s  %9s  %-6s  %-6s\n' ELAPSED FIS HEALTHY UNHEALTHY FAST TYPICAL
+printf '%8s  %-10s  %-12s  %7s  %9s  %-6s  %-6s
+' ELAPSED PHASE FIS HEALTHY UNHEALTHY FAST TYPICAL
 while :; do
   NOW="$(date -u +%s)"
   ELAPSED=$(( NOW - START_EPOCH ))
 
-  STATE="$(aws fis get-experiment --id "$ID" --region "$REGION" \
-           --query 'experiment.state.status' --output text)"
+  # Fired in parallel. Run serially these four calls take ~11s, which made the
+  # old sampling interval 16s -- far too coarse to time a 60s alarm against a
+  # 300s one.
+  T="$(mktemp -d)"
+  aws fis get-experiment --id "$ID" --region "$REGION"       --query 'experiment.state.status' --output text > "$T/state" 2>/dev/null &
+  aws elbv2 describe-target-health --target-group-arn "$TG_ARN" --region "$REGION"       --query 'TargetHealthDescriptions[].TargetHealth.State' --output text > "$T/health" 2>/dev/null &
+  alarm_state "$ALARM_FAST"    > "$T/af" &
+  alarm_state "$ALARM_TYPICAL" > "$T/at" &
+  wait
 
-  COUNTS="$(aws elbv2 describe-target-health --target-group-arn "$TG_ARN" --region "$REGION" \
-            --query 'TargetHealthDescriptions[].TargetHealth.State' --output text 2>/dev/null || echo "")"
-  HEALTHY=$(echo "$COUNTS" | tr '\t' '\n' | grep -c '^healthy$' || true)
-  UNHEALTHY=$(echo "$COUNTS" | tr '\t' '\n' | grep -vc '^healthy$' || true)
+  STATE="$(cat "$T/state" 2>/dev/null || echo '?')"
+  COUNTS="$(cat "$T/health" 2>/dev/null || echo '')"
+  AF="$(cat "$T/af" 2>/dev/null || echo '?')"
+  AT="$(cat "$T/at" 2>/dev/null || echo '?')"
+  rm -rf "$T"
 
-  AF="$(alarm_state "$ALARM_FAST")"
-  AT="$(alarm_state "$ALARM_TYPICAL")"
+  HEALTHY=$(echo "$COUNTS" | tr '	' '
+' | grep -c '^healthy$' || true)
+  UNHEALTHY=$(echo "$COUNTS" | tr '	' '
+' | grep -c '^\(unhealthy\|draining\|unused\|initial\)$' || true)
 
-  printf '%8s  %-12s  %7s  %9s  %-6s  %-6s\n' "$ELAPSED" "$STATE" "$HEALTHY" "$UNHEALTHY" "$AF" "$AT"
-  echo "$ELAPSED,$STATE,$HEALTHY,$UNHEALTHY,$AF,$AT" >> "$CSV"
+  printf '%8s  %-10s  %-12s  %7s  %9s  %-6s  %-6s
+'     "$ELAPSED" "$PHASE" "$STATE" "$HEALTHY" "$UNHEALTHY" "$AF" "$AT"
+  echo "$ELAPSED,$PHASE,$STATE,$HEALTHY,$UNHEALTHY,$AF,$AT" >> "$CSV"
 
   case "$STATE" in
-    completed|stopped|failed) break ;;
+    completed|stopped|failed)
+      if [ -z "$TERMINAL_AT" ]; then
+        TERMINAL_AT="$ELAPSED"
+        PHASE="aftermath"
+        echo "  -- FIS reported $STATE at ${ELAPSED}s; still watching the service --"
+      fi
+      ;;
   esac
+
+  if [ -n "$TERMINAL_AT" ]; then
+    if [ "$HEALTHY" -ge "$DESIRED" ] && [ "$UNHEALTHY" -eq 0 ]; then
+      RECOVERED_STREAK=$(( RECOVERED_STREAK + 1 ))
+    else
+      RECOVERED_STREAK=0
+    fi
+    [ "$RECOVERED_STREAK" -ge 3 ] && { echo "  -- service whole for 3 consecutive polls --"; break; }
+    [ $(( ELAPSED - TERMINAL_AT )) -ge "$SETTLE_SECONDS" ] && {
+      echo "  -- settle cap ${SETTLE_SECONDS}s reached --"; break; }
+  fi
+
   [ "$ELAPSED" -ge "$MAX_SECONDS" ] && { echo "gave up after ${MAX_SECONDS}s"; break; }
-  sleep 5
+  sleep 2
 done
 
 echo
 echo "final state : $STATE"
-aws fis get-experiment --id "$ID" --region "$REGION" \
-  --query 'experiment.{stopped:state.reason,start:startTime,end:endTime}' --output table
+aws fis get-experiment --id "$ID" --region "$REGION"   --query 'experiment.{stopped:state.reason,start:startTime,end:endTime}' --output table
 echo
 echo "recorded    : $CSV"
 echo "summarise   : python scripts/summarise.py $CSV"
