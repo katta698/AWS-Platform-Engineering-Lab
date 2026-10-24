@@ -10,20 +10,29 @@
 | 06 | `06-service-healthy.png` | How We Built It | Target group with 4 healthy targets, before anything is broken | AWS console |
 | 07 | `07-two-alarms.png` | How We Built It | Both alarms side by side — same metric, 60s/1 vs 300s/2. **The experiment is this difference** | AWS console |
 | 08 | `08-experiment-templates.png` | How We Built It | Three templates, and the stop condition on each | AWS console |
-| 09 | `09-recovery-run.png` | Challenges | The unguarded run: impact, then ECS putting tasks back. The baseline | Rendered card |
-| 10 | `10-fast-vs-typical.png` | Challenges | **The week.** Both guarded runs on one timeline: identical fault, damage window 10x apart | Rendered card |
-| 11 | `11-summary-output.png` | Challenges | `summarise.py` output across all three runs | Rendered card |
+| 09 | `09-metric-that-never-moved.png` | Challenges | **Finding 1.** CloudWatch showing `UnHealthyHostCount` flat at 0 across a window where the service demonstrably halved | AWS console |
+| 10 | `10-six-completed-actions.png` | Challenges | **Finding 3.** The FIS experiment detail: six kill rounds, all "Action was completed", only the first stopped a task | AWS console |
+| 11 | `11-dip-vs-sampling.png` | Challenges | **Finding 4.** The per-second recording against the 1-minute metric: a 17s outage that CloudWatch never saw | Rendered card |
 | 12 | `12-destroyed.png` | Cleanup | Nothing left: no cluster, no ALB, no experiment templates | Rendered card |
 | 13 | `13-cost.png` | Cost | The billed figure by usage type — FIS action-minutes separated from Fargate | Rendered card — after teardown |
 
 ## The two that carry the week
 
-**07** sets it up. Two alarms, same metric, same target group, differing only in
-patience. A reader should look at that and not yet see the problem.
+**09** is the one a reader should not be able to argue with. Two metrics, one
+window, the same service: capacity halves and the metric everyone would have
+alarmed on reports zero the whole way through.
 
-**10** is the payoff. The same fault, injected twice, with the damage window
-measured. If the numbers land anywhere near the modelled 60s versus 605s, the
-chart makes the argument without a caption.
+**10** is the punchline. Six actions, six green "Action was completed", and
+only the first of them did anything at all. The console gives no hint which
+five were no-ops.
+
+## Changed from the original plan
+
+The original figure 10 was to be "fast versus typical, damage windows 10x
+apart". That comparison could not be measured -- see `FINDINGS.md`. The fault
+heals in 17 seconds, the metric samples every 60, and the FIS action
+completes in 373 milliseconds, so no stop condition could act at all. The
+figures now carry the four findings that replaced it.
 
 ## Deliberately not captured
 

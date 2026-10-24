@@ -1,0 +1,20 @@
+title:    What builds the week
+subtitle: Six files. The two scripts are the measuring instrument, and they found more than the experiment did.
+width:    1180
+---
+week-24-chaos-engineering-fis/
+|
++-- terraform/
+|   +-- environments/dev/main.tf          106   HCP backend, OIDC, wires the two modules
+|   +-- modules/service/main.tf           293   ECS Fargate service, ALB, and the two alarms
+|   +-- modules/chaos/main.tf             310   FIS role, log group, three experiment templates
+|
++-- scripts/
+|   +-- run-experiment.sh                 184   starts an experiment and records what happened,
+|   |                                           every 2s, through to full recovery
+|   +-- summarise.py                      129   turns a recording into the numbers, and refuses
+|                                               to print one it cannot stand behind
+|
++-- docs/
+    +-- FINDINGS.md                       183   four ways the experiment reported success
+                                                while proving nothing

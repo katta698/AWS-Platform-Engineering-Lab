@@ -1,0 +1,32 @@
+title:    A 17-second outage that CloudWatch never recorded
+subtitle: Per-second recording of the ALB target group, against the 1-minute metric the alarms read
+width:    1180
+---
+# Recorded by scripts/run-experiment.sh, polling describe-target-health every 2s
+ ELAPSED  FIS           HEALTHY  UNHEALTHY  FAST    TYPICAL
+       0  initiating          4          0  OK      OK
+       7  running             4          0  OK      OK
+      14  running             4          0  OK      OK
+      21  running             4          0  OK      OK
+      28  running             2          2  OK      OK     <-- 2 tasks gone
+      37  running             2          2  OK      OK
+      45  running             4          0  OK      OK     <-- ECS has replaced them
+      52  running             4          0  OK      OK
+
+# The same window, as CloudWatch sampled it (HealthyHostCount, Minimum, 60s)
+#   the alarms can only read this, not the trace above
+  23:26   4.0
+  23:27   4.0
+  23:28   4.0      <-- the outage happened inside this minute
+  23:29   4.0
+  23:30   4.0
+
+# ECS task records for the same event
+  23:28:06   FIS issues StopTask
+  23:28:45   replacement task running
+  23:28:47   replacement task running
+#            -> healed in 39-41 seconds
+
+# And it is not deterministic. The 22:56 baseline run -- same fault, same
+# service, same metric -- DID record a 2.0 for its minute. One outage seen,
+# one outage missed.
