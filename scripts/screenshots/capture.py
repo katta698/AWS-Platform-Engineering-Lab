@@ -729,14 +729,41 @@ def redact_account_id(page, account_id: str) -> None:
 GOOGLE_SSO_HOSTS = ("app.terraform.io",)
 
 
-def require_cdp_for_google_sso(url: str, cdp_port: int | None) -> None:
-    """Refuse to launch a browser that provably cannot sign in."""
+
+def _refresh_hcp_session(path):
+    """Best-effort: pull a fresh cookie from a running signed-in Chrome.
+
+    HCP rotates _atlas_session_data as the live session is used, so a saved
+    snapshot goes stale within the hour. Refreshing costs one CDP call.
+    """
+    if not path:
+        return
+    try:
+        import sys as _sys, pathlib as _pl
+        _sys.path.insert(0, str(_pl.Path(__file__).parent))
+        from hcp_session import refresh_if_possible
+        refresh_if_possible(path)
+    except Exception:
+        pass
+
+
+def require_cdp_for_google_sso(url: str, cdp_port: int | None, load_session: str | None = None) -> None:
+    """Refuse to launch a browser that provably cannot sign in.
+
+    A replayed session is the exception: it does not sign in at all, it
+    arrives already authenticated. Measured 2026-10-23 - see --load-session.
+    """
     from urllib.parse import urlparse
 
     host = (urlparse(url).hostname or "").lower()
     if not any(host == h or host.endswith("." + h) for h in GOOGLE_SSO_HOSTS):
         return
     if cdp_port:
+        return
+    if load_session:
+        # Nothing signs in here. The cookie was exported from a browser a
+        # human signed in once, and replaying it arrives already
+        # authenticated - no Google SSO is attempted. Measured 2026-10-23.
         return
 
     raise SystemExit(
@@ -758,11 +785,13 @@ def require_cdp_for_google_sso(url: str, cdp_port: int | None) -> None:
 def capture(url: str, output_path: Path, wait_selector: str | None, wait_ms: int | None,
             headed: bool, login_wait_seconds: int, height: int,
             click_texts: list | None = None, click_wait_ms: int = 5000,
-            allow_unresolved_account: bool = False, cdp_port: int | None = None, scroll_to: str | None = None):
+            allow_unresolved_account: bool = False, cdp_port: int | None = None, scroll_to: str | None = None,
+            load_session: str | None = None):
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    require_cdp_for_google_sso(url, cdp_port)
+    _refresh_hcp_session(load_session)
+    require_cdp_for_google_sso(url, cdp_port, load_session)
 
     with sync_playwright() as p:
         # Persistent context = cookies/localStorage survive between runs,
@@ -802,6 +831,30 @@ def capture(url: str, output_path: Path, wait_selector: str | None, wait_ms: int
                 headless=not headed,
                 viewport={"width": 1400, "height": height},
             )
+            # HCP Terraform needs no --cdp and no manual sign-in.
+            #
+            # It was believed for weeks that HCP auth is a memory-only session
+            # cookie, so captures had to attach to a browser a human had signed
+            # in by hand. Measured 2026-10-23 in the Azure lab: app.terraform.io
+            # sets exactly ONE cookie, _atlas_session_data, and it is
+            # PERSISTENT. Replaying it into a clean headless context loads the
+            # workspace page fully authenticated.
+            #
+            # Export it once with scripts/screenshots/save_hcp_session.py, then
+            # pass --load-session. The file is a credential: it lives outside
+            # every repo and must never be committed.
+            if load_session:
+                import json as _json
+                _sess = Path(load_session)
+                if not _sess.is_file():
+                    raise SystemExit(
+                        "--load-session file not found: %s. "
+                        "Run scripts/screenshots/save_hcp_session.py first." % _sess)
+                _cookies = _json.loads(_sess.read_text(encoding="utf-8")).get("cookies", [])
+                if not _cookies:
+                    raise SystemExit(f"--load-session file has no cookies: {_sess}")
+                context.add_cookies(_cookies)
+                print(f"Replayed {len(_cookies)} cookies from {_sess}")
             page = context.new_page()
         # "networkidle" doesn't work for SPA-heavy pages (AWS Console, HCP UI)
         # that poll continuously in the background and never go idle -
@@ -1079,6 +1132,9 @@ if __name__ == "__main__":
                         help="Attach to a real Chrome already running with "
                              "--remote-debugging-port=PORT instead of launching Chromium. "
                              "Needed for sites behind Google sign-in.")
+    parser.add_argument("--load-session", default=None, metavar="FILE",
+                        help="Replay cookies exported by save_hcp_session.py, so HCP captures "
+                             "need no --cdp and no manual sign-in")
     parser.add_argument("--allow-login-page", action="store_true",
                         help="Permit saving a page that looks like a sign-in screen "
                              "(only when the sign-in screen is genuinely the subject)")
@@ -1105,4 +1161,4 @@ if __name__ == "__main__":
 
     capture(args.url, args.output_path, args.wait_selector, args.wait_ms, args.headed, args.login_wait_seconds,
             args.height, args.click_text, args.click_wait_ms, args.allow_unresolved_account, cdp_port=args.cdp,
-            scroll_to=args.scroll_to)
+            scroll_to=args.scroll_to, load_session=args.load_session)
