@@ -15,7 +15,7 @@ FIS experiments that inject the same fault under different guards.
 ```
     ALB  ->  target group  ->  4 Fargate tasks
                   |
-                  +-- UnHealthyHostCount
+                  +-- HealthyHostCount (Minimum)
                          |
             +------------+------------+
             |                         |
@@ -28,7 +28,22 @@ FIS experiments that inject the same fault under different guards.
                  FIS stop condition
                        |
             aws:ecs:stop-task  (50% of tasks)
+              x 7 rounds, 2 min apart
 ```
+
+### Two things that are not obvious
+
+**The metric has to be HealthyHostCount, not UnHealthyHostCount.** When FIS
+stops a task, ECS *deregisters* it from the target group. A deregistered
+target is not unhealthy -- it is gone. Measured here: the service went from 4
+tasks to 2 and back while `UnHealthyHostCount` reported `0.0` for every
+datapoint. An alarm on it is a stop condition that can never fire.
+
+**The fault has to repeat.** `aws:ecs:stop-task` is instantaneous -- 373ms in
+this lab. An experiment that is already finished cannot be halted by a stop
+condition, so a single kill makes both guards decorative. Delivering the
+fault in rounds separated by `aws:fis:wait` is what makes stopping early
+actually prevent damage.
 
 ## The three experiments
 
