@@ -1,0 +1,33 @@
+title:    Nothing left
+subtitle: Every resource type the week created, queried directly against AWS after the destroy run
+width:    1180
+---
+# HCP Terraform destroy run run-wsAV3PsBbWWpyZJ6 -- applied 00:49:42 CDT
+# 25 state entries (19 managed resources) removed
+
+$ aws ecs list-clusters --query "clusterArns[?contains(@,'week24')]"
+# (empty)
+
+$ aws elbv2 describe-load-balancers --query "LoadBalancers[?contains(LoadBalancerName,'week24')]"
+# (empty)
+
+$ aws elbv2 describe-target-groups --query "TargetGroups[?contains(TargetGroupName,'week24')]"
+# (empty)
+
+$ aws fis list-experiment-templates --query 'experimentTemplates[].id'
+# (empty)
+
+$ aws cloudwatch describe-alarms --alarm-name-prefix week24
+# (empty)
+
+$ aws iam list-roles --query "Roles[?contains(RoleName,'week24')]"
+# (empty)
+
+$ aws logs describe-log-groups --query "logGroups[?contains(logGroupName,'week24')]"
+# (empty)
+
+# HCP workspace week-24-dev: resource-count = 0
+#
+# Queried against AWS, not read off the destroy run's own output. A run that
+# reports success is a claim about what it did; this is the destination
+# answering for itself.
