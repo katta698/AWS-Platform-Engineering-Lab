@@ -1,0 +1,37 @@
+title:    What the week actually cost
+subtitle: Unblended cost for 2026-10-24 UTC, the single day the lab existed, by usage type
+width:    1180
+---
+# aws ce get-cost-and-usage --granularity DAILY --group-by USAGE_TYPE
+#   filtered to the services this lab used
+
+  USAGE TYPE                              COST      QUANTITY
+  USE1-ActionMinute                     $1.0250     10.25 action-minutes
+  USE1-Fargate-vCPU-Hours:perCPU        $0.0850      2.10 vCPU-hours
+  LoadBalancerUsage                     $0.0675      3.00 ALB-hours
+  USE1-PublicIPv4:InUseAddress          $0.0645     12.90 address-hours
+  USE1-Fargate-GB-Hours                 $0.0187      4.20 GB-hours
+  USE1-PublicIPv4:IdleAddress           $0.0003      0.07 address-hours
+  LCUUsage                              $0.0000      0.00 LCU-hours
+                                        -------
+  TOTAL                                 $1.2610
+
+# WHERE THE MONEY WENT
+#
+# 81% of the week is one line: FIS action-minutes, billed at $0.10 each.
+#
+# And almost all of those 10.25 minutes were aws:fis:wait -- the padding added
+# to give the fault a duration so a stop condition would have something to
+# interrupt. The stop-task actions themselves ran 373 ms apiece and rounded to
+# nothing.
+#
+# So the fault was free. The WAITING was the bill. That is worth knowing before
+# designing a long experiment: FIS charges for elapsed action time, not for
+# damage done, and an experiment that sits idle to satisfy an alarm's
+# evaluation window is paying by the minute to do nothing.
+#
+# The other 19% -- compute, load balancer, public IPv4 -- is what the service
+# under test costs to keep alive for roughly two hours.
+#
+# Not included: a FIS experiment REPORT at $5, which would have cost four times
+# the entire rest of the week.
