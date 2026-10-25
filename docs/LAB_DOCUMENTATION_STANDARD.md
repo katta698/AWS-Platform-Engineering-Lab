@@ -17,6 +17,46 @@ complexity.**
 - Explain essential concepts without turning the lab into a theory article.
 - **The reader should understand the purpose of the lab within the first minute.**
 
+## 1b. Two artifacts, not one
+
+Refined by Jay, 2026-10-25. **An engineering blog and a reproducible GitHub lab
+guide are different documents with different jobs.** Do not merge them.
+
+| | **Blog article** | **GitHub lab guide** |
+|---|---|---|
+| Teaches the problem | yes | no |
+| Services and architecture explained | yes | referenced |
+| Implementation | **summarised** | exact, step by step |
+| Prerequisites | no | **exact** |
+| Source files / Terraform | linked | **included** |
+| Deployment commands | no | **exact, copyable** |
+| Expected outputs | no | **yes** |
+| Validation | **actual evidence, with screenshots** | the procedure to run |
+| Security, cost, challenges, takeaways | yes | cost and cleanup detail |
+| Cleanup | summarised with evidence | **exact commands + verification** |
+
+Two further rules that follow from the split:
+
+- **The blog is not a chronological deployment diary.** Document the final
+  successful implementation first; discuss significant failures separately, in
+  Troubleshooting.
+- **Keep** real-world engineering findings, architectural trade-offs and
+  verified measurements. **Remove** repetition and excessive screenshots.
+
+**Review question for every article:** can a reader understand the architecture
+within five minutes, and can an engineer reproduce the lab from the linked
+GitHub guide? Apply the same structure across AWS, Azure and GCP while
+preserving cloud-specific technical requirements.
+
+### What this means for the section list below
+
+The ten sections are the **combined** requirement across both artifacts. In
+practice the blog carries Lab Overview, Cloud Services Used, Architecture and
+Workflow, a summarised Implementation, Validation and Evidence, Security and
+Cost, Troubleshooting, Cleanup, and Key Takeaways and References. **Prerequisites
+and the step-by-step implementation live in the GitHub guide**, which the blog
+links from its Lab Overview.
+
 ## 2. Mandatory document structure
 
 In this order:

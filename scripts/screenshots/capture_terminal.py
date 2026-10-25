@@ -76,10 +76,21 @@ SECRET_PATTERNS = [
 
 
 def run_headless(script: Path, extra_env: dict | None = None) -> tuple[int, str]:
-    """Run the commands once, capturing text, so the output can be scanned."""
+    """Run the commands once, capturing text, so the output can be scanned.
+
+    Invoked EXACTLY as the terminal run invokes it -- same `bash -x`, same
+    working directory. The two diverged once: the dry run sourced an absolute
+    path from wherever the tool happened to be, while the terminal run cd'd
+    into the script's folder first. A command using a relative path (here
+    `--filter file://cost-filter.json`) then failed in one and worked in the
+    other, which means the text that gets scanned for secrets is not the text
+    that reaches the screen. That is the one difference this gate cannot
+    tolerate.
+    """
     env = dict(os.environ, PS4="$ ", **(extra_env or {}))
     p = subprocess.run(
-        [GIT_BASH, "--noprofile", "--norc", "-c", f'set -x; source "{script.as_posix()}"'],
+        [GIT_BASH, "--noprofile", "--norc", "-x", f"./{script.name}"],
+        cwd=str(script.parent),
         capture_output=True, text=True, env=env, encoding="utf-8", errors="replace")
     return p.returncode, (p.stdout or "") + (p.stderr or "")
 
