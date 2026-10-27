@@ -1,0 +1,5 @@
+results/
+docs/linkedin/
+.terraform/
+*.tfstate*
+.wk*_resp.json
