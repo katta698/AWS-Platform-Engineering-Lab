@@ -18,7 +18,7 @@ not your code".
 So: wait for a configuration version whose commit matches the one you just
 pushed, pin the run to it, and refuse to proceed if it never arrives.
 """
-import io, json, os, subprocess, sys, time, urllib.request
+import io, json, os, re, subprocess, sys, time, urllib.request
 
 p = os.path.expandvars(r"%APPDATA%\terraform.d\credentials.tfrc.json")
 TOK = json.loads(io.open(p, encoding="utf-8-sig").read())["credentials"]["app.terraform.io"]["token"]
@@ -37,6 +37,34 @@ def main():
     if not args:
         sys.exit(__doc__)
     ws_name = args[0]
+
+    # PRE-DEPLOY GATE (added 2026-10-27)
+    #
+    # A deploy is the point of no return for before-state evidence: an empty
+    # console, a region with no functions, a workspace with no resources. None
+    # of it can be recreated afterwards, and tearing down to "recreate" one is
+    # staging evidence rather than capturing it.
+    #
+    # Every other figure check in this repo runs after that moment -- before
+    # destroy, or at push -- so the rule was enforced by Jay noticing. It
+    # should not be. This runs the check here, where it can still be obeyed.
+    # The workspace is named week-NN-dev; the week directory is week-NN-<slug>.
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    wk_dir = None
+    m = re.match(r"week-(\d+)", ws_name)
+    if m:
+        prefix = "week-%s-" % m.group(1)
+        wk_dir = next((d for d in sorted(os.listdir(root))
+                       if d.startswith(prefix) and os.path.isdir(os.path.join(root, d))), None)
+
+    if wk_dir and "--skip-predeploy" not in sys.argv:
+        rc = subprocess.run([sys.executable,
+                             os.path.join(root, "scripts", "check_before_deploy.py"),
+                             wk_dir], cwd=root).returncode
+        if rc != 0:
+            sys.exit("\nRefusing to apply. Capture what cannot be recreated "
+                     "first, or pass --skip-predeploy if you genuinely mean "
+                     "to lose it.")
     want = (args[1] if len(args) > 1 else
             subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip())
 
