@@ -10,7 +10,7 @@ missing.
 
 | # | File | Section | What it shows | Source | When |
 |---|------|---------|---------------|--------|------|
-| 01 | `01-before-state.png` | Implementation | `us-east-2` Lambda console with **no functions** — the empty region that is the experiment's fence | AWS console | **before apply** |
+| 01 | `01-before-state.png` | Implementation | Both regions side by side: us-east-1 with 13 functions, us-east-2 with 0 — the empty region that is the experiment's fence | **Real terminal** | **before apply — DONE** |
 | 02 | `02-hcp-workspace-vars.png` | Implementation | HCP workspace variables and OIDC — no static keys | HCP | at deploy |
 | 03 | `03-hcp-applied.png` | Implementation | Applied, with the resource count | HCP | at deploy |
 | 04 | `04-three-functions.png` | Implementation | Three functions in `us-east-2`, none with reserved concurrency | AWS console | after apply |
@@ -20,6 +20,16 @@ missing.
 | 08 | `08-protected-holds.png` | Validation | Same load, checkout reserved, success rate holding | Real terminal | run 2 |
 | 09 | `09-cost.png` | Security and Cost | Measured cost by usage type | Real terminal | after the bill |
 | 10 | `10-destroyed.png` | Cleanup | Nothing left in `us-east-2`, queried against AWS | Real terminal | after destroy |
+
+## Changed from the original plan
+
+Figure 01 was planned as an AWS console screenshot of the empty region. It is a
+**terminal capture** instead, and the change is an improvement rather than a
+compromise: the console shows one region's empty state, while the terminal
+shows *both* regions side by side with their function counts and quotas, which
+is the actual comparison the fence rests on. It also needs no browser session,
+so it could be taken at the moment it was needed rather than when a signed-in
+Chrome happened to be running.
 
 ## The two that carry the week
 
