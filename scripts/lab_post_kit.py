@@ -86,6 +86,22 @@ def extract(path):
         if m:
             figs[m.group(1)] = fb
 
+    # The chrome: everything above the first section -- the jk-post wrapper,
+    # the post-header (eyebrow/title/subtitle/meta) and the old table of
+    # contents. Ten posts lost all of it before this was captured, because the
+    # build replaced the whole body and extract() only ever took sections.
+    body = parts[2]
+    first = body.find('<div class="section"')
+    preamble = body[:first] if first > 0 else ""
+    header = ""
+    hm = re.search(r'(<div id="jk-post">.*?</div>\s*</div>)', preamble, re.S)
+    if hm:
+        header = hm.group(1)
+    else:
+        hm = re.search(r'(<div class="post-header">.*?</div>\s*</div>)', preamble, re.S)
+        if hm:
+            header = '<div id="jk-post">' + "\n\n" + hm.group(1)
+
     sections = {}
     for block, sid in re.findall(
             r'(<div class="section" id="([^"]+)".*?)(?=<div class="section"|\Z)', t, re.S):
@@ -97,10 +113,47 @@ def extract(path):
         "diagram": diagram or "",
         "figs": figs,
         "sections": sections,
+        "preamble": preamble,
+        "header": header,
         "title": (re.search(r"^title: (.*)$", fm, re.M) or [None, ""])[1]
                  if isinstance(re.search(r"^title: (.*)$", fm, re.M), type(None))
                  else re.search(r"^title: (.*)$", fm, re.M).group(1),
     }
+
+
+def chrome(src):
+    """The post header, plus a table of contents for the NEW sections.
+
+    The header -- eyebrow, title, subtitle, and the date/tools/cost meta line
+    -- is carried over VERBATIM. It is the post's own record of what it is and
+    when it ran, and not the restructure's to rewrite.
+
+    The table of contents is REGENERATED, because the old one links to #why,
+    #how, #challenges and friends, which do not exist after a restructure.
+    Carrying it over would produce a menu of dead links that looks perfectly
+    fine until somebody clicks one.
+    """
+    if not src["header"]:
+        raise SystemExit(
+            "this post has no post-header to carry over. Weeks 1-3 and 5 never "
+            "had one. Build it from the post's own front matter and Lab "
+            "Overview table rather than inventing facts for it.")
+    rows = chr(10).join(
+        '      <li><a href="#%s">%s</a></li>' % (sid, name)
+        for sid, name in SECTION_ORDER)
+    toc = (
+        '  <div class="toc">' + chr(10) +
+        '    <h3>&#128203; In This Post</h3>' + chr(10) +
+        '    <ol>' + chr(10) +
+        rows + chr(10) +
+        '    </ol>' + chr(10) +
+        '  </div>' + chr(10))
+    return src["header"].rstrip() + chr(10) + chr(10) + toc
+
+
+def close_chrome():
+    """Closes the jk-post wrapper. Every restructured body must end with it."""
+    return chr(10) + "</div>" + chr(10)
 
 
 def fig(src, name):
@@ -132,11 +185,77 @@ def assemble(path, src, body, *, min_words=1200, max_words=2600,
     if ids != want:
         raise SystemExit("section ids/order wrong.\n  got:  %s\n  want: %s" % (ids, want))
 
-    if out.count('<div class="section"') != out.count("</div>"):
-        raise SystemExit("unbalanced <div> in the assembled post")
+    # Count ALL divs, not just section divs. The original compared section
+    # openings to every closing tag, which was only ever right by accident --
+    # it happened to hold while posts had no chrome, and reported a correct
+    # post as broken the moment the header and toc came back.
+    body_only = out.split("---", 2)[2]
+    if body_only.count("<div") != body_only.count("</div>"):
+        raise SystemExit("unbalanced <div>: %d open, %d close"
+                         % (body_only.count("<div"), body_only.count("</div>")))
 
     if "<svg" not in out:
         raise SystemExit("architecture diagram (inline <svg>) is missing")
+
+    # THE POST CHROME MUST SURVIVE (added 2026-10-25, after it did not)
+    #
+    # A post is not only its sections. Above the first <div class="section">
+    # sits the jk-post wrapper, the post-header (eyebrow, title, subtitle and
+    # the date/tools/cost meta line) and the table of contents.
+    #
+    # The first ten restructures dropped all three, on every post, because the
+    # build replaced the whole body with the nine new sections and extract()
+    # only ever captured sections. Every other check here passed: section order,
+    # div balance, figures, word count, dates. Jay found it by opening a page on
+    # his phone and seeing it start at "Lab Overview" with no index.
+    #
+    # The table of contents must also be REGENERATED rather than carried over:
+    # the old one links to #why, #how, #challenges and friends, which no longer
+    # exist after a restructure. A preserved TOC is a menu of dead links.
+    for needle, what in (('<div id="jk-post">', "the jk-post wrapper"),
+                         ('class="post-header"', "the post-header block"),
+                         ('class="post-meta"', "the post-meta line"),
+                         ('class="toc"', "the table of contents")):
+        if needle not in out:
+            raise SystemExit(
+                "%s is missing. A restructured post keeps its chrome -- "
+                "header and meta verbatim, table of contents regenerated for "
+                "the new section ids." % what)
+
+    # EVERY CITED PAGE MUST STILL BE REACHABLE (added 2026-10-29, after it was not)
+    #
+    # The front matter's `verified_claims:` records which page was checked for
+    # each claim, and the badge on the post asserts that work to the reader. A
+    # claim is only repeatable if the reader can get to the page, which means the
+    # References list has to carry it.
+    #
+    # Condensing the prose condensed the References list with it, and eleven
+    # restructured posts (weeks 13-23) lost at least one cited page. Week 14 lost
+    # six, among them the CloudWatch and Athena pricing pages sitting behind nine
+    # separate cost claims. Nothing caught it: the shape gate checks headings, not
+    # citations, and validate_arch_post.py reports this one as advisory, so the
+    # push printed "11 error(s)" and succeeded anyway.
+    #
+    # This is the cheap place to catch it -- before the file is written, while the
+    # old References list is still in src and its wording can be carried over.
+    cited = [u.rstrip("/") for u in
+             re.findall(r"^\s*source:\s*(https://\S+)", src["fm"], re.M)]
+    if cited:
+        tail = out.split("References", 1)[-1] if "References" in out else ""
+        lost = sorted({u for u in cited if u not in tail.replace("&amp;", "&")})
+        if lost:
+            raise SystemExit(
+                "the References list no longer reaches %d page(s) this post's "
+                "verified_claims cite, so the badge asserts a check the reader "
+                "cannot repeat:\n  %s\nCarry the entry over from the old "
+                "References list rather than dropping it."
+                % (len(lost), "\n  ".join(lost)))
+
+    anchors = set(re.findall(r'<a href="#([a-z0-9-]+)"', out))
+    dead = sorted(a for a in anchors if 'id="%s"' % a not in out)
+    if dead:
+        raise SystemExit("table of contents links to sections that do not "
+                         "exist: %s" % ", ".join(dead))
 
     # the publish date must survive untouched
     for key in ("date:", "verified:"):
