@@ -15,9 +15,9 @@ missing.
 | 03 | `03-hcp-applied.png` | Implementation | Applied, with the resource count | HCP | **DONE 2026-10-29** |
 | 04 | `04-three-functions.png` | Implementation | Three functions in `us-east-2`, none with reserved concurrency | AWS console | **DONE 2026-10-29** |
 | 05 | `05-baseline-healthy.png` | Validation | checkout returning 200 at a steady rate before any load | Real terminal | run 1, baseline |
-| 06 | `06-pool-filling.png` | Validation | **The week.** CloudWatch: neighbours' concurrency climbing, checkout's throttles starting only once the pool is full | AWS console | run 1 |
+| 06 | `06-pool-filling.png` | Validation | **The week.** CloudWatch: neighbours' concurrency climbing, checkout's throttles starting only once the pool is full | AWS console | **DONE 2026-10-30** |
 | 07 | `07-checkout-starved.png` | Validation | The recorder's own output — checkout's success rate collapsing while nothing about checkout changed | Real terminal | run 1 |
-| 08 | `08-protected-holds.png` | Validation | Same load, checkout reserved, success rate holding | Real terminal | run 2 |
+| 08 | `08-protected-holds.png` | Validation | Same load, checkout reserved, success rate holding | Real terminal | **DONE 2026-10-30** |
 | 09 | `09-cost.png` | Security and Cost | Measured cost by usage type | Real terminal | after the bill |
 | 10 | `10-destroyed.png` | Cleanup | Nothing left in `us-east-2`, queried against AWS | Real terminal | after destroy |
 
