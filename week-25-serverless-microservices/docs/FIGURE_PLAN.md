@@ -18,7 +18,7 @@ missing.
 | 06 | `06-pool-filling.png` | Validation | **The week.** CloudWatch: neighbours' concurrency climbing, checkout's throttles starting only once the pool is full | AWS console | **DONE 2026-10-30** |
 | 07 | `07-checkout-starved.png` | Validation | The recorder's own output — checkout's success rate collapsing while nothing about checkout changed | Real terminal | run 1 |
 | 08 | `08-protected-holds.png` | Validation | Same load, checkout reserved, success rate holding | Real terminal | **DONE 2026-10-30** |
-| 09 | `09-cost.png` | Security and Cost | Measured cost by usage type | Real terminal | after the bill |
+| 09 | `09-cost.png` | Security and Cost | Measured cost by usage type | Real terminal | **DONE 2026-10-30** |
 | 10 | `10-destroyed.png` | Cleanup | Nothing left in `us-east-2`, queried against AWS | Real terminal | after destroy |
 
 ## Changed from the original plan
