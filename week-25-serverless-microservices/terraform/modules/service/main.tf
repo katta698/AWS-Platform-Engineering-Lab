@@ -131,7 +131,7 @@ resource "aws_lambda_function" "fn" {
   reserved_concurrent_executions = (
     var.protect_checkout && each.key == "checkout"
     ? var.checkout_reserved_concurrency
-    : -1
+    : lookup(var.neighbour_reservation, each.key, -1)
   )
 
   environment {

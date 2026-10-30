@@ -31,3 +31,9 @@ variable "checkout_reserved_concurrency" {
   type    = number
   default = 50
 }
+
+variable "neighbour_reservation" {
+  description = "Reserved concurrency per neighbour. {exports = 900} leaves 100 unreserved for reports and checkout to fight over."
+  type        = map(number)
+  default     = {}
+}

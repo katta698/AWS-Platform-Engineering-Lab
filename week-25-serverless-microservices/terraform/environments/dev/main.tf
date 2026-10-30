@@ -75,6 +75,10 @@ module "service" {
   # function is declared rather than in the experiment module.
   protect_checkout              = var.protect_checkout
   checkout_reserved_concurrency = var.checkout_reserved_concurrency
+
+  # Shrinks the unreserved pool the other two share. See the variable's own
+  # comment: this is how the experiment reaches exhaustion from one client.
+  neighbour_reservation = var.neighbour_reservation
 }
 
 module "experiment" {
