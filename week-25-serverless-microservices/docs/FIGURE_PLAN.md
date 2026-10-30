@@ -11,9 +11,9 @@ missing.
 | # | File | Section | What it shows | Source | When |
 |---|------|---------|---------------|--------|------|
 | 01 | `01-before-state.png` | Implementation | Both regions side by side: us-east-1 with 13 functions, us-east-2 with 0 — the empty region that is the experiment's fence | **Real terminal** | **before apply — DONE** |
-| 02 | `02-hcp-workspace-vars.png` | Implementation | HCP workspace variables and OIDC — no static keys | HCP | at deploy |
-| 03 | `03-hcp-applied.png` | Implementation | Applied, with the resource count | HCP | at deploy |
-| 04 | `04-three-functions.png` | Implementation | Three functions in `us-east-2`, none with reserved concurrency | AWS console | after apply |
+| 02 | `02-hcp-workspace-vars.png` | Implementation | HCP workspace variables and OIDC — no static keys | HCP | **DONE 2026-10-29** |
+| 03 | `03-hcp-applied.png` | Implementation | Applied, with the resource count | HCP | **DONE 2026-10-29** |
+| 04 | `04-three-functions.png` | Implementation | Three functions in `us-east-2`, none with reserved concurrency | AWS console | **DONE 2026-10-29** |
 | 05 | `05-baseline-healthy.png` | Validation | checkout returning 200 at a steady rate before any load | Real terminal | run 1, baseline |
 | 06 | `06-pool-filling.png` | Validation | **The week.** CloudWatch: neighbours' concurrency climbing, checkout's throttles starting only once the pool is full | AWS console | run 1 |
 | 07 | `07-checkout-starved.png` | Validation | The recorder's own output — checkout's success rate collapsing while nothing about checkout changed | Real terminal | run 1 |
