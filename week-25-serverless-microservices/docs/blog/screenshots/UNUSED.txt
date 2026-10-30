@@ -1,0 +1,21 @@
+# Capture slots declared but not published, with the reason.
+# A number is never recycled; a capture not worth publishing is retired here.
+
+# 05 - checkout returning 200 at a steady rate before any load.
+#      Covered by 08, which is the recorder's own comparison and carries the
+#      baseline for BOTH runs as a column: 83.6% unprotected, 97.6% protected.
+#      A separate screenshot of a healthy baseline shows one number that 08
+#      already shows twice, in context, beside the figure it is contrasted with.
+05-baseline-healthy.png
+
+# 07 - the recorder's output as checkout's success rate collapses.
+#      Covered by 08 for the same reason: the collapse is only meaningful
+#      against the protected run, and 08 puts 5.4% and 99.5% on adjacent lines
+#      from the two recordings. 06 carries the cause - concurrency pinned at
+#      100 with throttles in six figures.
+#
+#      Retiring these two also keeps the post inside the standard's 4-7 figure
+#      budget. With 10 and the cost slot captured the post publishes 7; adding
+#      05 and 07 would make 9, and the two they duplicate are the stronger
+#      pair.
+07-checkout-starved.png
