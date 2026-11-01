@@ -1,0 +1,27 @@
+# Copy to terraform.tfvars and fill in your values.
+# terraform.tfvars is git-ignored — never commit real values.
+
+# ── Required ──────────────────────────────────────────────────────────────────
+org_name   = "myorg"          # short slug, e.g. "acme"
+aws_region = "us-east-1"
+environment = "dev"
+
+# ── First run only — creates S3 bucket for remote state ──────────────────────
+# After apply, uncomment the backend block in backend.tf and run:
+#   terraform init -migrate-state
+# DynamoDB is NOT needed — Terraform 1.10+ uses S3 native locking (use_lockfile = true)
+bootstrap_state_bucket = true   # set false after state migration is done
+
+# ── Optional — leave defaults for a quick single-account test ─────────────────
+
+# org_id             = "o-xxxxxxxxxx"   # AWS Org ID for cross-account trust
+# member_account_ids = ["111111111111", "222222222222"]
+
+# vpc_id             = "vpc-xxxxxxxxxxxxxxxxx"
+# private_subnet_ids = ["subnet-aaa", "subnet-bbb"]
+
+# domain_name         = "ebs-savings.internal.example.com"
+# acm_certificate_arn = "arn:aws:acm:us-east-1:123456789012:certificate/xxxxxxxx"
+
+# cognito_user_pool_id  = "us-east-1_XXXXXXXXX"
+# cognito_app_client_id = "xxxxxxxxxxxxxxxxxxxxxxxxxx"
