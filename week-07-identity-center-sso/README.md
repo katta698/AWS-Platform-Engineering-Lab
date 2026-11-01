@@ -89,6 +89,23 @@ Identity Center users created via Terraform have no password and no MFA device b
 
 ---
 
+## 4. Run it
+
+This lab has no separate run step. The workload is what the deploy creates, and what to look at afterwards is in [5. Validation](#5-validation).
+
+## 5. Validation
+
+| Test | Expected |
+|---|---|
+| Terraform creates the identity objects | Three groups and three permission sets |
+| Assignments reach the target account | Each group bound to its permission set on the target account |
+| AWS provisions the role itself | An `AWSReservedSSO` role per permission set, created by Identity Center and never declared in Terraform |
+| The portal scopes by group membership | The test user sees only the role her own group grants |
+| No static credential is issued | A temporary federated session, and no IAM user or access key in the target account |
+| Session durations differ by privilege | BreakGlassAdmins shorter than Engineers |
+
+The results recorded when this lab was built are in the article.
+
 ## 6. Cleanup
 
 ### Cleanup
@@ -108,6 +125,20 @@ A destroy run removes the permission sets, groups, users, and account assignment
 | **Destroyed** | **$0** |
 
 ---
+
+## Troubleshooting
+
+**The first plan created zero account assignments and reported success**.
+The module derives its targets by listing the child accounts of named OUs, and Week 6's `Sandbox` and `Production` OUs existed but had nothing vended into them yet. An empty OU is not an error: it returns an empty list, and `setproduct` of three groups with zero accounts is zero assignments.
+*Fix:* Overrode `target_ou_names` to `["Dev"]` through an HCP workspace variable, pointing at an older OU with one active account. A deliberate deviation, written into the README to be reverted once accounts exist in the intended OUs.
+
+**Signing in as the Terraform-created test user returned *"You are required to provide multi-factor authentication that you do not have"* — for a user with no MFA device, and after the MFA setting had already been relaxed**.
+Not established. It behaved like a stuck sign-in state left by an earlier blocked attempt rather than a policy being evaluated: relaxing the setting and waiting for propagation did not clear it.
+*Fix:* Used the admin-initiated **Reset password** on the user's detail page instead of the self-service "Forgot password?" flow. That path issued a fresh credential and the block disappeared.
+
+**All three permission sets were assigned to the target account, but the test user's portal showed only `Engineers`, which looked like two assignments having failed**.
+Not a fault. The portal scopes by the signed-in user's own group membership, not by everything assigned to the account, and the test user was only in `Engineers`.
+*Fix:* None needed; confirmed against the assignment API, which listed all three.
 
 ## References
 

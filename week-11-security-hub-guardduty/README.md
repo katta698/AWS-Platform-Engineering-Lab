@@ -70,6 +70,32 @@ no GitHub Actions workflow (a VCS-connected workspace blocks CI applies).
    Config findings surface in Security Hub within ~15–30 minutes; GuardDuty
    sample findings notify within a minute or two.
 
+## 4. Run it
+
+```bash
+./scripts/generate_misconfig.sh
+```
+
+Create deliberately-insecure resources so Security Hub FSBP raises findings and the auto-remediators can be watched fixing them end-to-end. Both resources are tagged auto-remediate=true so the Lambdas act on them. Run cleanup_misconfig.sh (or the values printed here) to remove any leftovers. Usage: ./generate_misconfig.sh [vpc-id] vpc-id optional; defaults to the account's default VPC.
+
+```bash
+./scripts/trigger_guardduty_sample.sh
+```
+
+Generate GuardDuty sample findings so the threat_notifier Lambda can be seen publishing an alert to SNS. Sample findings are marked [SAMPLE] and are safe; they emit real "GuardDuty Finding" EventBridge events.
+
+## 5. Validation
+
+| Test | Expected |
+|---|---|
+| Security group with SSH and RDP open to 0.0.0.0/0, tagged `auto-remediate=true` | World-open rules revoked, finding set to RESOLVED |
+| Public S3 bucket, tagged for opt-in | All four Block Public Access settings applied, finding RESOLVED |
+| GuardDuty sample findings (credential exfiltration, crypto-mining) | Human notified by SNS; nothing mutated |
+| Untagged public bucket already in the account | Reported, never modified |
+| Failed asynchronous invocation | Lands in the dead-letter queue and raises an alarm |
+
+The results recorded when this lab was built are in the article.
+
 ## 6. Cleanup
 
 ### Cleanup

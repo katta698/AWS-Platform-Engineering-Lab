@@ -12,6 +12,15 @@ Deployed and managed via **HCP Terraform** (VCS-driven, org: Katta).
 
 > **Status:** built and validated.
 
+## 1. Prerequisites
+
+| Requirement | Why | How to check |
+|---|---|---|
+| Cost Explorer enabled on the account | Anomaly detection is part of it, and nothing can be created until it is switched on — a one-time action in the console | The Cost Management console shows cost data rather than an enable prompt |
+| Billing data history | The detector learns a normal pattern before it can call anything abnormal, so a brand-new account has nothing to compare against | Expect no anomalies at all on the first days |
+| An email address to subscribe | An SNS subscription stays pending until the confirmation link is clicked, and an unconfirmed topic delivers nothing while reporting success | `aws sns list-subscriptions-by-topic` shows an ARN, not `PendingConfirmation` |
+| An HCP Terraform workspace with OIDC | Keeps credentials out of the repo; the workspace is VCS-connected, so destroy is driven from the HCP UI | The run page shows an applied run against the committed configuration |
+
 ## 2. Source files
 
 ### Infrastructure
@@ -44,6 +53,33 @@ terraform apply
 State is in HCP (not S3). Org: `Katta` | Workspace: `week-05-dev` | Mode: VCS-driven.
 Plan on PR → Apply on merge to main.
 
+## 4. Run it
+
+This lab has no separate run step. The workload is what the deploy creates, and what to look at afterwards is in [5. Validation](#5-validation).
+
+## 5. Validation
+
+| Test | Expected |
+|---|---|
+| The stack deploys | A clean apply from a VCS-connected workspace |
+| The monitor exists and covers everything | A DIMENSIONAL monitor across all services |
+| The subscription has the intended threshold | Immediate delivery above $10 of absolute impact |
+| Both topics exist and are separate | One topic AWS publishes to, one a person subscribes to |
+| The formatter runs | A test invocation publishes to the formatted topic |
+| A human gets something readable | Expected against actual spend, with a root cause |
+| A real anomaly is detected end to end | AWS raises one by itself and the mail arrives |
+| Teardown | Everything removed |
+
+The results recorded when this lab was built are in the article.
+
+## 6. Cleanup
+
+```bash
+./scripts/cleanup.sh
+```
+
+cleanup.sh — destroys all week-05 resources
+
 ## Cost
 
 All resources are within AWS Free Tier or near-zero cost:
@@ -51,6 +87,24 @@ All resources are within AWS Free Tier or near-zero cost:
 - SNS: first 1M publishes/month free
 - Lambda: well within free tier
 - Destroyed: $0
+
+## Troubleshooting
+
+**The monitor and the subscription were both created and no alert ever fired. No error in CloudWatch, nothing in the console**.
+The SNS topic policy named `budgets.amazonaws.com` as the principal. Cost Anomaly Detection publishes as `costalerts.amazonaws.com`, and AWS drops a refused publish silently.
+*Fix:* Name the right principal.
+
+**Days passed with no real alert, even while running charges up deliberately**.
+Not a fault. The detector needs enough spend history to build a baseline before it can call anything anomalous, and a new monitor has none.
+*Fix:* Prove the delivery path with a test event, and wait for the baseline for the detection itself.
+
+**The function ran successfully and no email arrived**.
+The subscription was still in `PendingConfirmation`. SNS does not deliver to an unconfirmed endpoint, and does not treat that as an error.
+*Fix:* Click the confirmation link.
+
+**Every plan failed with `No Terraform configuration files found in working directory`, for a directory that was plainly in the repo**.
+Partly established. The HCP GitHub App's repository access was scoped to a different repository, which explains the clone having nothing in it. Granting access did not on its own fix it.
+*Fix:* Enabling "Include submodules on clone" is what broke the cycle. The repository has no submodules, so why that mattered is unconfirmed, and it is recorded here as what worked rather than as an explanation.
 
 ## References
 

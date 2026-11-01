@@ -56,6 +56,61 @@ terraform/modules/observed_workload/
   variables.tf
 ```
 
+## 3. Deploy
+
+The workspace is VCS-connected, so an apply does not run from a
+checkout: `terraform apply` is refused with
+`Error: Apply not allowed for workspaces with a VCS connection`.
+
+```bash
+# on the connected branch
+git push
+```
+
+The push queues a plan in the `week-16-dev` workspace (organization `Katta`). Confirm
+the apply on its run page.
+
+## 4. Run it
+
+```bash
+./scripts/break_it.sh
+```
+
+Break the workload in a known way, and record the truth before the agent sees it. The whole week rests on this script being honest. If the true cause is not written down BEFORE the investigation runs, then grading the agent afterwards is just deciding whether its story sounds plausible -- which is exactly the failure mode the week exists to examine. So this does three things in order: 1.
+
+```bash
+./scripts/fix_it.sh
+```
+
+Undo the deliberate break. Separate from terraform apply on purpose. An apply would also reconcile anything else that drifted, which muddies the timeline the agent is being graded on -- the point is to restore exactly what was removed and nothing else, so the CloudTrail record of the repair is as clean as the record of the break.
+
+```bash
+./scripts/measure_usage.sh
+```
+
+Read the DevOps Agent usage meter. Run before and after anything the agent does. This week has no spend ceiling to lean on. Every other week in this series had one enforced by the service -- Week 14 and Week 15 both capped Athena at 10 GB per query at the workgroup level, so a mistake was bounded by configuration. An agent space has no equivalent.
+
+## 5. Validation
+
+| Test | Expected |
+|---|---|
+| Run 1: names the cause | The revoked `ssm:GetParameter` |
+| Run 1: identifies who and when | Principal and timestamp |
+| Run 2 (decoy): reconstructs a sequence | Break, repair, re-break |
+| Declares what it could not see | Names its own gaps |
+| Mitigation plan is safe to run | Correct repair |
+| Evaluation is uncontaminated | Agent works from evidence |
+
+The results recorded when this lab was built are in the article.
+
+## 6. Cleanup
+
+Queue a destroy from the same workspace: **Settings &rarr;
+Destruction and Deletion &rarr; Queue destroy plan**, then confirm it.
+
+Verify afterwards rather than trusting the destroy output &mdash; a destroy
+reports what Terraform removed, not what is left in the account.
+
 ## Cost
 
 ### Cost — the honest position
@@ -74,6 +129,19 @@ Reads the usage meter, converts hours to dollars, and prints the absence of a li
 A free trial exists — 2 months, 20 hours of investigations per month — for new DevOps Agent customers. Whether it applies here is not yet confirmed; it appears as a billing credit, not as a usage limit, so it cannot be read from the API.
 
 ---
+
+## Troubleshooting
+
+**The first investigation's root cause ended with a sentence I did not expect: *"The SSM parameter's own description confirms this was a deliberate break."***.
+It did — because I wrote it, in the Terraform, months earlier:
+
+**How do you trust a fluent narrative at all?**.
+You cannot, from the narrative. You can from what it admits it could not see.
+*Fix:* The agent reported being denied `lambda:GetFunction` and said so.
+
+**One run proposed a repair broader than the permission that had been removed**.
+A plan optimises for "make it work", not for "restore the prior boundary".
+*Fix:* A human performed the repair, scoped to what was actually revoked.
 
 ## References
 

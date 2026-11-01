@@ -13,6 +13,15 @@
 
 > **Status:** built, validated and destroyed.
 
+## 1. Prerequisites
+
+| Requirement | Detail |
+|---|---|
+| AWS account | Permission for WAFv2, CloudFront, API Gateway, Lambda, CloudWatch, SNS |
+| Terraform | >= 1.10. Note the provider gap in Troubleshooting |
+| HCP Terraform | Workspace with OIDC to AWS. No static keys |
+| Regions | Edge ACL must be created in `us-east-1` regardless of where the origin lives |
+
 ## 2. Source files
 
 ### Layout
@@ -50,6 +59,35 @@ Then run the simulation against your own endpoints:
 Every payload is a signature string sent to an echo Lambda that does nothing but reflect its input. There is no third-party target.
 
 ---
+
+## 4. Run it
+
+```bash
+./scripts/attack_simulation.sh
+```
+
+Attack simulation for the Week 13 WAF build. Sends benign-but-rule-matching requests to YOUR OWN endpoints to prove each rule fires. Nothing here is an exploit: the payloads are the well-known signature strings the managed rule groups look for, sent to a Lambda that echoes its input and does nothing else. There is no third-party target and no vulnerability being exercised.
+
+## 5. Validation
+
+| Test | Expected |
+|---|---|
+| Benign request, Count mode | Allowed, nothing counted |
+| Path scan in Count mode | Counted, not blocked |
+| Path scan in Block mode | Rejected at the edge |
+| Same attack against the origin URL directly | Rejected by the regional ACL |
+| Credentials kept out of logs | `authorization` etc. redacted |
+| Edge alarms fire on blocks | Notification sent |
+
+The results recorded when this lab was built are in the article.
+
+## 6. Cleanup
+
+```bash
+./scripts/cleanup.sh
+```
+
+Week 13 teardown. The HCP workspace week-13-dev is VCS-connected, which means `terraform destroy` from a CLI checkout will not run against it. Destroy from the HCP UI instead: Workspace -> Settings -> Destruction and Deletion -> Queue destroy plan. This script only verifies that the destroy actually removed everything, and reports anything left behind.
 
 ## Cost
 

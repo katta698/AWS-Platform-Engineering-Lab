@@ -79,6 +79,31 @@ This packages all 3 Lambda zip files, runs `terraform init` + `terraform apply`,
 
 ---
 
+## 4. Run it
+
+This lab has no separate run step. The workload is what the deploy creates, and what to look at afterwards is in [5. Validation](#5-validation).
+
+## 5. Validation
+
+| Test | Expected |
+|---|---|
+| The platform deploys | Terraform applies cleanly from CI |
+| Fleet data reaches S3 | SSM inventory under the raw prefix |
+| The catalog describes it | Tables discovered without being declared |
+| The ETL runs | A successful Glue run |
+| Output is partitioned Parquet | Columnar files under a partitioned prefix |
+| The ticket closes itself | The requester gets an answer without an engineer |
+| The question is answerable | Patch compliance across the fleet, in SQL |
+| Query cost | Low, because partitions let Athena skip data |
+
+The results recorded when this lab was built are in the article.
+
+## 6. Cleanup
+
+```bash
+./scripts/cleanup.sh
+```
+
 ## Cost
 
 ### Cost If Left Running
@@ -91,6 +116,32 @@ This packages all 3 Lambda zip files, runs `terraform init` + `terraform apply`,
 | **Destroyed** | **$0** |
 
 ---
+
+## Troubleshooting
+
+**The Glue job crashed immediately with `java.net.URISyntaxException: Relative path in absolute URI`**.
+SSM writes its data under prefixes like `AWS:ComplianceSummary`, and Java's URI parser reads the colon as a protocol separator. `spark.read.json()` could not open a path it considered malformed.
+*Fix:* Listed and downloaded the objects with a boto3 paginator instead, which treats a key as a string, then built the DataFrame from the records.
+
+**Every signed webhook returned 401, with the right secret**.
+ServiceNow sent the signature as `x-servicenow-hmac`; the function read `X-ServiceNow-HMAC`. API Gateway lowercases header names, so the lookup found nothing and compared against an empty string.
+*Fix:* Read the lowercase name.
+
+**The state machine appeared stuck polling the crawler**.
+It was not. The poll waits 30 seconds and a first crawler run takes four to five minutes doing schema inference from cold.
+*Fix:* No code change; added logging so the poll count is visible.
+
+**The Glue job failed with `Script not found`**.
+Terraform creates the job with a script location; it does not put the script there.
+*Fix:* Upload it in the deploy workflow before `terraform apply`.
+
+**The raw bucket stayed empty for more than twenty minutes after Resource Data Sync was configured**.
+Two things at once: the initial sync delay is up to thirty minutes, and the sync role was missing `ssm:PutComplianceItems` on the target instances.
+*Fix:* Fixed the permission, then waited.
+
+**Closing the ticket returned 404**.
+The payload carried the human-readable number (`RITM0012345`); the API PATCH endpoint addresses records by `sys_id`.
+*Fix:* Resolve the number to a `sys_id` with a query first, and carry the `sys_id` in the payload from then on.
 
 ## References
 

@@ -13,6 +13,15 @@ A self-service fleet management platform where ops engineers submit a ServiceNow
 
 > **Status:** built and validated.
 
+## 1. Prerequisites
+
+| Requirement | Why | How to check |
+|---|---|---|
+| The SSM agent running, with an instance profile that allows it | Systems Manager reaches an instance through its agent and the agent's role. Without the role the instance is simply invisible, with no error anywhere | It appears in Fleet Manager as `Online` |
+| A network path to the Systems Manager endpoints | The agent has to reach the service. This build uses VPC interface endpoints rather than a NAT gateway, which removes the per-GB charge entirely | The instance registers without a public route |
+| A `PatchGroup` tag on anything you expect to be patched | The tag is what associates an instance with a baseline. An untagged instance reports no compliance state rather than a bad one | Patch Manager lists the instance against a baseline |
+| A shared secret for the webhook | The endpoint accepts only signed requests | Held as a sensitive variable, never in the repo |
+
 ## 2. Source files
 
 What builds this. Documentation, figures and build artefacts are left out.
@@ -317,6 +326,32 @@ gh secret set ALERT_EMAIL             --body "your-email@example.com"
 sh scripts/cleanup.sh
 # Destroys all infrastructure including EC2 fleet, SSM documents, session logs bucket
 ```
+
+## 4. Run it
+
+This lab has no separate run step. The workload is what the deploy creates, and what to look at afterwards is in [5. Validation](#5-validation).
+
+## 5. Validation
+
+| Test | Expected |
+|---|---|
+| Starting state is honest | Instances that have never been scanned report as such |
+| An unmanaged instance is invisible, not wrong | An instance with only a `Name` tag has no baseline |
+| Onboarding tags it | The workflow applies the tags that make it managed |
+| The fleet grows by one | Patch Manager counts the new instance with the others |
+| Patching reaches compliance | Every instance compliant, nothing missing |
+| Every request is auditable | One execution per request, each with a timestamp |
+| The requester gets the answer | The ticket closes carrying the compliance result |
+
+The results recorded when this lab was built are in the article.
+
+## 6. Cleanup
+
+```bash
+./scripts/cleanup.sh
+```
+
+cleanup.sh — Destroy all Week 3 infrastructure + CloudWatch log groups
 
 ## Cost
 

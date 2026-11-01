@@ -233,6 +233,19 @@ Tests 3, 5 and 6 are the ones worth the week.
 
 ---
 
+## 5. Validation
+
+| Test | Expected |
+|---|---|
+| Image push is signed | Valid Signer signature |
+| Repository outside the filter | Not signed |
+| Enhanced scan reads language deps | Python findings reported |
+| Signed but vulnerable image | Quarantined |
+| Re-tagged existing image | Evaluated |
+| Gate failure behaviour | Fails closed, alarms |
+
+The results recorded when this lab was built are in the article.
+
 ## 6. Cleanup
 
 ### Teardown
@@ -290,6 +303,20 @@ Twelve signatures rather than three, because **every rebuild re-signs**. Four
 builds during one night of debugging cost four times a single build. On a busy
 pipeline that is the line to watch, not storage — which came to eight
 hundredths of a cent.
+
+## Troubleshooting
+
+**An image rebuilt byte-identically sat deployable with seven critical findings**.
+Inspector emits its scan-complete event **only the first time it sees a digest**. The rebuild attached a new tag to content Inspector already knew, so there was no new scan, no event, and no evaluation. Deleting the image from ECR first did not help; Inspector still remembered.
+*Fix:* A second trigger on ECR's own push event, deciding from findings Inspector already holds.
+
+**The headline test quarantined an image carrying a complete, valid AWS Signer signature**.
+Working as intended — 16 findings, of which 12 were Python package findings including CVE-2023-30861 on Flask, against 4 OS findings. Basic scanning would have reported the four and stopped.
+*Fix:* None needed; this is the demonstration.
+
+**`terraform validate` rejects the signing configuration outright**.
+The feature shipped in November 2025; the provider pull request was still open when 6.68.0 shipped on 7 October 2026.
+*Fix:* Create it outside Terraform and document the gap, rather than pretending the stack is complete.
 
 ## References
 

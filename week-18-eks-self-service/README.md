@@ -15,6 +15,15 @@ This week builds a cluster where a new tenant gets a namespace that actually *is
 
 > **Status:** built, validated and destroyed.
 
+## 1. Prerequisites
+
+| Requirement | Detail |
+|---|---|
+| AWS account | Permission for EKS, EC2, Fargate, VPC, IAM and S3 |
+| Terraform | >= 1.10, plus the Kubernetes provider |
+| Control plane logging | Audit logs on — a denied cross-tenant call is only visible there |
+| Region | `us-east-1` |
+
 ## 2. Source files
 
 What builds this. Documentation, figures and build artefacts are left out.
@@ -37,6 +46,28 @@ terraform/modules/tenant/
   outputs.tf
   variables.tf
 ```
+
+## 3. Deploy
+
+The workspace is VCS-connected, so an apply does not run from a
+checkout: `terraform apply` is refused with
+`Error: Apply not allowed for workspaces with a VCS connection`.
+
+```bash
+# on the connected branch
+git push
+```
+
+The push queues a plan in the `week-18-dev` workspace (organization `Katta`). Confirm
+the apply on its run page.
+
+## 4. Run it
+
+```bash
+./scripts/prove_isolation.sh
+```
+
+Prove the tenancy boundary, rather than assert it. Four checks against the live cluster. The two that matter are the ones expected to FAIL: 1. tenant-a reaches its own bucket -> must succeed (Pod Identity) 2. tenant-a reaches tenant-b's bucket -> must be DENIED 3. tenant-b reaches its own bucket -> must succeed (IRSA, Fargate) 4.
 
 ## 5. Validation
 
@@ -88,6 +119,20 @@ Prices as of September 2026 — verify at [aws.amazon.com/eks/pricing](https://a
 **Extended support is $0.60/hr**, six times standard, if the cluster falls off a supported Kubernetes version. Staying current is a cost decision.
 
 ---
+
+## Troubleshooting
+
+**The first run reported *two passed, two failed*. The two failures looked like a real isolation problem**.
+Every probe was rejected before a container started. The ResourceQuota requires every pod to declare CPU and memory requests and limits; my probes declared none, so the admission controller refused all four. The checks looked only for denial strings in the output — and **a pod that never starts produces none**. So "no denial found" scored as success on the two tests that expected success.
+*Fix:* Add resources to the probes — and make anything resembling a pod failing to start a hard failure regardless of what the output says.
+
+**Pods that previously deployed fine began being refused**.
+A ResourceQuota makes requests and limits mandatory in that namespace — retroactively, for everything.
+*Fix:* Declare resources on every workload before applying the quota.
+
+**Pod Identity silently failed on Fargate**.
+The agent is a privileged DaemonSet; Fargate runs neither. The webhook still injects the environment variables, so the pod looks correctly configured and the credential fetch simply times out.
+*Fix:* IRSA for Fargate pods, Pod Identity for EC2 pods, in the same cluster — which is AWS's own answer.
 
 ## References
 

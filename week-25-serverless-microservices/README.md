@@ -202,6 +202,31 @@ log groups persist and will hold data until removed.
 
 ---
 
+## Cost
+
+| Usage type | Quantity | Cost |
+|---|---|---|
+| API Gateway HTTP requests | 798,228 | $0.798228 |
+| DynamoDB write request units | 21,446 | $0.013404 |
+| Lambda requests and duration | 21,446 requests, 30,056 GB-seconds | $0.00 |
+| **Total** |  | **$0.81** |
+
+The protection in run 2 cost $0.00.
+
+## Troubleshooting
+
+**An early run showed checkout falling to 2% success under load. It looked exactly like the result the lab was built to produce**.
+It was the client dying, not the service. The failures were connection errors rather than HTTP 503s, they began ten seconds *before* the neighbours ramped on, and CloudWatch recorded zero throttles on all three functions with the pool peaking at 292 of 1,000.
+*Fix:* Change the success criterion from a success-rate curve to `Throttles` in CloudWatch, then re-run.
+
+**Two attempts failed to exhaust the pool, peaking at 319 and 292 concurrent executions with no throttling at all**.
+Concurrency is requests per second times duration, so occupying 1,000 slots means holding 1,000 requests open simultaneously. The original generator started a thread per request and delivered 13 requests a second when asked for 60. Rewriting it in asyncio — coroutines holding keep-alive connections, working in concurrency rather than request rate — raised the ceiling and still fell short.
+*Fix:* Stop trying to fill the pool and shrink it instead: reserve 900 to a neighbour, and AWS leaves exactly 100 unreserved for the others to contend over.
+
+**Setting checkout's reservation to 50 while lowering a neighbour's from 900 to 850 failed: `InvalidParameterValueException: Specified ReservedConcurrentExecutions for function decreases account's UnreservedConcurrentExecution below its minimum value of [100]`**.
+Terraform applied checkout's increase before the neighbour's decrease. The requested end state totals 900 reserved and is perfectly legal; the intermediate state asked for 950 and breached the account floor.
+*Fix:* Two applies — lower first, then raise.
+
 ## References
 
 - [Understanding Lambda function scaling](https://docs.aws.amazon.com/lambda/latest/dg/lambda-concurrency.html) — the shared pool, reserved vs provisioned, the 10× requests-per-second rule

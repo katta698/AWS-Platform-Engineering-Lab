@@ -26,6 +26,16 @@ deploying the same application — so the only variable is who operates Argo CD.
 
 > **Status:** built, validated and destroyed.
 
+## 1. Prerequisites
+
+| Requirement | Detail |
+|---|---|
+| AWS account | Permission for EKS, EC2, VPC, IAM and the EKS Capability |
+| IAM Identity Center | An enabled instance — the capability authenticates through it |
+| Terraform | >= 1.10, plus the Helm and Kubernetes providers |
+| A Git repository | Public for this lab; the capability role needs no policy to read one |
+| Region | `us-east-1` |
+
 ## 2. Source files
 
 ### Layout
@@ -40,6 +50,28 @@ terraform/
   modules/argocd_selfmanaged    helm_release, chart pinned to 10.9.1
   environments/dev              both paths on one cluster
 ```
+
+## 3. Deploy
+
+The workspace is VCS-connected, so an apply does not run from a
+checkout: `terraform apply` is refused with
+`Error: Apply not allowed for workspaces with a VCS connection`.
+
+```bash
+# on the connected branch
+git push
+```
+
+The push queues a plan in the `week-19-dev` workspace (organization `Katta`). Confirm
+the apply on its run page.
+
+## 4. Run it
+
+```bash
+./scripts/prove_drift.sh
+```
+
+What does Argo CD's self-heal actually heal? GitOps' headline claim is that Git is the source of truth and the cluster converges back to it. That claim is true and narrower than it sounds, and this script is an attempt to find its edge rather than to demonstrate it. THE RULE THIS SCRIPT IS BUILT AROUND Week 18's isolation test reported two passes out of four against pods that never started.
 
 ## 5. Validation
 
@@ -119,6 +151,20 @@ capability-hours plus $0.007 in Application-hours, itemised separately), and
 $0.04 of Elastic IP, EBS and regional data transfer. The rate line predicts
 $1.17 — 3% under, and the gap is entirely the three items a rate table never
 lists.
+
+## Troubleshooting
+
+**The first apply built the VPC, cluster, node group and capability, then failed on the Helm release: *"CustomResourceDefinition `applications.argoproj.io` in namespace "" exists and cannot be imported into the current release"***.
+Note `namespace ""` — that is Kubernetes saying the object has no namespace, because it *cannot* have one. **CRDs are cluster-scoped.** Separate namespaces isolate Deployments, Services and configuration, and isolate nothing whatsoever about the type definitions they share. Creating the capability installs the CRDs; AWS documents it in one sentence in a list of five.
+*Fix:* The second installation defers to the first rather than adopting the objects.
+
+**An out-of-band resource survived indefinitely under a controller with self-heal enabled**.
+Self-heal reverts fields Git specifies and restores resources Git declares. It leaves alone any field Git never mentions, and never prunes a resource it never tracked.
+*Fix:* Treat "tracked" as the unit, and prune explicitly if you need it.
+
+**One Application reported `OutOfSync` permanently**.
+The last writer takes the tracking annotation and reports `Synced`; the other sees a resource it believes it owns, annotated for someone else.
+*Fix:* Give each controller its own resources. There is no shared-ownership mode.
 
 ## References
 

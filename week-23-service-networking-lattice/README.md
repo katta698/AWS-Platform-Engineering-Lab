@@ -180,6 +180,27 @@ half-finished destroy leaves a VPC that looks orphaned and is not.
 
 ---
 
+## 4. Run it
+
+```bash
+./scripts/test_auth.sh
+```
+
+Run the six authorisation tests in order and print pass/fail for each. bash scripts/test_auth.sh Order matters. Test 2 establishes that an allowed call works at all; a refusal in test 3 means nothing until test 2 has passed, because every call would be refused if the plumbing were simply broken. Nothing here is interactive and nothing is left running.
+
+## 5. Validation
+
+| Test | Expected |
+|---|---|
+| Infrastructure deploys | 24 resources |
+| `orders-client` calls `GET` | 200 |
+| `stranger` calls `GET` | 403 |
+| Unsigned (anonymous) call | 403 |
+| Policy deleted, `auth_type` still `AWS_IAM` | Fails closed |
+| `auth_type` set to `NONE`, policy left attached | Policy still enforced |
+
+The results recorded when this lab was built are in the article.
+
 ## 6. Cleanup
 
 ### Teardown
@@ -211,6 +232,16 @@ only ever says "VPC Lattice".
 **Billed total:** filled in from the bill after teardown, not estimated here.
 
 ---
+
+## Troubleshooting
+
+**With `auth_type` set to `NONE`, the wrong role using the wrong method received a **200****.
+`auth_type` and the auth policy are separate objects. The policy stayed attached and visible, reporting `state: Inactive` — a field almost nobody queries — while the service reported `Status: Active` at the top of the same page.
+*Fix:* Set `auth_type = "AWS_IAM"` explicitly on both the service and the service network. Terraform makes it optional on both, and the auth policy resource does not set it, so omitting it silently yields the `NONE` default.
+
+**With the service policy inert, spot-checking from outside the VPC still returned 403, suggesting the controls were fine**.
+The service network policy carried on refusing anonymous callers even though the service layer was disabled. Something was still saying no.
+*Fix:* Test from inside the VPC with a real signed identity, not from outside with none.
 
 ## References
 

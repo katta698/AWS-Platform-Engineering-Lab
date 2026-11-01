@@ -15,6 +15,16 @@ The single highest-leverage decision in here is one configuration field. Flow lo
 
 > **Status:** built, validated and destroyed.
 
+## 1. Prerequisites
+
+| Requirement | Detail |
+|---|---|
+| AWS account | Permission for VPC, EC2, S3, Glue, Athena, Lambda, CloudWatch |
+| Terraform | >= 1.10 |
+| HCP Terraform | Workspace with OIDC to AWS. No static keys |
+| Instance access | SSM Session Manager — no SSH, no key pairs |
+| Region | `us-east-1` |
+
 ## 2. Source files
 
 What builds this. Documentation, figures and build artefacts are left out.

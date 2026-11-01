@@ -311,6 +311,32 @@ sh scripts/cleanup.sh
 # Aurora takes ~5 min to fully delete
 ```
 
+## 4. Run it
+
+This lab has no separate run step. The workload is what the deploy creates, and what to look at afterwards is in [5. Validation](#5-validation).
+
+## 5. Validation
+
+| Test | Expected |
+|---|---|
+| The stack deploys | A clean apply |
+| The endpoint accepts a request | A POST returns success |
+| The workflow runs end to end | Provision, then update the ticket |
+| Credentials are stored, not returned | A per-tenant secret in Secrets Manager |
+| The database actually exists | The new database on the shared cluster |
+| The requester is told | The ticket closes with the connection details |
+| Tenants cannot read each other's data | A role scoped to its own database only |
+
+The results recorded when this lab was built are in the article.
+
+## 6. Cleanup
+
+```bash
+./scripts/cleanup.sh
+```
+
+cleanup.sh — Destroy all Week 2 infrastructure + CloudWatch log groups
+
 ## Cost
 
 | Resource                       | Cost/month (if left running) |

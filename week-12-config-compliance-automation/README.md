@@ -19,6 +19,15 @@ because a tag value can't be safely invented by automation.
 
 > **Status:** built, validated and destroyed.
 
+## 1. Prerequisites
+
+| Requirement | Detail |
+|---|---|
+| AWS account | Permission for Config, S3, SSM, Lambda, EventBridge, SNS, SQS |
+| Terraform | >= 1.10 |
+| HCP Terraform | **Two workspace variables**: `TFC_AWS_PROVIDER_AUTH=true` and `TFC_AWS_RUN_ROLE_ARN`. Remote runners have no AWS credentials by default |
+| Region | `us-east-1` |
+
 ## 2. Source files
 
 ### Configuration
@@ -54,6 +63,27 @@ blocks CI applies).
    within minutes) and an untagged bucket (should surface in the next daily
    digest). Config evaluates on a resource-change trigger, usually within a
    few minutes.
+
+## 4. Run it
+
+```bash
+./scripts/generate_misconfig.sh
+```
+
+Create deliberately-non-compliant S3 buckets so the 3 Config rules can be watched evaluating (and, for the tagged one, auto-remediating) end-to-end. Bucket 1 is tagged auto-remediate=true and left with no versioning/encryption (a bucket's default state) — the two S3 rules should flag it NON_COMPLIANT, then the SSM-document remediations should fix both within minutes.
+
+## 5. Validation
+
+| Test | Expected |
+|---|---|
+| Untagged bucket | Flagged by `required-tags` |
+| Untagged bucket auto-tagged? | No — a human supplies the value |
+| Unversioned bucket, opted in | Remediated via SSM |
+| Unversioned bucket, *not* opted in | Never evaluated |
+| Daily digest reaches a human | Email, scoped to these 3 rules |
+| Tag-scoped IAM guardrail on S3 | Restricts bucket-level admin actions |
+
+The results recorded when this lab was built are in the article.
 
 ## 6. Cleanup
 

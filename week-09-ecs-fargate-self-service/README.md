@@ -104,6 +104,26 @@ This deploys a public `nginx` image as `demo-nginx` — see `lambda/webhook_rece
 
 ---
 
+## 4. Run it
+
+```bash
+./scripts/test_webhook.sh
+```
+
+Usage: bash test_webhook.sh <api_gateway_url> <webhook_secret> [ticket_id] [service_name] [image_uri] api_gateway_url: from terraform output api_gateway_url (HCP UI -> Outputs) webhook_secret: the value you set as the webhook_secret HCP workspace variable No ticket_sys_id is sent - there's no real ServiceNow ticket behind a manual test, and status_notifier skips the ServiceNow update gracefully
+
+## 5. Validation
+
+| Test | Expected |
+|---|---|
+| Submit a catalog request for a private-ECR nginx image | Step Functions completes both states |
+| ECS service health | Task registers healthy against the path-aware health check |
+| Reach the service over HTTP | The shared ALB serves the app at its own path prefix |
+| Ticket closed automatically | The request item closes with a provisioning work note |
+| Public registry image | Expected to fail; tasks have no internet route |
+
+The results recorded when this lab was built are in the article.
+
 ## 6. Cleanup
 
 ### Cleanup
@@ -125,6 +145,23 @@ Every self-service ticket's ECR repo, task definition, ECS service, target group
 | **Pipeline infra + test services destroyed** | **$0** |
 
 Prices as of July 2026 — verify at [aws.amazon.com/fargate/pricing](https://aws.amazon.com/fargate/pricing/) and [aws.amazon.com/elasticloadbalancing/pricing](https://aws.amazon.com/elasticloadbalancing/pricing/).
+
+## Troubleshooting
+
+**A genuinely healthy task kept being killed**
+The demo app was running and answering — confirmed by its `Server: nginx` response header — and ECS kept replacing the task as unhealthy.
+
+**The retry was not idempotent**
+A transient failure triggered the Step Functions Retry, which re-ran the provisioner from the top and hit `InvalidParameterException: Creation of service was not idempotent`.
+
+**A missing service-linked role broke the first real ticket**
+`RegisterScalableTarget` failed with a `ValidationException`.
+
+**The ticket would not close, and the reason was already written down**
+`status_notifier`'s PATCH returned 404 for a ticket that plainly existed.
+
+**A wrong field name that failed silently**
+Provisioning the ServiceNow side through the Table API rather than by hand surfaced two quirks no documentation mentions: a community-standard `HexUtil` call that the real instance rejects as undefined, and a field name the API accepted without complaint while the record simply did not work. The second is the worse failure — nothing errored, and the only way to catch it was reading the raw JSON.
 
 ## References
 

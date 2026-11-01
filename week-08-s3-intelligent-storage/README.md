@@ -13,6 +13,15 @@
 
 > **Status:** built and validated.
 
+## 1. Prerequisites
+
+| Requirement | Why | How to check |
+|---|---|---|
+| An HCP Terraform workspace with OIDC into an AWS role | Keeps credentials out of the repo and out of CI | The workspace assumes the role on each run; no static keys exist anywhere |
+| An email address you can read during the apply | An SNS subscription is *pending* until the confirmation link is clicked, and an unconfirmed topic delivers nothing while reporting success | `aws sns list-subscriptions-by-topic` shows an ARN rather than `PendingConfirmation` |
+| A day of patience before judging the report | S3 storage metrics in CloudWatch are published roughly daily, so the first report is legitimately empty — this is not a bug in the reporter | The first report says so; the second has numbers |
+| Terraform with the AWS provider | Everything here is declared; nothing is clicked | `terraform version` |
+
 ## 2. Source files
 
 What builds this. Documentation, figures and build artefacts are left out.
@@ -111,6 +120,26 @@ aws sqs get-queue-attributes \
 ```
 
 ---
+
+## 5. Validation
+
+| Test | Expected |
+|---|---|
+| The platform deploys | 25 resources |
+| The bucket is hardened | Versioning on, SSE-S3 encryption, public access fully blocked |
+| Intelligent-Tiering is configured | Archive Instant at 90 days, Deep Archive at 180, bucket-wide |
+| Lifecycle rules exist | Three: `logs/` to Standard-IA at 30 days, Glacier Instant Retrieval at 90 and deletion at 365; abort incomplete multipart uploads at 7 days; expire noncurrent versions at 30 |
+| Objects are tagged on upload | `content-type` and `upload-date` applied by the tagger |
+| The tagger has no failures | An empty dead-letter queue |
+| The daily report is delivered | An email, on a schedule, with the bucket's size |
+
+The results recorded when this lab was built are in the article.
+
+## 6. Cleanup
+
+```bash
+./scripts/cleanup.sh
+```
 
 ## Cost
 

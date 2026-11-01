@@ -15,6 +15,15 @@ CodeDeploy, because AWS recommends the native path for new work as of March 2026
 
 > **Status:** built, validated and destroyed.
 
+## 1. Prerequisites
+
+| Requirement | Detail |
+|---|---|
+| AWS account | Permission for ECS, ELB, IAM, CloudWatch and VPC resources |
+| Terraform | >= 1.10, with an AWS provider supporting ECS native blue/green |
+| HCP Terraform | Workspace with OIDC to AWS. No static keys |
+| Region | `us-east-1` |
+
 ## 2. Source files
 
 What builds this. Documentation, figures and build artefacts are left out.
@@ -32,6 +41,20 @@ terraform/modules/service/
   outputs.tf
   variables.tf
 ```
+
+## 3. Deploy
+
+The workspace is VCS-connected, so an apply does not run from a
+checkout: `terraform apply` is refused with
+`Error: Apply not allowed for workspaces with a VCS connection`.
+
+```bash
+# on the connected branch
+git push
+```
+
+The push queues a plan in the `week-21-dev` workspace (organization `Katta`). Confirm
+the apply on its run page.
 
 ## 4. Run it
 
@@ -72,6 +95,14 @@ The good release: cutover visible to a client at **t+182s**, 62 requests on v1, 
 zero failures. A straight switch, not a percentage split — one task plus plain `BLUE_GREEN`
 just flips the listener rule.
 
+## 6. Cleanup
+
+```bash
+./scripts/cleanup.sh
+```
+
+Week 21 teardown verification. Run AFTER the HCP destroy. This week has a real hourly meter -- the ALB bills whether or not anything is deployed -- so "probably gone" is not good enough. One lesson carried in deliberately: a check that cries wolf is one nobody reads to the end. Anything that cannot be deleted and does not bill is reported as a note, not a finding.
+
 ## Cost
 
 **Billed $0.1552** for about three hours — Elastic Load Balancing $0.1126, ECS/Fargate
@@ -80,6 +111,20 @@ that served a few hundred requests: the meter is the front door, not the contain
 
 Destroyed and verified: no load balancer, cluster, target groups or network interfaces
 remain, and the workspace reports zero resources.
+
+## Troubleshooting
+
+**The deliberately broken version was deployed and the automatic rollback alarm never fired**.
+The broken version **failed its health check** (`Target.ResponseCodeMismatch` — 404), so ECS never sent it any traffic. No client request reached it, so there were no errors, so the alarm stayed `OK` and rolled back nothing. Alarm history confirms no state change during the deployment.
+*Fix:* None needed — users were protected. But by the health check, not by the mechanism built for the job.
+
+**The failed deployment cycled tasks for over ten minutes**.
+`deploymentCircuitBreaker` is **off by default**. The deployment retried rather than reverting.
+*Fix:* Enable the circuit breaker with rollback.
+
+**`terraform apply` returned *applied* with zero new tasks running and the old version still serving**.
+Terraform hands off to ECS and returns; the deployment continues asynchronously.
+*Fix:* Watch the deployment from the client side, not the apply output.
 
 ## References
 

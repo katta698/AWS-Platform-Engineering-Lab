@@ -93,6 +93,28 @@ git push
 # 5. Watch data arrive (5-10 min for first generator runs + centralized copies)
 ```
 
+## 4. Run it
+
+This lab has no separate run step. The workload is what the deploy creates, and what to look at afterwards is in [5. Validation](#5-validation).
+
+## 5. Validation
+
+| Test | Expected |
+|---|---|
+| Generator writes to the intended log group | Structured JSON in `/platform-lab/week10/log-generator` |
+| Cross-account query from the monitoring account | One Logs Insights query, scope "All accounts", returns results from the source account |
+| Alarm fires on an error spike | Five or more ERROR events in five minutes moves the alarm to ALARM and emails SNS |
+| Cross-account dashboard | Centralized error count beside the source account's Lambda metrics |
+| Org-wide centralization rule | Matching log groups replicated into the management account |
+
+The results recorded when this lab was built are in the article.
+
+## 6. Cleanup
+
+```bash
+./scripts/cleanup.sh
+```
+
 ## Cost
 
 | Component | Deployed | Notes |

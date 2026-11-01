@@ -111,6 +111,27 @@ curl -X POST "$API_GATEWAY_URL" \
 
 ---
 
+## 4. Run it
+
+```bash
+./scripts/test_webhook.sh
+```
+
+Usage: bash test_webhook.sh <api_gateway_url> <webhook_secret> [ticket_id] <account_email> [target_ou] account_email is REQUIRED and has no default: a vended account is a real AWS account tied to a real mailbox, so the address has to be a deliberate choice rather than whatever was left in the script.
+
+## 5. Validation
+
+| Test | Expected |
+|---|---|
+| The OU tree is created | Sandbox and Production nested under the existing Workloads OU |
+| The guardrail is attached | `sandbox-guardrail-scp` attached to the Sandbox OU |
+| The webhook authenticates and starts the workflow | An HMAC-signed POST returns 200 and a Step Functions execution ARN |
+| An account is vended | A new account appears in the Sandbox OU |
+| The failure path reports the failure | `CreateAccount`'s Catch routes to `VendingFailed`, which closes the ticket with the reason |
+| Teardown removes everything | A clean destroy |
+
+The results recorded when this lab was built are in the article.
+
 ## 6. Cleanup
 
 ### Cleanup
@@ -132,6 +153,28 @@ A destroy run removes the OUs, SCP, Lambda, Step Functions, and API Gateway — 
 | **Pipeline infra destroyed** | **$0** (vended accounts are a separate, manual cleanup) |
 
 ---
+
+## Troubleshooting
+
+**The organization was not the blank slate the module assumed**.
+It already held Control-Tower-style OUs and three `SUSPENDED` accounts, residue of a decommissioned Landing Zone.
+*Fix:* Nested the new OUs inside the existing `Workloads-OU`, found by data source rather than assumed.
+
+**The workspace failed with `lstat ../../modules: no such file or directory`**.
+A CLI-driven HCP workspace uploads only the directory Terraform runs from, so a module source above it can never resolve.
+*Fix:* Connected the workspace to the repository instead, with `working-directory` set to the environment path.
+
+**Attaching the SCP failed with `PolicyTypeNotEnabledException`**.
+`SERVICE_CONTROL_POLICY` had never been enabled on the root, and Terraform creates the policy quite happily while the type is off.
+*Fix:* `enable-policy-type`, once. The provider has no equivalent resource.
+
+**When account creation failed, the execution reported `FAILED` and the ticket was never told**.
+`VendingFailed` read `$.status_result.failure_reason`, which only the polling branch sets. With `CreateAccount` itself failing, the field did not exist and the handler died on `States.Runtime`.
+*Fix:* A `NormalizeFailure` pass state that both Catch blocks route through, mapping `$.error.Cause` into the expected field.
+
+**The first end-to-end test returned `ConstraintViolationException: You have exceeded the allowed number of AWS accounts`**.
+Ten accounts against the default limit — seven active, three suspended, and suspended ones still count.
+*Fix:* None on the day. Closing an account does not free the slot: it stays suspended for about 90 days before deletion, and counts throughout. The limit moves only by support request.
 
 ## References
 

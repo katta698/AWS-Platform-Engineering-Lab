@@ -20,6 +20,16 @@ break the one everybody assumes rather than tests.
 
 > **Status:** built, validated and destroyed.
 
+## 1. Prerequisites
+
+| Requirement | Detail |
+|---|---|
+| AWS account | Permission for EventBridge, Lambda, SQS, CloudTrail, CloudWatch and S3 |
+| Terraform | >= 1.10 |
+| HCP Terraform | Workspace with OIDC to AWS. No static keys |
+| CloudTrail | Data events are **off by default** and billed per event — scope the selector by bus ARN |
+| Region | `us-east-1` |
+
 ## 2. Source files
 
 ### Layout
@@ -33,6 +43,47 @@ terraform/
   modules/consumers          rules, consumer, DLQ, catch-all, alarms
   environments/dev           HCP workspace week-20-dev
 ```
+
+## 3. Deploy
+
+The workspace is VCS-connected, so an apply does not run from a
+checkout: `terraform apply` is refused with
+`Error: Apply not allowed for workspaces with a VCS connection`.
+
+```bash
+# on the connected branch
+git push
+```
+
+The push queues a plan in the `week-20-dev` workspace (organization `Katta`). Confirm
+the apply on its run page.
+
+## 4. Run it
+
+```bash
+./scripts/prove_replay.sh
+```
+
+Does a replay re-deliver to the rules that existed when the event was archived, or to the rules that exist now? It matters because people reach for replay during an incident: "we lost an hour of events, replay them." If replay followed the ORIGINAL routing, that is a time machine.
+
+```bash
+./scripts/prove_unmatched.sh
+```
+
+What happens to an event that no rule matches? The advertised answer is "it is discarded". The interesting part is how thoroughly indistinguishable that is from success: PutEvents returns HTTP 200 and an event id, the publisher's code carries on, and nothing anywhere says a decision was made to drop it. THE RULE THIS SCRIPT IS BUILT AROUND, carried from two prior weeks.
+
+## 5. Validation
+
+| Test | Expected |
+|---|---|
+| Matching event reaches the consumer | Delivered and processed |
+| Typo event (`order.crated`) is published | 200, matched by nothing |
+| CloudTrail attributes the publisher | Caller recorded |
+| Rule-target DLQ catches a failing consumer | Message lands in DLQ |
+| Consumer-error alarm fires | Notification sent |
+| Replay re-delivers an archived event | Follows current rules |
+
+The results recorded when this lab was built are in the article.
 
 ## 6. Cleanup
 
@@ -66,6 +117,20 @@ event, and lab volume is thousands.
 **Expected total: cents.** Teardown still matters, but for a different reason —
 the archive, the trail and the discoverer keep charging quietly and
 indefinitely. Small and permanent is easier to miss than large and obvious.
+
+## Troubleshooting
+
+**`Order.crated` — published once, matched by nothing, consumed by nobody — acquired a full OpenAPI definition beside the real events**.
+Schema discovery documents what producers *actually send*, and at the wire level there is no difference between a new event type and a bug.
+*Fix:* None available — discovery is not validation, and nothing rejected any of them. EventBridge accepted every event regardless of the registry's contents.
+
+**A DLQ was attached to the rule target, an event the consumer fails on was published, and the queue stayed empty**.
+The EventBridge DLQ covers "I could not hand this over". A target that *accepts* an event and then fails has succeeded as far as the rule is concerned.
+*Fix:* A separate on-failure destination on the function itself — two failure modes, two queues.
+
+**A replayed event was delivered through a rule that did not exist when it was first published**.
+Replay follows *current* rules, issues new event ids, and carries today's consequences.
+*Fix:* Treat replay as publishing, not as time travel.
 
 ## References
 

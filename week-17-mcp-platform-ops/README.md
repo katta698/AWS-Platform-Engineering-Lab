@@ -15,6 +15,15 @@ This week builds that way to ask: a **Model Context Protocol server** exposing f
 
 > **Status:** built, validated and destroyed.
 
+## 1. Prerequisites
+
+| Requirement | Detail |
+|---|---|
+| AWS account | Permission for Lambda, IAM, DynamoDB, CloudWatch; and Cost Explorer **enabled** |
+| Terraform | >= 1.10 |
+| An MCP client | One that can SigV4-sign requests — a plain HTTP client will get 403 |
+| Region | `us-east-1` — Cost Explorer is a global endpoint served here |
+
 ## 2. Source files
 
 What builds this. Documentation, figures and build artefacts are left out.
@@ -54,6 +63,28 @@ python scripts/mcp_client.py "$URL" ask "what did I leave running"
 
 ---
 
+## 4. Run it
+
+```bash
+python scripts/mcp_client.py
+```
+
+```bash
+python scripts/mcp_stdio_bridge.py
+```
+
+## 5. Validation
+
+| Test | Expected |
+|---|---|
+| Unsigned request to the Function URL | Rejected before any code runs |
+| Signed request from an allowed principal | Protocol handshake succeeds |
+| "What did I leave running?" | Matches what exists in the account |
+| Repeat cost question | Served from cache, no second charge |
+| Role holds no write of any kind | True — as published in three files |
+
+The results recorded when this lab was built are in the article.
+
 ## 6. Cleanup
 
 ### Cleanup
@@ -83,6 +114,20 @@ Prices as of September 2026 — verify at [aws.amazon.com/aws-cost-management/pr
 Nothing here bills while idle: no NAT gateway, no API Gateway, no always-on compute.
 
 ---
+
+## Troubleshooting
+
+**Three files — the handler docstring, the Terraform comment and the README — said the role holds *no write action of any kind***.
+I wrote it while designing. It was true of the design in my head, and I never re-read it against the thing I built. The fourth statement holds `dynamodb:PutItem` — a scoped write to the server's own cache, architecturally fine, but the claim was false.
+*Fix:* Rendering the policy as a screenshot and reading it. The accurate claim is narrower and still worth making: there is no write on anything the server reports on.
+
+**The IAM console lists a policy name and hides its body, so the screenshot that would prove the claim did not exist there**.
+Chasing the console was the wrong instinct — the authoritative copy is the API's.
+*Fix:* Read the policy back from the API and render that.
+
+**A model decides how often to call a tool, and Cost Explorer bills per request**.
+Almost every AWS read is free, so the instinct is that reads are free. One is not.
+*Fix:* A DynamoDB cache in front of the only metered path.
 
 ## References
 

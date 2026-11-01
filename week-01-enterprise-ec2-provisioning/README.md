@@ -127,6 +127,10 @@ week-01-enterprise-ec2-provisioning/
 
 ---
 
+## 4. Run it
+
+This lab has no separate run step. The workload is what the deploy creates, and what to look at afterwards is in [5. Validation](#5-validation).
+
 ## 5. Validation
 
 ### H. Validation Steps
@@ -179,6 +183,18 @@ aws dynamodb delete-table --table-name terraform-lock
 - **Total: ~$114/month → Always clean up after learning!**
 
 ---
+
+## Cost
+
+| Resource | Monthly Cost (est.) |
+|---|---|
+| t3.micro EC2 (1 instance, always on) | ~$8.50 |
+| NAT Gateway | ~$32 + data transfer charges ← biggest cost |
+| ALB | ~$18 |
+| CloudWatch | ~$3 |
+| **Total** | **~$65/month** |
+
+**Problem.** The execution failed at `CheckValidation`: the path `$.validation.Payload.valid` was not found.
 
 ## Troubleshooting
 
