@@ -1,10 +1,19 @@
 # Week 06 — Account Vending Machine (Simulated, No Control Tower)
 
+**What you build:** A ServiceNow ticket in, an account in the right OU with its guardrail already attached out, and the ticket closed with the new account id.
+
 **The story:** A team lead submits a ServiceNow ticket: "I need a new sandbox AWS account for my team." Today that means a cloud engineer manually creates the account, attaches the right guardrails, and emails back the account ID — minutes of clicking repeated every time someone needs an account. This week automates it: the ticket triggers Step Functions, which creates a real AWS account inside the Organization, places it in the right Organizational Unit, and the SCPs already attached to that OU apply automatically — no manual guardrail setup per account.
 
 This is a **simulated** Account Vending Machine — it builds the same core pattern (Organizations + SCPs + programmatic account creation) that AWS Control Tower's Account Factory provides, without enabling Control Tower itself. Control Tower's managed Landing Zone (dedicated Log Archive/Audit accounts, org-wide CloudTrail) is a heavy, largely irreversible setup — not a fit for a personal lab account meant to be built and torn down weekly.
 
 ---
+
+| | |
+|---|---|
+| **Cost** | ~$0 &mdash; Organizations and SCPs are free, Step Functions under $0.001 per vend |
+| **Provisioning** | 100% IaC (Terraform) |
+
+> **Status:** built and validated.
 
 ## 1. Prerequisites
 

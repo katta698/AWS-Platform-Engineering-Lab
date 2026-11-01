@@ -1,8 +1,17 @@
 # Week 13 — AWS WAF + Shield Standard
 
+**What you build:** Put that layer in — at the edge and at the origin — and find out what Shield Standard already does for free, and what it cannot see.
+
 **The story:** an internet-facing endpoint gets hit by traffic nobody wrote code for — path scanners, Log4Shell probes, and single IPs firing thousands of requests a minute. This week puts a firewall in front of it at two layers, starts every rule in observation mode, and only then decides what to block.
 
 ---
+
+| | |
+|---|---|
+| **Cost** | ~$20/month if left running · $0 destroyed |
+| **Provisioning** | Terraform · HCP |
+
+> **Status:** built, validated and destroyed.
 
 ## 2. Source files
 

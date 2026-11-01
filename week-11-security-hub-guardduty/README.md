@@ -1,11 +1,20 @@
 # Week 11 — Security Hub + GuardDuty Auto-Remediation
 
+**What you build:** A security finding is worthless if it sits in a console nobody watches. This week wires Security Hub and GuardDuty to EventBridge and Lambda so the clear-cut, dangerous misconfigurations — a management port open to the whole internet, a public S3 bucket — get fixed automatically in seconds, while active-threat findings that need human judgement get escalated to a person instead of being touched. The whole thing is tag-gated so it can never surprise a resource you meant to leave alone.
+
 **The story:** a security finding is worthless if it sits in a console nobody
 watches. This week wires Security Hub and GuardDuty to EventBridge and Lambda so
 the clear-cut, dangerous misconfigurations — a management port open to the whole
 internet, a public S3 bucket — get fixed automatically in seconds, while
 active-threat findings that need human judgement get escalated to a person
 instead of being touched.
+
+| | |
+|---|---|
+| **Cost** | ~$5-20/month deployed · $0 destroyed |
+| **Provisioning** | 30 Terraform Resources |
+
+> **Status:** built, validated and destroyed.
 
 ## 1. Prerequisites
 

@@ -1,10 +1,19 @@
 # Week 14 — VPC Flow Logs + Network Intelligence
 
+**What you build:** Build the query layer: a small VPC that produces identifiable traffic, capture into Parquet on S3, and a query layer with a hard spend ceiling.
+
 **The story:** flow logs get switched on for a compliance checkbox, quietly write tens of gigabytes a month into a bucket nobody has permission to read, and are never queried again — until an incident, when the answer is technically sitting in S3 and unreachable in under a day. This week builds the layer that makes them answer questions: Parquet on S3, a Glue table that needs no crawler, an Athena workgroup that cannot run away with the bill, saved queries an on-call engineer can actually use, and an hourly analyzer that turns traffic into metrics with anomaly detection on top.
 
 The single highest-leverage decision in here is one configuration field. Flow logs to **S3 cost $0.25/GB**; the same logs to **CloudWatch Logs cost $0.50/GB** — and Parquet, which is what makes querying affordable, is only offered on the S3 path.
 
 ---
+
+| | |
+|---|---|
+| **Cost** | ~$33/month if left running · $0 destroyed |
+| **Provisioning** | Terraform · HCP |
+
+> **Status:** built, validated and destroyed.
 
 ## 2. Source files
 

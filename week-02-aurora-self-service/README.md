@@ -1,10 +1,19 @@
 # Week 2: Aurora Self-Service Database Platform
 
+**What you build:** A ServiceNow catalogue item in, a real database on a shared Aurora cluster out, credentials in Secrets Manager, and the ticket closed with the connection details. No engineer in the path.
+
 **52-Week AWS Platform Engineering Lab — Week 2 of 52**
 
 A self-service platform where developers submit a ServiceNow ticket and get a
 fully isolated PostgreSQL database — with dedicated credentials, Secrets Manager
 auto-rotation, and zero DBA involvement.
+
+| | |
+|---|---|
+| **Cost** | ~$75/month if left running; destroyed after the lab |
+| **Provisioning** | Terraform · Aurora · Step Functions · ServiceNow |
+
+> **Status:** built, validated and destroyed.
 
 ## 1. Prerequisites
 

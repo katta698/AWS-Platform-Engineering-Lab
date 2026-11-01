@@ -1,8 +1,17 @@
 # Week 07 — IAM Identity Center SSO (Multi-Account Permission Sets)
 
+**What you build:** Define the access once — three permission sets, three groups — and let AWS provision the matching role into every target account. Then sign in as a real test user and see exactly what she gets.
+
 **The story:** Week 6 built an Account Vending Machine — a ServiceNow ticket now produces a real AWS account inside the right Organizational Unit in minutes, with SCP guardrails attached automatically. But that just answers "where does the account live." It doesn't answer "who can actually log into it, and with what level of access." Today that gap is filled by hand: someone creates an IAM user or role per account, per person, and quietly accumulates long-lived credentials and inconsistent permissions across every account in the Organization. This week closes that gap with **IAM Identity Center** — one set of users and groups, a small number of reusable permission sets (least-privilege role definitions), and account assignments that let AWS provision the actual IAM role into every target account automatically. Add someone to the `Engineers` group once, and they can federate into every Sandbox and Production account vended so far — no per-account IAM user, no long-lived access keys.
 
 ---
+
+| | |
+|---|---|
+| **Cost** | Free &mdash; Identity Center, permission sets and assignments carry no charge |
+| **Provisioning** | 100% IaC (Terraform) |
+
+> **Status:** built and validated.
 
 ## 1. Prerequisites
 

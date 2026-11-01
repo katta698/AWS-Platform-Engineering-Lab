@@ -1,5 +1,7 @@
 # Week 15 — CloudTrail Organization Trail + Audit Forensics
 
+**What you build:** An organization-wide CloudTrail with a query layer that can answer "who changed this, when, and from where" after the fact.
+
 **The story:** Weeks 11 and 12 answer *"is something wrong?"* — Security Hub and GuardDuty find the open security group and close it; Config reports whether a resource is compliant. Both describe **state**. Neither can tell you **who did it, when, from where, and what else they touched**. And once an auto-remediation has fixed the problem, the action record is the only evidence it ever happened.
 
 This week builds the attribution layer: an organization trail, a queryable table over it, and the saved SQL to answer those questions in about thirty seconds instead of not at all.
@@ -7,6 +9,13 @@ This week builds the attribution layer: an organization trail, a queryable table
 **The motivating incident is real and from this lab.** During Week 12 the account's AWS Config recorder was deleted mid-build by an unrelated project's cleanup script. The build broke, the recorder was rebuilt — and *who deleted it* was never answerable by anyone.
 
 ---
+
+| | |
+|---|---|
+| **Cost** | ~$10/month if left running · $0 destroyed |
+| **Provisioning** | Terraform · HCP |
+
+> **Status:** built, validated and destroyed.
 
 ## 1. Prerequisites
 

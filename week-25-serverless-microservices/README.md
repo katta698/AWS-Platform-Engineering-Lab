@@ -20,6 +20,11 @@ sharing one DynamoDB table — and one account-wide Lambda concurrency pool.
 
 ---
 
+| | |
+|---|---|
+| **Cost** | $0.81 measured |
+| **Provisioning** | Terraform · HCP · Lambda · API Gateway · DynamoDB · CloudWatch |
+
 ## 1. Prerequisites
 
 | Requirement | Detail |

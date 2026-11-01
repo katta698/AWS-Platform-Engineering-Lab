@@ -1,8 +1,17 @@
 # Week 09 — ECS Fargate Self-Service
 
+**What you build:** Deploying a containerized service today means someone hand-builds an ECS cluster, task definition, target group, listener rule, and auto-scaling policy — an hour of work, repeated inconsistently every time. This platform turns a ServiceNow ticket into a running, load-balanced, auto-scaling Fargate service with no server management and no manual ALB wiring.
+
 **The story:** A team wants to deploy a containerized service. Today that means someone hand-builds an ECS cluster, task definition, ALB target group, listener rule, security groups, and auto-scaling — an hour of console/Terraform work, repeated (and often done inconsistently) every time. This week automates it: a ServiceNow ticket with an image URI and a port number becomes a running, load-balanced, auto-scaling Fargate service in minutes — no server management, no manual ALB wiring.
 
 ---
+
+| | |
+|---|---|
+| **Cost** | ~$18/month if left running; destroyed after the lab |
+| **Provisioning** | 50 Terraform Resources |
+
+> **Status:** built, validated and destroyed.
 
 ## 1. Prerequisites
 

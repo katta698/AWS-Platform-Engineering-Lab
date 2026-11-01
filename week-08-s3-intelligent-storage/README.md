@@ -1,8 +1,17 @@
 # Week 08 — S3 Intelligent Storage Platform
 
+**What you build:** Let AWS decide where the access pattern is unknown, write deterministic rules where it is known, and mail the bill daily so the result is visible rather than assumed.
+
 **The story:** S3 costs grow invisibly — objects uploaded once, never moved, billed at Standard rates for years. This platform automates tiering with S3 Intelligent-Tiering and Lifecycle Policies, then delivers a daily email showing exactly how much the automation is saving versus doing nothing.
 
 ---
+
+| | |
+|---|---|
+| **Cost** | estimated per rate in the article; no measured total recorded |
+| **Provisioning** | 25 Terraform Resources |
+
+> **Status:** built and validated.
 
 ## 2. Source files
 

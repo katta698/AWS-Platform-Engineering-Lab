@@ -1,10 +1,19 @@
 # Week 17 — MCP Server for Platform Operations
 
+**What you build:** Build an MCP server that lets a model answer the question without knowing which six APIs to call, in what order, with what filters.
+
 **The story:** on 30 August I asked my own AWS account what it was doing. Answering took eleven API calls across Cost Explorer, CloudTrail, Resource Groups Tagging, CloudWatch and Terraform Cloud — and by then a service had been billing $9.35/day for a week. The data existed the whole time. What was missing was a way to ask.
 
 This week builds that way to ask: a **Model Context Protocol server** exposing four read-only tools, so an AI client can answer *"what is running, what is it costing, and did we leave anything behind?"* in one question.
 
 ---
+
+| | |
+|---|---|
+| **Cost** | $0.13 spent · $0 destroyed |
+| **Provisioning** | Terraform · HCP · MCP |
+
+> **Status:** built, validated and destroyed.
 
 ## 2. Source files
 

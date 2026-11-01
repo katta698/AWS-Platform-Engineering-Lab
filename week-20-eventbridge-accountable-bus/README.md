@@ -1,5 +1,7 @@
 # Week 20 — An Accountable Event Bus
 
+**What you build:** Build an event bus you can actually interrogate: who published, what was delivered, what matched nothing, and what happens to an event nobody wanted.
+
 **Status: scaffolded 2026-09-24, `terraform validate` clean. Nothing applied yet.**
 
 An event bus is the easiest thing in AWS to deploy and one of the hardest to
@@ -10,6 +12,13 @@ that records a decision was made to discard it.
 
 This week adds the four mechanisms that make a bus answerable, then tries to
 break the one everybody assumes rather than tests.
+
+| | |
+|---|---|
+| **Cost** | no hourly meter · destroyed |
+| **Provisioning** | Terraform · HCP · EventBridge · CloudTrail |
+
+> **Status:** built, validated and destroyed.
 
 ## 2. Source files
 

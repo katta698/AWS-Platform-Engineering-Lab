@@ -1,8 +1,17 @@
 # Week 10 — Centralised Logging Platform
 
+**What you build:** Every account in an AWS organization hoards its own CloudWatch log groups — so "show me every error across the platform in the last hour" means logging into N accounts and running the same query N times, and log evidence dies with the account that produced it. This platform fixes both with CloudWatch's 2025-era native primitives: cross-account observability (OAM) for query-in-place, and organization-wide centralization rules for durable copies — no OpenSearch cluster, no Firehose pipeline, and the first centralized copy is free.
+
 **The story:** the org now has multiple accounts, each hoarding its own CloudWatch log groups — and "show me every error across the platform in the last hour" means logging into each account and running the same query N times. This week builds the 2025-era fix: CloudWatch cross-account observability (OAM) for query-in-place, plus the new native Logs Centralization rules for durable copies that survive the account that produced them — no OpenSearch cluster, no Firehose pipeline, near-zero cost.
 
 > **Why no OpenSearch?** AWS is retiring its "Centralized Logging with OpenSearch" solution (December 2026) in favour of CloudWatch-native centralization, and Logs Insights now speaks OpenSearch PPL/SQL directly. A permanently-running cluster (~$26/mo minimum) buys nothing at this log volume.
+
+| | |
+|---|---|
+| **Cost** | < $2/month deployed · $0 destroyed |
+| **Provisioning** | 17 Terraform Resources |
+
+> **Status:** built, validated and destroyed.
 
 ## 1. Prerequisites
 

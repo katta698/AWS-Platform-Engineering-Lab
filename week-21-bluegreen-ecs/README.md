@@ -1,10 +1,19 @@
 # Week 21 — Blue/Green on ECS
 
+**What you build:** Run a containerised service behind a load balancer, release a new version, then deliberately ship a broken one — to find out which part of the machinery actually protects users.
+
 Deploy a new version of a container with no downtime, and get the old one back
 automatically when the new one is bad. The deployment controller is ECS itself — no
 CodeDeploy, because AWS recommends the native path for new work as of March 2026.
 
 **Blog:** https://jayanthkatta.com/blog/week-21-bluegreen-ecs/
+
+| | |
+|---|---|
+| **Cost** | $0.1552 measured · destroyed |
+| **Provisioning** | Terraform · HCP · ECS · ALB |
+
+> **Status:** built, validated and destroyed.
 
 ## 2. Source files
 

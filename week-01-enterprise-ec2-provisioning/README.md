@@ -1,11 +1,20 @@
 # Week 1 — Enterprise Self-Service EC2 Provisioning
 
+**What you build:** A ServiceNow catalogue item that produces a real, tagged, governed EC2 instance with no one in the middle, and a ticket that closes itself with the instance details.
+
 **Theme:** Enterprise Self-Service Infrastructure  
 **Difficulty:** ⭐⭐⭐ Intermediate-Advanced  
 **Estimated Completion:** 8–12 hours  
 **Business Value:** Eliminates manual provisioning, enforces standards, full audit trail
 
 ---
+
+| | |
+|---|---|
+| **Cost** | ~$65/month if left running; destroyed after the lab |
+| **Provisioning** | Terraform · ServiceNow · Step Functions · EC2 |
+
+> **Status:** built, validated and destroyed.
 
 ## 1. Prerequisites
 

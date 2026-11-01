@@ -1,7 +1,16 @@
 # Week 05 — Cost Anomaly Detection
 
+**What you build:** Ask a different question — "is this unlike me" — using Cost Anomaly Detection, which models expected spend per service per day, and turn what it emits into an email a person can act on.
+
 Automated AWS cost anomaly detection using Cost Explorer ML, SNS, and Lambda.
 Deployed and managed via **HCP Terraform** (VCS-driven, org: Katta).
+
+| | |
+|---|---|
+| **Cost** | ~$0 &mdash; every component is free at this scale |
+| **Provisioning** | 100% IaC (Terraform) |
+
+> **Status:** built and validated.
 
 ## 2. Source files
 

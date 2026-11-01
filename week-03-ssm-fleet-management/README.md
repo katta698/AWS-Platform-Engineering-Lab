@@ -1,8 +1,17 @@
 # Week 3: SSM Fleet Management Platform
 
+**What you build:** An inherited fleet with no consistent tagging and no known patch state. A ticket onboards an unmanaged instance or patches the fleet, and no one opens an SSH session.
+
 **52-Week AWS Platform Engineering Lab — Week 3 of 52**
 
 A self-service fleet management platform where ops engineers submit a ServiceNow ticket to either onboard an EC2 instance into the managed fleet or trigger a patch run across an environment — with full compliance reporting, session audit logging, and zero manual AWS console involvement.
+
+| | |
+|---|---|
+| **Cost** | estimated per resource in the article; no measured total recorded |
+| **Provisioning** | Terraform · SSM · Step Functions · ServiceNow |
+
+> **Status:** built and validated.
 
 ## 2. Source files
 

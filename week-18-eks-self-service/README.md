@@ -1,10 +1,19 @@
 # Week 18 — EKS Cluster Self-Service
 
+**What you build:** Build a real tenant boundary for two teams on one cluster, then attack it to find out whether it holds.
+
 **The story:** a namespace is a label, not a boundary. It does not limit CPU, does not stop a pod reaching a pod in another namespace, and has no bearing at all on AWS permissions. Every team that believes otherwise finds out during an incident.
 
 This week builds a cluster where a new tenant gets a namespace that actually *is* a boundary — a quota, a network policy, and an AWS identity scoped to exactly one bucket — and then proves it by trying to break it.
 
 ---
+
+| | |
+|---|---|
+| **Cost** | 11h 22m at $0.17/hr · $0 destroyed |
+| **Provisioning** | Terraform · HCP · EKS |
+
+> **Status:** built, validated and destroyed.
 
 ## 2. Source files
 

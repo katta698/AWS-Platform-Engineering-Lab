@@ -22,6 +22,13 @@ alarm, a slow alarm.
 
 ---
 
+| | |
+|---|---|
+| **Cost** | $1.26 measured · destroyed |
+| **Provisioning** | Terraform · HCP · FIS · ECS · CloudWatch |
+
+> **Status:** built, validated and destroyed.
+
 ## 1. Prerequisites
 
 ### Accounts and permissions

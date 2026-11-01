@@ -1,10 +1,19 @@
 # Week 16 — AWS DevOps Agent: Investigations, and Whether to Believe Them
 
+**What you build:** Not "can an agent investigate" — obviously yes. The question is how would I know if it were wrong, answered before an agent's conclusion is allowed to shorten anybody's thinking.
+
 **The story:** an investigating agent does not return a metric. It returns a **narrative** — *"the IAM change at 14:02 removed the parameter read, here is the evidence."* Narratives are persuasive whether or not they are correct, and that is the whole problem with putting one on-call.
 
 So this week is not a demonstration that an agent can investigate. AWS's marketing covers that. It is an **evaluation**: break something in a known way, let the agent investigate with no hints, and grade its conclusion against Week 15's CloudTrail attribution — which is fact rather than opinion.
 
 ---
+
+| | |
+|---|---|
+| **Cost** | $23.28 spent · $0 destroyed |
+| **Provisioning** | Terraform · HCP · awscc |
+
+> **Status:** built, validated and destroyed.
 
 ## 1. Prerequisites
 

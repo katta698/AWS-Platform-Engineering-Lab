@@ -1,5 +1,7 @@
 # Week 19 — GitOps on EKS: who should run Argo CD?
 
+**What you build:** Run both, on one cluster, against one repository, and find out what actually differs.
+
 **Status: complete.** Built and destroyed 18 September 2026, cluster `week19-gitops`
 alive 5h19m (13:02–18:21 UTC). `cleanup.sh` clean on all eleven checks.
 Published: https://jayanthkatta.com/blog/week-19-gitops-argocd/
@@ -16,6 +18,13 @@ It is **should I run it at all, or let AWS?**
 
 This week built both, on one cluster, reading the same Git repository and
 deploying the same application — so the only variable is who operates Argo CD.
+
+| | |
+|---|---|
+| **Cost** | $1.21 measured from Cost Explorer; destroyed |
+| **Provisioning** | Terraform · HCP · EKS · Argo CD |
+
+> **Status:** built, validated and destroyed.
 
 ## 2. Source files
 

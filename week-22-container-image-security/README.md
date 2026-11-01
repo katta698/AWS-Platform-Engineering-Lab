@@ -1,5 +1,7 @@
 # Week 22 — Container Image Security Pipeline
 
+**What you build:** Build the part nobody writes about: the gate that reads the evidence and refuses the image.
+
 **The goal, in one sentence:** no container image can be deployed unless this
 pipeline signed it and a scanner cleared it — and both facts are provable for
 any image in the registry afterwards.
@@ -16,6 +18,13 @@ third one is the only one that stops anything:
 Most writing on this topic stops after the first two and calls it a pipeline.
 
 ---
+
+| | |
+|---|---|
+| **Cost** | $0.2409 measured · destroyed |
+| **Provisioning** | Terraform · HCP · ECR · Signer · Inspector |
+
+> **Status:** built, validated and destroyed.
 
 ## 1. Prerequisites
 

@@ -1,8 +1,17 @@
 # Week 04 — Glue Fleet Intelligence Platform
 
+**What you build:** Get that inventory out of SSM and into S3, describe it, convert it to partitioned Parquet, and make the whole fleet answerable in SQL — triggered by a ticket, closed by the pipeline.
+
 **The story:** An ops engineer submits a ServiceNow ticket: "Run fleet intelligence report" → SSM inventory and patch data is automatically synced to S3, crawled by Glue, transformed by an ETL job, and made queryable via Athena — all in under 10 minutes. No manual exports. No scripts. Just SQL.
 
 ---
+
+| | |
+|---|---|
+| **Cost** | per-run; estimated in the article, no measured total recorded |
+| **Provisioning** | 100% IaC (Terraform) |
+
+> **Status:** built and validated.
 
 ## 1. Prerequisites
 

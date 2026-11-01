@@ -1,5 +1,7 @@
 # Week 12 — AWS Config Compliance Automation
 
+**What you build:** A conformance pack that evaluates governance rules continuously, auto-remediates the safe ones through AWS-managed automation, and reports the rest to a human daily.
+
 **The story:** Security Hub (Week 11) only catches *security* misconfigurations
 — it has no concept of governance drift like a missing cost-allocation tag or
 a data bucket that was never versioned. Those don't trip any alarm; they just
@@ -9,6 +11,13 @@ gap, bundled into a single conformance pack: two auto-remediate through
 AWS-managed SSM Automation documents (tag-scoped opt-in, same guardrail
 philosophy as Week 11), and a tagging-governance rule that's notify-only,
 because a tag value can't be safely invented by automation.
+
+| | |
+|---|---|
+| **Cost** | ~$1–5/month deployed · $0 destroyed |
+| **Provisioning** | 23 Terraform Resources |
+
+> **Status:** built, validated and destroyed.
 
 ## 2. Source files
 

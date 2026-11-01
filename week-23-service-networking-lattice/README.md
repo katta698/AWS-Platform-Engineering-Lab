@@ -1,5 +1,7 @@
 # Week 23 — Service Networking with VPC Lattice
 
+**What you build:** Build one service that only a named IAM role may call, then try to call it as the wrong one. Two Lambda functions, same VPC, same subnet, same security group, byte-identical code. The only difference is which role signs the request.
+
 **The goal, in one sentence:** make one service callable only by a named
 identity — and prove the wrong identity is genuinely refused.
 
@@ -21,6 +23,13 @@ identities.
 > reason App Mesh is mentioned anywhere in this week.
 
 ---
+
+| | |
+|---|---|
+| **Cost** | $1.00 measured · destroyed |
+| **Provisioning** | Terraform · HCP · VPC Lattice · Lambda |
+
+> **Status:** built, validated and destroyed.
 
 ## 1. Prerequisites
 
