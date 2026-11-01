@@ -3,6 +3,50 @@
 Automated AWS cost anomaly detection using Cost Explorer ML, SNS, and Lambda.
 Deployed and managed via **HCP Terraform** (VCS-driven, org: Katta).
 
+## 2. Source files
+
+### Infrastructure
+| Resource | Name |
+|---|---|
+| Cost Anomaly Monitor | `week05-dev-monitor` |
+| Cost Anomaly Subscription | `week05-dev-subscription` |
+| SNS Topic (raw) | `week05-dev-raw-anomaly` |
+| SNS Topic (alert) | `week05-dev-cost-alert` |
+| Lambda | `week05-dev-cost-alerter` |
+| IAM Role | `week05-dev-cost-alerter-role` |
+| CloudWatch Log Group | `/aws/lambda/week05-dev-cost-alerter` |
+
+## 3. Deploy
+
+### Quick Start
+See [docs/execution-guide.md](docs/execution-guide.md) for full HCP setup, validation steps, and troubleshooting.
+
+```bash
+# After HCP workspace is configured
+cd terraform/environments/dev
+cp terraform.tfvars.example terraform.tfvars
+# Edit terraform.tfvars: set alert_email
+terraform login
+terraform init
+terraform plan
+terraform apply
+```
+### HCP Terraform
+State is in HCP (not S3). Org: `Katta` | Workspace: `week-05-dev` | Mode: VCS-driven.
+Plan on PR → Apply on merge to main.
+
+## Cost
+
+All resources are within AWS Free Tier or near-zero cost:
+- Cost Anomaly Detection: free
+- SNS: first 1M publishes/month free
+- Lambda: well within free tier
+- Destroyed: $0
+
+## References
+
+- [The article for this week](https://jayanthkatta.com/blog/week-5-cost-anomaly-detection-with-aws-cost-explorer-sns-and/) &mdash; the problem, the findings and the measured cost.
+- [This week's source](https://github.com/katta698/AWS-Platform-Engineering-Lab/tree/main/week-05-cost-anomaly-detection)
 
 ## The Story
 
@@ -40,49 +84,9 @@ Email → your-email@example.com
 | CloudWatch Logs | Lambda execution logs (14-day retention) |
 | HCP Terraform | State management + VCS-driven CI/CD |
 
-## Infrastructure
-
-| Resource | Name |
-|---|---|
-| Cost Anomaly Monitor | `week05-dev-monitor` |
-| Cost Anomaly Subscription | `week05-dev-subscription` |
-| SNS Topic (raw) | `week05-dev-raw-anomaly` |
-| SNS Topic (alert) | `week05-dev-cost-alert` |
-| Lambda | `week05-dev-cost-alerter` |
-| IAM Role | `week05-dev-cost-alerter-role` |
-| CloudWatch Log Group | `/aws/lambda/week05-dev-cost-alerter` |
-
-## Quick Start
-
-See [docs/execution-guide.md](docs/execution-guide.md) for full HCP setup, validation steps, and troubleshooting.
-
-```bash
-# After HCP workspace is configured
-cd terraform/environments/dev
-cp terraform.tfvars.example terraform.tfvars
-# Edit terraform.tfvars: set alert_email
-terraform login
-terraform init
-terraform plan
-terraform apply
-```
-
-## HCP Terraform
-
-State is in HCP (not S3). Org: `Katta` | Workspace: `week-05-dev` | Mode: VCS-driven.
-Plan on PR → Apply on merge to main.
-
 ## Security
 
 - No static AWS credentials — HCP uses OIDC dynamic credentials
 - Lambda has least-privilege IAM (SNS:Publish + CloudWatch only)
 - SNS topic policy explicitly scopes `costalerts.amazonaws.com` as publisher
 - `terraform.tfvars` gitignored — never committed
-
-## Cost
-
-All resources are within AWS Free Tier or near-zero cost:
-- Cost Anomaly Detection: free
-- SNS: first 1M publishes/month free
-- Lambda: well within free tier
-- Destroyed: $0

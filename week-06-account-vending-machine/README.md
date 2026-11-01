@@ -6,6 +6,129 @@ This is a **simulated** Account Vending Machine — it builds the same core patt
 
 ---
 
+## 1. Prerequisites
+
+### Prerequisites
+- Must be deployed with credentials for the Organizations **management account** — `organizations:CreateAccount` and `organizations:MoveAccount` only work there
+- State is in **HCP Terraform** (not S3) — org: `Katta` | workspace: `week-06-dev`
+- Terraform >= 1.10
+- Confirm the existing `Workloads-OU` ID/name before first apply — this Organization already
+  has real accounts and Control-Tower-residue OUs at root; the vending OUs nest under
+  `Workloads-OU` rather than root (see `parent_ou_name` in `terraform.tfvars`)
+
+---
+
+## 2. Source files
+
+What builds this. Documentation, figures and build artefacts are left out.
+
+```
+lambda/account_creator/
+  handler.py
+lambda/account_mover/
+  handler.py
+lambda/status_notifier/
+  handler.py
+lambda/webhook_receiver/
+  handler.py
+scripts/
+  cleanup.sh
+  deploy.sh
+  test_webhook.sh
+terraform/environments/dev/
+  main.tf
+  outputs.tf
+  terraform.tfvars.example
+  variables.tf
+terraform/modules/api-gateway/
+  main.tf
+  outputs.tf
+  variables.tf
+terraform/modules/iam/
+  main.tf
+  outputs.tf
+  variables.tf
+terraform/modules/lambda/
+  main.tf
+  outputs.tf
+  variables.tf
+terraform/modules/organizations/
+  main.tf
+  outputs.tf
+  variables.tf
+terraform/modules/scp/
+  main.tf
+  outputs.tf
+  variables.tf
+terraform/modules/step-functions/
+  main.tf
+  outputs.tf
+  variables.tf
+```
+
+## 3. Deploy
+
+### Deploy Steps
+`week-06-dev` is a **VCS-connected HCP Terraform workspace** (same pattern as Week 5) — Terraform runs remotely from this GitHub repo, not from local CLI. ServiceNow creds, the webhook secret, and AWS auth (dynamic OIDC via `hcp-terraform-role`) are configured as HCP workspace variables, not a local `terraform.tfvars`.
+
+```bash
+bash scripts/deploy.sh   # rebuilds the 4 Lambda zips
+git add lambda/*/*.zip
+git commit -m "Update Lambda packages"
+git push
+```
+
+Then in the HCP UI: **week-06-dev → Start new plan**, review, and confirm **Apply**. This creates the OUs, SCP, and vending pipeline — **it does not vend any accounts on its own.**
+
+Note: local `terraform apply`/`destroy` against this workspace will fail with `Saved plans not allowed for workspaces with a VCS connection` — that's expected; all applies/destroys go through the HCP UI.
+
+### Triggering an account-vend (read this first)
+
+Submitting a webhook request creates a **real AWS account** in your Organization. There is no instant way to delete it — closing an account puts it into a ~90 day suspension window, not immediate removal, and each account needs a unique email address. Only trigger this deliberately, e.g. with a throwaway alias email, when you actually want to exercise the full pipeline end-to-end.
+
+```bash
+# Example payload — see lambda/webhook_receiver/handler.py for required fields
+curl -X POST "$API_GATEWAY_URL" \
+  -H "Content-Type: application/json" \
+  -H "x-servicenow-hmac: sha256=<computed-hmac>" \
+  -d '{
+        "ticket_id": "RITM0010001",
+        "requested_by": "jay",
+        "account_name": "sandbox-test-01",
+        "account_email": "your-alias+sandbox01@example.com",
+        "target_ou": "Sandbox"
+      }'
+```
+
+---
+
+## 6. Cleanup
+
+### Cleanup
+Destroy must be confirmed from the **HCP UI** (same VCS-connection restriction as deploy) — `bash scripts/cleanup.sh` just walks through the pre-destroy checklist and waits for confirmation; it does not call `terraform destroy` itself. Trigger the actual destroy from **week-06-dev → Settings → Destruction and Deletion → Queue destroy plan**, then confirm Apply.
+
+A destroy run removes the OUs, SCP, Lambda, Step Functions, and API Gateway — it does **not** touch any account actually vended through the pipeline, since that account was created dynamically via boto3 and is never in Terraform state. AWS also refuses to delete a non-empty OU, so any vended test accounts must be moved out (or closed) via the Organizations console before destroying.
+
+---
+
+## Cost
+
+| Resource | Cost |
+|----------|------|
+| AWS Organizations, OUs, SCPs | Free |
+| Step Functions (per execution) | ~$0.025 per 1,000 state transitions |
+| Lambda | Well within free tier |
+| API Gateway | Free tier covers low request volume |
+| Vended AWS accounts | No direct cost, but each account is real and persists — not destroyed by `terraform destroy` |
+| **Pipeline infra destroyed** | **$0** (vended accounts are a separate, manual cleanup) |
+
+---
+
+## References
+
+### Blog
+Published: [Week 6 — Building an Account Vending Machine with AWS Organizations, SCPs & Step Functions (No Control Tower)](https://jayanthkatta.com/blog/week-6-account-vending-machine-with-aws-organizations-and-scps/)
+
 ## What It Builds
 
 - **Organizational Units** — `Sandbox` and `Production`, nested under the existing `Workloads-OU`
@@ -63,60 +186,6 @@ AWS Control Tower is the managed product version of this pattern — it provisio
 
 ---
 
-## Prerequisites
-
-- Must be deployed with credentials for the Organizations **management account** — `organizations:CreateAccount` and `organizations:MoveAccount` only work there
-- State is in **HCP Terraform** (not S3) — org: `Katta` | workspace: `week-06-dev`
-- Terraform >= 1.10
-- Confirm the existing `Workloads-OU` ID/name before first apply — this Organization already
-  has real accounts and Control-Tower-residue OUs at root; the vending OUs nest under
-  `Workloads-OU` rather than root (see `parent_ou_name` in `terraform.tfvars`)
-
----
-
-## Deploy Steps
-
-`week-06-dev` is a **VCS-connected HCP Terraform workspace** (same pattern as Week 5) — Terraform runs remotely from this GitHub repo, not from local CLI. ServiceNow creds, the webhook secret, and AWS auth (dynamic OIDC via `hcp-terraform-role`) are configured as HCP workspace variables, not a local `terraform.tfvars`.
-
-```bash
-bash scripts/deploy.sh   # rebuilds the 4 Lambda zips
-git add lambda/*/*.zip
-git commit -m "Update Lambda packages"
-git push
-```
-
-Then in the HCP UI: **week-06-dev → Start new plan**, review, and confirm **Apply**. This creates the OUs, SCP, and vending pipeline — **it does not vend any accounts on its own.**
-
-Note: local `terraform apply`/`destroy` against this workspace will fail with `Saved plans not allowed for workspaces with a VCS connection` — that's expected; all applies/destroys go through the HCP UI.
-
-### Triggering an account-vend (read this first)
-
-Submitting a webhook request creates a **real AWS account** in your Organization. There is no instant way to delete it — closing an account puts it into a ~90 day suspension window, not immediate removal, and each account needs a unique email address. Only trigger this deliberately, e.g. with a throwaway alias email, when you actually want to exercise the full pipeline end-to-end.
-
-```bash
-# Example payload — see lambda/webhook_receiver/handler.py for required fields
-curl -X POST "$API_GATEWAY_URL" \
-  -H "Content-Type: application/json" \
-  -H "x-servicenow-hmac: sha256=<computed-hmac>" \
-  -d '{
-        "ticket_id": "RITM0010001",
-        "requested_by": "jay",
-        "account_name": "sandbox-test-01",
-        "account_email": "your-alias+sandbox01@example.com",
-        "target_ou": "Sandbox"
-      }'
-```
-
----
-
-## Cleanup
-
-Destroy must be confirmed from the **HCP UI** (same VCS-connection restriction as deploy) — `bash scripts/cleanup.sh` just walks through the pre-destroy checklist and waits for confirmation; it does not call `terraform destroy` itself. Trigger the actual destroy from **week-06-dev → Settings → Destruction and Deletion → Queue destroy plan**, then confirm Apply.
-
-A destroy run removes the OUs, SCP, Lambda, Step Functions, and API Gateway — it does **not** touch any account actually vended through the pipeline, since that account was created dynamically via boto3 and is never in Terraform state. AWS also refuses to delete a non-empty OU, so any vended test accounts must be moved out (or closed) via the Organizations console before destroying.
-
----
-
 ## Security
 
 - HMAC-SHA256 signature validation on the ServiceNow webhook (same pattern as prior weeks)
@@ -125,20 +194,3 @@ A destroy run removes the OUs, SCP, Lambda, Step Functions, and API Gateway — 
 - `terraform.tfvars` gitignored — never committed
 
 ---
-
-## Cost
-
-| Resource | Cost |
-|----------|------|
-| AWS Organizations, OUs, SCPs | Free |
-| Step Functions (per execution) | ~$0.025 per 1,000 state transitions |
-| Lambda | Well within free tier |
-| API Gateway | Free tier covers low request volume |
-| Vended AWS accounts | No direct cost, but each account is real and persists — not destroyed by `terraform destroy` |
-| **Pipeline infra destroyed** | **$0** (vended accounts are a separate, manual cleanup) |
-
----
-
-## Blog
-
-Published: [Week 6 — Building an Account Vending Machine with AWS Organizations, SCPs & Step Functions (No Control Tower)](https://jayanthkatta.com/blog/week-6-account-vending-machine-with-aws-organizations-and-scps/)

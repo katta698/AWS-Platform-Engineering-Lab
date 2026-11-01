@@ -168,7 +168,7 @@ curl -s -o /dev/null -w '%{http_code}\n' "http://$ALB_DNS/"
 
 ---
 
-## 4. Run the experiments
+## 4. Run it
 
 ```bash
 bash scripts/run-experiment.sh recovery   # no stop condition — baseline

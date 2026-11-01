@@ -7,6 +7,97 @@ internet, a public S3 bucket — get fixed automatically in seconds, while
 active-threat findings that need human judgement get escalated to a person
 instead of being touched.
 
+## 1. Prerequisites
+
+### Prerequisite: AWS Config must be recording
+Security Hub's FSBP controls that this stack remediates (EC2.13/14/19, S3.2/3/8) are
+**backed by AWS Config**. Without a Config configuration recorder actively recording
+security groups and S3 buckets, those controls report `NO_DATA`, **no findings are
+generated, and nothing is remediated** — the pipeline deploys cleanly but does nothing.
+
+This stack does **not** provision Config (an account typically has one centrally-managed
+recorder; adding another conflicts). Confirm one is recording before deploying:
+
+```bash
+aws configservice describe-configuration-recorder-status \
+  --query 'ConfigurationRecordersStatus[].[name,recording,lastStatus]' --output text
+# want: <name>  True  SUCCESS
+```
+
+If nothing is recording, enable Config (all supported resource types) first — via your
+org's Config setup, or a minimal recorder + delivery channel in this account.
+
+## 2. Source files
+
+### Configuration
+All knobs are workspace/`tfvars` variables (see `terraform.tfvars.example`):
+`remediation_tag_key`/`value` (opt-in gate), `high_risk_ports` (default `22,3389`),
+`guardduty_min_severity` (default `4.0`), `production_tag_key`/`value` (severity
+escalation), `finding_publishing_frequency`, `log_retention_days`.
+
+## 3. Deploy
+
+### Quick start
+This deploys via **HCP Terraform** (workspace `week-11-dev`, VCS-driven). HCP runs
+plan/apply remotely from the GitHub repo — there is no local `terraform apply` and
+no GitHub Actions workflow (a VCS-connected workspace blocks CI applies).
+
+1. **Set the workspace variable** `alert_email` (sensitive) in HCP to the address
+   that should receive alerts.
+2. **Build + commit the Lambda zips** (HCP can't build them):
+   ```bash
+   cd week-11-security-hub-guardduty
+   ./scripts/build_lambdas.sh
+   git add -f lambda/**/*.zip
+   git commit -m "Week 11: remediation lambdas" && git push
+   ```
+3. **Apply** in the HCP UI: start a plan on `week-11-dev`, review, confirm apply.
+4. **Confirm the SNS subscription** — click the link in the confirmation email.
+5. **Exercise it end-to-end:**
+   ```bash
+   ./scripts/generate_misconfig.sh        # open SG + public bucket → auto-fixed
+   ./scripts/trigger_guardduty_sample.sh  # GuardDuty threat → SNS notify
+   ```
+   Config findings surface in Security Hub within ~15–30 minutes; GuardDuty
+   sample findings notify within a minute or two.
+
+## 6. Cleanup
+
+### Cleanup
+Queue a destroy plan on `week-11-dev` in the HCP UI (disables Security Hub CSPM +
+GuardDuty, removes the Lambdas/rules/SNS/DLQ). Remove any leftover test resources
+with `./scripts/cleanup.sh <sg-id> <bucket-name>`.
+
+## Cost
+
+Single low-traffic account, us-east-1. Prices as of July 2026 — verify at the
+[Security Hub](https://aws.amazon.com/security-hub/pricing/) and
+[GuardDuty](https://aws.amazon.com/guardduty/pricing/) pricing pages.
+
+| Item | Estimate |
+|---|---|
+| GuardDuty foundational (CloudTrail $4/M events, VPC/DNS ~$1/GB) | ~$2–5 / month |
+| Security Hub CSPM checks ($0.0010/check; first 10k findings/mo free) | ~$3–15 / month |
+| EventBridge + Lambda + SNS + SQS | pennies (well within free tier) |
+| **Both services include a 30-day free trial** | covers the lab window |
+| **Destroyed** | **$0** |
+
+## Troubleshooting
+
+| Symptom | Cause / fix |
+|---|---|
+| No findings after deploy | FSBP checks take up to ~30 min on first run; GuardDuty finding cadence is `FIFTEEN_MINUTES` |
+| Finding appears but SG/bucket not fixed | Resource isn't tagged `auto-remediate=true` — check the SNS "[REVIEW]" email |
+| `RevokeSecurityGroupIngress` AccessDenied | Expected on untagged SGs — the IAM condition blocks it by design |
+| No SNS emails | Confirm the subscription (one-time click in the confirmation email) |
+| DLQ alarm fired | A remediator raised — inspect the DLQ message and the Lambda's CloudWatch logs |
+| S3 public bucket policy rejected by an SCP | The BPA finding still fires and remediation still applies — the policy step is only to force the finding |
+
+## References
+
+### Blog
+Published walkthrough: _(link added on publish)_
+
 ## Architecture
 
 ```
@@ -79,57 +170,6 @@ it in the console for comparison.
 Anything **not** tagged for opt-in is left untouched and a notification is sent
 instead, so a human still sees it.
 
-## Prerequisite: AWS Config must be recording
-
-Security Hub's FSBP controls that this stack remediates (EC2.13/14/19, S3.2/3/8) are
-**backed by AWS Config**. Without a Config configuration recorder actively recording
-security groups and S3 buckets, those controls report `NO_DATA`, **no findings are
-generated, and nothing is remediated** — the pipeline deploys cleanly but does nothing.
-
-This stack does **not** provision Config (an account typically has one centrally-managed
-recorder; adding another conflicts). Confirm one is recording before deploying:
-
-```bash
-aws configservice describe-configuration-recorder-status \
-  --query 'ConfigurationRecordersStatus[].[name,recording,lastStatus]' --output text
-# want: <name>  True  SUCCESS
-```
-
-If nothing is recording, enable Config (all supported resource types) first — via your
-org's Config setup, or a minimal recorder + delivery channel in this account.
-
-## Quick start
-
-This deploys via **HCP Terraform** (workspace `week-11-dev`, VCS-driven). HCP runs
-plan/apply remotely from the GitHub repo — there is no local `terraform apply` and
-no GitHub Actions workflow (a VCS-connected workspace blocks CI applies).
-
-1. **Set the workspace variable** `alert_email` (sensitive) in HCP to the address
-   that should receive alerts.
-2. **Build + commit the Lambda zips** (HCP can't build them):
-   ```bash
-   cd week-11-security-hub-guardduty
-   ./scripts/build_lambdas.sh
-   git add -f lambda/**/*.zip
-   git commit -m "Week 11: remediation lambdas" && git push
-   ```
-3. **Apply** in the HCP UI: start a plan on `week-11-dev`, review, confirm apply.
-4. **Confirm the SNS subscription** — click the link in the confirmation email.
-5. **Exercise it end-to-end:**
-   ```bash
-   ./scripts/generate_misconfig.sh        # open SG + public bucket → auto-fixed
-   ./scripts/trigger_guardduty_sample.sh  # GuardDuty threat → SNS notify
-   ```
-   Config findings surface in Security Hub within ~15–30 minutes; GuardDuty
-   sample findings notify within a minute or two.
-
-## Configuration
-
-All knobs are workspace/`tfvars` variables (see `terraform.tfvars.example`):
-`remediation_tag_key`/`value` (opt-in gate), `high_risk_ports` (default `22,3389`),
-`guardduty_min_severity` (default `4.0`), `production_tag_key`/`value` (severity
-escalation), `finding_publishing_frequency`, `log_retention_days`.
-
 ## Security patterns
 
 - **Tag-scoped opt-in.** Mutating remediations only touch resources tagged
@@ -145,38 +185,3 @@ escalation), `finding_publishing_frequency`, `log_retention_days`.
   alarms to SNS. Threat findings are never auto-mutated.
 - **Automation rule enrichment.** Failed controls on production-tagged resources
   are escalated to CRITICAL inside Security Hub before any routing happens.
-
-## Cost
-
-Single low-traffic account, us-east-1. Prices as of July 2026 — verify at the
-[Security Hub](https://aws.amazon.com/security-hub/pricing/) and
-[GuardDuty](https://aws.amazon.com/guardduty/pricing/) pricing pages.
-
-| Item | Estimate |
-|---|---|
-| GuardDuty foundational (CloudTrail $4/M events, VPC/DNS ~$1/GB) | ~$2–5 / month |
-| Security Hub CSPM checks ($0.0010/check; first 10k findings/mo free) | ~$3–15 / month |
-| EventBridge + Lambda + SNS + SQS | pennies (well within free tier) |
-| **Both services include a 30-day free trial** | covers the lab window |
-| **Destroyed** | **$0** |
-
-## Troubleshooting
-
-| Symptom | Cause / fix |
-|---|---|
-| No findings after deploy | FSBP checks take up to ~30 min on first run; GuardDuty finding cadence is `FIFTEEN_MINUTES` |
-| Finding appears but SG/bucket not fixed | Resource isn't tagged `auto-remediate=true` — check the SNS "[REVIEW]" email |
-| `RevokeSecurityGroupIngress` AccessDenied | Expected on untagged SGs — the IAM condition blocks it by design |
-| No SNS emails | Confirm the subscription (one-time click in the confirmation email) |
-| DLQ alarm fired | A remediator raised — inspect the DLQ message and the Lambda's CloudWatch logs |
-| S3 public bucket policy rejected by an SCP | The BPA finding still fires and remediation still applies — the policy step is only to force the finding |
-
-## Cleanup
-
-Queue a destroy plan on `week-11-dev` in the HCP UI (disables Security Hub CSPM +
-GuardDuty, removes the Lambdas/rules/SNS/DLQ). Remove any leftover test resources
-with `./scripts/cleanup.sh <sg-id> <bucket-name>`.
-
-## Blog
-
-Published walkthrough: _(link added on publish)_

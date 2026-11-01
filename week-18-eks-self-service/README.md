@@ -6,6 +6,85 @@ This week builds a cluster where a new tenant gets a namespace that actually *is
 
 ---
 
+## 2. Source files
+
+What builds this. Documentation, figures and build artefacts are left out.
+
+```
+scripts/
+  cleanup.sh
+  prove_isolation.sh
+terraform/environments/dev/
+  main.tf
+  outputs.tf
+  terraform.tfvars.example
+  variables.tf
+terraform/modules/platform_cluster/
+  main.tf
+  outputs.tf
+  variables.tf
+terraform/modules/tenant/
+  main.tf
+  outputs.tf
+  variables.tf
+```
+
+## 5. Validation
+
+### Proving it, rather than asserting it
+```bash
+BUCKET_A=... BUCKET_B=... ./scripts/prove_isolation.sh
+```
+
+Four checks. The two that matter are the ones expected to **fail**:
+
+1. `tenant-a` → its own bucket — must succeed
+2. `tenant-a` → `tenant-b`'s bucket — **must be denied**
+3. `tenant-b` → its own bucket — must succeed
+4. `tenant-b` → `tenant-a`'s bucket — **must be denied**
+
+Run 1 and 3 alone and you have shown that permissions work. Only 2 and 4 show that they stop anything.
+
+---
+
+## 6. Cleanup
+
+### Cleanup
+```bash
+# destroy via HCP, then:
+./scripts/cleanup.sh
+```
+
+The script checks clusters, NAT gateways, elastic IPs, VPCs, instances, roles, **OIDC providers**, buckets and log groups by name — then does a tag search on `Week=18` for anything the name checks missed.
+
+OIDC providers are on that list deliberately: IRSA creates one per cluster, they are invisible in the EKS console, they survive a careless teardown, and IAM caps you at 100 per account.
+
+---
+
+## Cost
+
+### Cost — read this before deploying
+Prices as of September 2026 — verify at [aws.amazon.com/eks/pricing](https://aws.amazon.com/eks/pricing/).
+
+| Item | Rate | Note |
+|---|---|---|
+| EKS control plane | **$0.10/hr** | from creation. **No free tier** |
+| NAT gateway | **$0.045/hr** | from creation |
+| t3.small node | ~$0.0208/hr | one, fixed |
+| Fargate | $0.0405/vCPU-hr + $0.00444/GB-hr | per second, 1-min minimum |
+| **Running total** | **~$0.17/hr ≈ $4/day** | whether or not a pod runs |
+
+**This is the opposite shape to most of this series.** Weeks 11, 12 and 16 cost $0 on day one and began billing later, invisibly. EKS bills from the moment the cluster exists, visibly. That is easier to manage — provided teardown is part of the plan rather than an afterthought.
+
+**Extended support is $0.60/hr**, six times standard, if the cluster falls off a supported Kubernetes version. Staying current is a cost decision.
+
+---
+
+## References
+
+- [The article for this week](https://jayanthkatta.com/blog/week-18-eks-self-service/) &mdash; the problem, the findings and the measured cost.
+- [This week's source](https://github.com/katta698/AWS-Platform-Engineering-Lab/tree/main/week-18-eks-self-service)
+
 ## The collision that shaped the build
 
 AWS recommends **EKS Pod Identity** over IRSA for giving pods AWS permissions. AWS also offers **Fargate** so you never manage a node.
@@ -31,54 +110,6 @@ Three objects, none of which a namespace gives you:
 | **ResourceQuota** | one tenant can request every core in the cluster |
 | **NetworkPolicy** | every pod can reach every other pod, in any namespace |
 | **Pod Identity / IRSA** | pods inherit whatever the node role has |
-
----
-
-## Proving it, rather than asserting it
-
-```bash
-BUCKET_A=... BUCKET_B=... ./scripts/prove_isolation.sh
-```
-
-Four checks. The two that matter are the ones expected to **fail**:
-
-1. `tenant-a` → its own bucket — must succeed
-2. `tenant-a` → `tenant-b`'s bucket — **must be denied**
-3. `tenant-b` → its own bucket — must succeed
-4. `tenant-b` → `tenant-a`'s bucket — **must be denied**
-
-Run 1 and 3 alone and you have shown that permissions work. Only 2 and 4 show that they stop anything.
-
----
-
-## Cost — read this before deploying
-
-Prices as of September 2026 — verify at [aws.amazon.com/eks/pricing](https://aws.amazon.com/eks/pricing/).
-
-| Item | Rate | Note |
-|---|---|---|
-| EKS control plane | **$0.10/hr** | from creation. **No free tier** |
-| NAT gateway | **$0.045/hr** | from creation |
-| t3.small node | ~$0.0208/hr | one, fixed |
-| Fargate | $0.0405/vCPU-hr + $0.00444/GB-hr | per second, 1-min minimum |
-| **Running total** | **~$0.17/hr ≈ $4/day** | whether or not a pod runs |
-
-**This is the opposite shape to most of this series.** Weeks 11, 12 and 16 cost $0 on day one and began billing later, invisibly. EKS bills from the moment the cluster exists, visibly. That is easier to manage — provided teardown is part of the plan rather than an afterthought.
-
-**Extended support is $0.60/hr**, six times standard, if the cluster falls off a supported Kubernetes version. Staying current is a cost decision.
-
----
-
-## Cleanup
-
-```bash
-# destroy via HCP, then:
-./scripts/cleanup.sh
-```
-
-The script checks clusters, NAT gateways, elastic IPs, VPCs, instances, roles, **OIDC providers**, buckets and log groups by name — then does a tag search on `Week=18` for anything the name checks missed.
-
-OIDC providers are on that list deliberately: IRSA creates one per cluster, they are invisible in the EKS console, they survive a careless teardown, and IAM caps you at 100 per account.
 
 ---
 

@@ -10,6 +10,83 @@ AWS-managed SSM Automation documents (tag-scoped opt-in, same guardrail
 philosophy as Week 11), and a tagging-governance rule that's notify-only,
 because a tag value can't be safely invented by automation.
 
+## 2. Source files
+
+### Configuration
+All knobs are workspace/`tfvars` variables (see `terraform.tfvars.example`):
+`remediation_tag_key`/`value` (opt-in gate, default `auto-remediate`/`true`),
+`required_tag_keys` (exactly 3 — default `environment`, `owner`,
+`cost-center`), `log_retention_days`.
+
+## 3. Deploy
+
+### Quick start
+This deploys via **HCP Terraform** (workspace `week-12-dev`, VCS-driven). HCP
+runs plan/apply remotely from the GitHub repo — there is no local
+`terraform apply` and no GitHub Actions workflow (a VCS-connected workspace
+blocks CI applies).
+
+1. **Set the workspace variable** `alert_email` (sensitive) in HCP to the
+   address that should receive the daily digest.
+2. **Build + commit the reporter Lambda zip** (HCP can't build it):
+   ```bash
+   cd week-12-config-compliance-automation
+   ./scripts/build_lambdas.sh
+   git add -f lambda/**/*.zip
+   git commit -m "Week 12: compliance reporter lambda" && git push
+   ```
+3. **Apply** in the HCP UI: start a plan on `week-12-dev`, review, confirm apply.
+4. **Confirm the SNS subscription** — click the link in the confirmation email.
+5. **Exercise it end-to-end:**
+   ```bash
+   ./scripts/generate_misconfig.sh
+   ```
+   Creates an opted-in bucket (no versioning/encryption — should auto-fix
+   within minutes) and an untagged bucket (should surface in the next daily
+   digest). Config evaluates on a resource-change trigger, usually within a
+   few minutes.
+
+## 6. Cleanup
+
+### Cleanup
+Queue a destroy plan on `week-12-dev` in the HCP UI. **This removes the
+account's only Config recorder along with everything else** (conformance
+pack, reporter Lambda/schedule/SNS/DLQ, SSM automation role, the recorder
+itself and its delivery bucket) — check first whether Week 11's Security Hub
+FSBP controls (or any other future week) still needs a recorder before
+destroying this stack; if so, keep `module.config_recorder` and only remove
+`module.config_compliance`/`module.reporter`. Remove any leftover test
+buckets with `./scripts/cleanup.sh <remediate-bucket> <untagged-bucket>`.
+
+## Cost
+
+Single low-traffic account, us-east-1. Prices as of July 2026 — verify at
+[aws.amazon.com/config/pricing](https://aws.amazon.com/config/pricing/).
+
+| Item | Estimate |
+|---|---|
+| Config rule evaluations (3 rules, $0.001/eval, well under the 100k tier) | pennies / month |
+| Conformance pack evaluations ($0.001/eval) | pennies / month |
+| Lambda + EventBridge + SNS + SQS | pennies (well within free tier) |
+| Config recorder — configuration items ($0.003/item, continuous, `ALL_SUPPORTED_RESOURCE_TYPES`, account-wide) | not free — this Lab now owns the account's only recorder, replacing the deleted one, so it bills for the whole account's resource inventory, not just this week's own resources. Rough estimate a few dollars/month depending on total resource count and change frequency across every week's deployed infra; monitor actual usage after a few days |
+| S3 delivery bucket (config history, 90-day lifecycle expiry) | pennies |
+| **Destroyed** | **$0** for this week's own resources; destroying `module.config_recorder` also removes the account's only recorder — re-check before destroying if other weeks still depend on it |
+
+## Troubleshooting
+
+| Symptom | Cause / fix |
+|---|---|
+| Rules show `NO_DATA` | No Config recorder is actively recording — see Prerequisite above |
+| Bucket not auto-fixed | Not tagged `auto-remediate=true`, or the tag was added after the rule's last evaluation cycle |
+| `PutBucketVersioning`/`PutBucketEncryption` AccessDenied | Expected on untagged buckets — the IAM condition blocks it by design |
+| No SNS digest email | Confirm the subscription (one-time click), or wait for the next daily schedule |
+| DLQ alarm fired | The reporter Lambda raised — inspect the DLQ message and its CloudWatch logs |
+
+## References
+
+### Blog
+Published walkthrough: _(link added on publish)_
+
 ## Architecture
 
 ```
@@ -124,40 +201,6 @@ aws configservice describe-configuration-recorder-status \
 If one already exists, remove `module.config_recorder` from `main.tf` and
 point the other modules at the existing recorder instead.
 
-## Quick start
-
-This deploys via **HCP Terraform** (workspace `week-12-dev`, VCS-driven). HCP
-runs plan/apply remotely from the GitHub repo — there is no local
-`terraform apply` and no GitHub Actions workflow (a VCS-connected workspace
-blocks CI applies).
-
-1. **Set the workspace variable** `alert_email` (sensitive) in HCP to the
-   address that should receive the daily digest.
-2. **Build + commit the reporter Lambda zip** (HCP can't build it):
-   ```bash
-   cd week-12-config-compliance-automation
-   ./scripts/build_lambdas.sh
-   git add -f lambda/**/*.zip
-   git commit -m "Week 12: compliance reporter lambda" && git push
-   ```
-3. **Apply** in the HCP UI: start a plan on `week-12-dev`, review, confirm apply.
-4. **Confirm the SNS subscription** — click the link in the confirmation email.
-5. **Exercise it end-to-end:**
-   ```bash
-   ./scripts/generate_misconfig.sh
-   ```
-   Creates an opted-in bucket (no versioning/encryption — should auto-fix
-   within minutes) and an untagged bucket (should surface in the next daily
-   digest). Config evaluates on a resource-change trigger, usually within a
-   few minutes.
-
-## Configuration
-
-All knobs are workspace/`tfvars` variables (see `terraform.tfvars.example`):
-`remediation_tag_key`/`value` (opt-in gate, default `auto-remediate`/`true`),
-`required_tag_keys` (exactly 3 — default `environment`, `owner`,
-`cost-center`), `log_retention_days`.
-
 ## Security patterns
 
 - **Tag-scoped opt-in, enforced by Config's Scope alone.** The two S3 rules
@@ -175,42 +218,3 @@ All knobs are workspace/`tfvars` variables (see `terraform.tfvars.example`):
   human has to supply the actual `cost-center` value.
 - **No silent failures.** Failed reporter invocations land in a 14-day DLQ
   that alarms to SNS.
-
-## Cost
-
-Single low-traffic account, us-east-1. Prices as of July 2026 — verify at
-[aws.amazon.com/config/pricing](https://aws.amazon.com/config/pricing/).
-
-| Item | Estimate |
-|---|---|
-| Config rule evaluations (3 rules, $0.001/eval, well under the 100k tier) | pennies / month |
-| Conformance pack evaluations ($0.001/eval) | pennies / month |
-| Lambda + EventBridge + SNS + SQS | pennies (well within free tier) |
-| Config recorder — configuration items ($0.003/item, continuous, `ALL_SUPPORTED_RESOURCE_TYPES`, account-wide) | not free — this Lab now owns the account's only recorder, replacing the deleted one, so it bills for the whole account's resource inventory, not just this week's own resources. Rough estimate a few dollars/month depending on total resource count and change frequency across every week's deployed infra; monitor actual usage after a few days |
-| S3 delivery bucket (config history, 90-day lifecycle expiry) | pennies |
-| **Destroyed** | **$0** for this week's own resources; destroying `module.config_recorder` also removes the account's only recorder — re-check before destroying if other weeks still depend on it |
-
-## Troubleshooting
-
-| Symptom | Cause / fix |
-|---|---|
-| Rules show `NO_DATA` | No Config recorder is actively recording — see Prerequisite above |
-| Bucket not auto-fixed | Not tagged `auto-remediate=true`, or the tag was added after the rule's last evaluation cycle |
-| `PutBucketVersioning`/`PutBucketEncryption` AccessDenied | Expected on untagged buckets — the IAM condition blocks it by design |
-| No SNS digest email | Confirm the subscription (one-time click), or wait for the next daily schedule |
-| DLQ alarm fired | The reporter Lambda raised — inspect the DLQ message and its CloudWatch logs |
-
-## Cleanup
-
-Queue a destroy plan on `week-12-dev` in the HCP UI. **This removes the
-account's only Config recorder along with everything else** (conformance
-pack, reporter Lambda/schedule/SNS/DLQ, SSM automation role, the recorder
-itself and its delivery bucket) — check first whether Week 11's Security Hub
-FSBP controls (or any other future week) still needs a recorder before
-destroying this stack; if so, keep `module.config_recorder` and only remove
-`module.config_compliance`/`module.reporter`. Remove any leftover test
-buckets with `./scripts/cleanup.sh <remediate-bucket> <untagged-bucket>`.
-
-## Blog
-
-Published walkthrough: _(link added on publish)_

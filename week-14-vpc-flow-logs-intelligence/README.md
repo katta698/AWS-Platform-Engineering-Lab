@@ -6,6 +6,171 @@ The single highest-leverage decision in here is one configuration field. Flow lo
 
 ---
 
+## 2. Source files
+
+What builds this. Documentation, figures and build artefacts are left out.
+
+```
+lambda/flow_analyzer/
+  handler.py
+scripts/
+  cleanup.sh
+  generate_signal.sh
+  render_query.py
+  verify_pipeline.sh
+terraform/environments/dev/
+  main.tf
+  outputs.tf
+  terraform.tfvars.example
+  variables.tf
+terraform/modules/analytics/
+  main.tf
+  outputs.tf
+  variables.tf
+terraform/modules/flow_logs/
+  main.tf
+  outputs.tf
+  variables.tf
+terraform/modules/monitoring/
+  main.tf
+  outputs.tf
+  variables.tf
+terraform/modules/network_lab/
+  main.tf
+  outputs.tf
+  variables.tf
+```
+
+## 3. Deploy
+
+### Quick Start
+Deployment is through **HCP Terraform** (workspace `week-14-dev`, VCS-connected). Pushing to `main` queues a plan; apply from the HCP UI.
+
+```bash
+cd week-14-vpc-flow-logs-intelligence/terraform/environments/dev
+terraform init
+terraform validate
+```
+
+The workspace needs two environment variables for AWS OIDC credentials — `TFC_AWS_PROVIDER_AUTH=true` and `TFC_AWS_RUN_ROLE_ARN`. `alert_email` arrives from the org-wide `shared-alert-email` variable set.
+
+**After apply, in order:**
+
+```bash
+# 1. Confirm the SNS subscription from the email AWS sends. Alarms cannot
+#    notify until this is done.
+
+# 2. Wait ~15 minutes. Flow logs reach S3 in about 10, written in 5-minute
+#    batches. Querying sooner shows nothing and looks like a broken pipeline.
+
+# 3. Verify the pipeline end to end — this is not optional, see below.
+./scripts/verify_pipeline.sh
+
+# 4. Generate a deliberate, identifiable signal against your own instance.
+./scripts/generate_signal.sh "$(terraform output -raw exposed_instance_public_ip)"
+
+# 5. Force an analyzer run rather than waiting for the hourly schedule.
+aws lambda invoke --function-name week14-flowlogs-flow-analyzer out.json \
+  && cat out.json && rm out.json
+```
+
+---
+
+## 4. Run it
+
+### Run `verify_pipeline.sh`. Every failure mode here is silent.
+This build has three ways to be completely broken while reporting success:
+
+1. **A partition projection template that does not match the real S3 prefixes** returns zero rows and reports `SUCCEEDED`. A dashboard on top shows a flat, healthy-looking zero line indefinitely.
+2. **A delivery role missing `ec2:DescribeTags`** produces a column of `-` instead of tag values. No error.
+3. **A `log_format` whose field order disagrees with the Glue schema** returns values under the wrong column names — all of them plausible numbers.
+
+None of these raise anything. None are findable by re-reading the Terraform. `verify_pipeline.sh` checks a real delivered S3 key against the projection template, confirms the subscription is `ACTIVE` with no delivery error, runs a query that must return rows, and warns if the tag column has collapsed to a single value.
+
+The format-order risk is handled structurally: the field list is declared **once** in `terraform/environments/dev/main.tf` and generates both the flow log format string and the Glue columns, so the two cannot disagree.
+
+---
+
+## 5. Validation
+
+### Saved queries
+Published into the Athena console as named queries. Source in [`athena/`](./athena).
+
+| Query | Answers |
+|---|---|
+| `partition-sanity-check` | **Run first.** Is any data readable at all, and are the tag fields resolving? |
+| `top-talkers` | Which source/destination pairs moved the most bytes |
+| `rejected-traffic` | Rejected flows clustered by source — repetition and spread, not single events |
+| `port-scan-candidates` | Sources rejected across 20+ distinct ports on one target |
+| `nat-cost-attribution` | NAT egress bytes and projected cost, grouped by owning team |
+| `traffic-path-contrast` | Egress by route taken: billed NAT paths against free endpoint paths |
+| `next-hop-path-trace` | Which intermediate resource handled each flow |
+
+Every query filters on partitions. Athena bills on data **scanned**, so a missing partition filter is not a slow query — it is an expensive one.
+
+---
+
+## 6. Cleanup
+
+### Teardown
+Queue a destroy from the HCP UI (Workspace → Settings → Destruction and Deletion → Queue destroy plan), or via the API with `is-destroy: true`. A VCS-connected workspace blocks CLI `terraform destroy`, not an HCP-queued destroy.
+
+Then verify — the script reports what survived and fails loudly if a check could not run:
+
+```bash
+./scripts/cleanup.sh
+```
+
+It separately checks the NAT gateway, the Elastic IP (billed hourly on its own once detached), the S3 bucket, and CloudWatch **anomaly detectors** — which are a different API from alarms and survive alarm deletion.
+
+## Cost
+
+Prices as of August 2026 — verify at [aws.amazon.com/vpc/pricing](https://aws.amazon.com/vpc/pricing/) and [aws.amazon.com/cloudwatch/pricing](https://aws.amazon.com/cloudwatch/pricing/).
+
+| Item | Rate | 48-hour build-test-destroy |
+|---|---|---|
+| NAT Gateway | $0.045/hr + $0.045/GB processed | ~$2.16 |
+| 2 × t4g.nano | $0.0042/hr each | ~$0.40 |
+| Flow log ingest to S3 | $0.25/GB (vended logs) | < $0.10 at lab volume |
+| S3 storage | $0.023/GB-month | cents |
+| Athena | $5/TB scanned, 10 MB minimum/query | cents |
+| Anomaly alarms × 2 | $3.00/month each, prorated hourly | ~$0.02 |
+| Static alarms × 3 | $0.10/month each | negligible |
+| Lambda, EventBridge, SNS, SQS, Glue catalog | — | effectively free at this volume |
+| **Total** | | **≈ $3** |
+| **Destroyed** | | **$0** |
+
+**Left running: ~$33/month, roughly 75% of it NAT Gateway.** The NAT gateway bills whether or not a single packet flows and produces no usage signal to remind you it exists. On this build, forgetting is the risk — not the rate.
+
+Cost controls that are actually in the code, not just advice:
+
+- **S3 lifecycle expiry at 30 days**, plus noncurrent-version expiry — versioning is on, so expiry alone would only create delete markers while the billed bytes stayed
+- **Incomplete multipart upload abort at 7 days** — invisible in the console object list, billed anyway
+- **Athena results expire at 7 days**
+- **`bytes_scanned_cutoff_per_query` = 10 GB**, enforced at workgroup level so no client can opt out
+
+---
+
+## Troubleshooting
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| Query succeeds, zero rows, objects visible in S3 | Projection template does not match delivered prefixes | Compare `terraform output partition_location_template` against a real key from `aws s3 ls s3://<bucket>/AWSLogs/ --recursive \| tail -3` |
+| `instance_tag` column is all `-` | Delivery role missing `ec2:DescribeTags`, or `tag_field_specification` absent | Both are required. Check the flow_logs module |
+| No objects in the bucket at all | Delivery lag, or bucket policy rejecting writes | Wait 15 min; then check `DeliverLogsErrorMessage` in `aws ec2 describe-flow-logs` |
+| Values look wrong but plausible | `log_format` order disagrees with Glue column order | Should be structurally impossible — both derive from one list. If it happens, that list was edited without re-applying |
+| Query cancelled, `SCAN_BYTES_EXCEEDED` | Scan ceiling fired | Working as intended. Add or tighten the partition filter |
+| Analyzer succeeds but publishes nothing | Query returned no rows | Check the analyzer log group; run `partition-sanity-check` |
+| Alarms never notify | SNS email subscription unconfirmed | Confirm from the email AWS sent at apply |
+| `aws logs` CLI errors on a `/aws/...` argument | Git Bash rewrites leading-slash arguments to Windows paths | Prefix with `MSYS_NO_PATHCONV=1` |
+
+---
+
+## References
+
+- [The article for this week](https://jayanthkatta.com/blog/week-14-vpc-flow-logs-intelligence/) &mdash; the problem, the findings and the measured cost.
+- [This week's source](https://github.com/katta698/AWS-Platform-Engineering-Lab/tree/main/week-14-vpc-flow-logs-intelligence)
+
 ## Architecture
 
 ```
@@ -78,72 +243,6 @@ Most published examples of this table stop at version 5. The fields this build d
 
 ---
 
-## Quick Start
-
-Deployment is through **HCP Terraform** (workspace `week-14-dev`, VCS-connected). Pushing to `main` queues a plan; apply from the HCP UI.
-
-```bash
-cd week-14-vpc-flow-logs-intelligence/terraform/environments/dev
-terraform init
-terraform validate
-```
-
-The workspace needs two environment variables for AWS OIDC credentials — `TFC_AWS_PROVIDER_AUTH=true` and `TFC_AWS_RUN_ROLE_ARN`. `alert_email` arrives from the org-wide `shared-alert-email` variable set.
-
-**After apply, in order:**
-
-```bash
-# 1. Confirm the SNS subscription from the email AWS sends. Alarms cannot
-#    notify until this is done.
-
-# 2. Wait ~15 minutes. Flow logs reach S3 in about 10, written in 5-minute
-#    batches. Querying sooner shows nothing and looks like a broken pipeline.
-
-# 3. Verify the pipeline end to end — this is not optional, see below.
-./scripts/verify_pipeline.sh
-
-# 4. Generate a deliberate, identifiable signal against your own instance.
-./scripts/generate_signal.sh "$(terraform output -raw exposed_instance_public_ip)"
-
-# 5. Force an analyzer run rather than waiting for the hourly schedule.
-aws lambda invoke --function-name week14-flowlogs-flow-analyzer out.json \
-  && cat out.json && rm out.json
-```
-
----
-
-## Run `verify_pipeline.sh`. Every failure mode here is silent.
-
-This build has three ways to be completely broken while reporting success:
-
-1. **A partition projection template that does not match the real S3 prefixes** returns zero rows and reports `SUCCEEDED`. A dashboard on top shows a flat, healthy-looking zero line indefinitely.
-2. **A delivery role missing `ec2:DescribeTags`** produces a column of `-` instead of tag values. No error.
-3. **A `log_format` whose field order disagrees with the Glue schema** returns values under the wrong column names — all of them plausible numbers.
-
-None of these raise anything. None are findable by re-reading the Terraform. `verify_pipeline.sh` checks a real delivered S3 key against the projection template, confirms the subscription is `ACTIVE` with no delivery error, runs a query that must return rows, and warns if the tag column has collapsed to a single value.
-
-The format-order risk is handled structurally: the field list is declared **once** in `terraform/environments/dev/main.tf` and generates both the flow log format string and the Glue columns, so the two cannot disagree.
-
----
-
-## Saved queries
-
-Published into the Athena console as named queries. Source in [`athena/`](./athena).
-
-| Query | Answers |
-|---|---|
-| `partition-sanity-check` | **Run first.** Is any data readable at all, and are the tag fields resolving? |
-| `top-talkers` | Which source/destination pairs moved the most bytes |
-| `rejected-traffic` | Rejected flows clustered by source — repetition and spread, not single events |
-| `port-scan-candidates` | Sources rejected across 20+ distinct ports on one target |
-| `nat-cost-attribution` | NAT egress bytes and projected cost, grouped by owning team |
-| `traffic-path-contrast` | Egress by route taken: billed NAT paths against free endpoint paths |
-| `next-hop-path-trace` | Which intermediate resource handled each flow |
-
-Every query filters on partitions. Athena bills on data **scanned**, so a missing partition filter is not a slow query — it is an expensive one.
-
----
-
 ## Alarms: anomaly detection *and* static thresholds
 
 The split is deliberate, and using anomaly detection for everything would cost 30× more and detect less.
@@ -160,34 +259,6 @@ Anomaly-detection alarms bill **three** metrics each (value, upper band, lower b
 
 ---
 
-## Cost
-
-Prices as of August 2026 — verify at [aws.amazon.com/vpc/pricing](https://aws.amazon.com/vpc/pricing/) and [aws.amazon.com/cloudwatch/pricing](https://aws.amazon.com/cloudwatch/pricing/).
-
-| Item | Rate | 48-hour build-test-destroy |
-|---|---|---|
-| NAT Gateway | $0.045/hr + $0.045/GB processed | ~$2.16 |
-| 2 × t4g.nano | $0.0042/hr each | ~$0.40 |
-| Flow log ingest to S3 | $0.25/GB (vended logs) | < $0.10 at lab volume |
-| S3 storage | $0.023/GB-month | cents |
-| Athena | $5/TB scanned, 10 MB minimum/query | cents |
-| Anomaly alarms × 2 | $3.00/month each, prorated hourly | ~$0.02 |
-| Static alarms × 3 | $0.10/month each | negligible |
-| Lambda, EventBridge, SNS, SQS, Glue catalog | — | effectively free at this volume |
-| **Total** | | **≈ $3** |
-| **Destroyed** | | **$0** |
-
-**Left running: ~$33/month, roughly 75% of it NAT Gateway.** The NAT gateway bills whether or not a single packet flows and produces no usage signal to remind you it exists. On this build, forgetting is the risk — not the rate.
-
-Cost controls that are actually in the code, not just advice:
-
-- **S3 lifecycle expiry at 30 days**, plus noncurrent-version expiry — versioning is on, so expiry alone would only create delete markers while the billed bytes stayed
-- **Incomplete multipart upload abort at 7 days** — invisible in the console object list, billed anyway
-- **Athena results expire at 7 days**
-- **`bytes_scanned_cutoff_per_query` = 10 GB**, enforced at workgroup level so no client can opt out
-
----
-
 ## Security patterns
 
 - **No SSH, no inbound ports, no key pairs.** Instance access is SSM Session Manager only
@@ -199,30 +270,3 @@ Cost controls that are actually in the code, not just advice:
 - **Least-privilege IAM throughout**: the analyzer's Athena permissions are scoped to the one workgroup that carries the scan ceiling, and `PutMetricData` is constrained by a namespace condition since it supports no resource-level permission
 
 ---
-
-## Troubleshooting
-
-| Symptom | Cause | Fix |
-|---|---|---|
-| Query succeeds, zero rows, objects visible in S3 | Projection template does not match delivered prefixes | Compare `terraform output partition_location_template` against a real key from `aws s3 ls s3://<bucket>/AWSLogs/ --recursive \| tail -3` |
-| `instance_tag` column is all `-` | Delivery role missing `ec2:DescribeTags`, or `tag_field_specification` absent | Both are required. Check the flow_logs module |
-| No objects in the bucket at all | Delivery lag, or bucket policy rejecting writes | Wait 15 min; then check `DeliverLogsErrorMessage` in `aws ec2 describe-flow-logs` |
-| Values look wrong but plausible | `log_format` order disagrees with Glue column order | Should be structurally impossible — both derive from one list. If it happens, that list was edited without re-applying |
-| Query cancelled, `SCAN_BYTES_EXCEEDED` | Scan ceiling fired | Working as intended. Add or tighten the partition filter |
-| Analyzer succeeds but publishes nothing | Query returned no rows | Check the analyzer log group; run `partition-sanity-check` |
-| Alarms never notify | SNS email subscription unconfirmed | Confirm from the email AWS sent at apply |
-| `aws logs` CLI errors on a `/aws/...` argument | Git Bash rewrites leading-slash arguments to Windows paths | Prefix with `MSYS_NO_PATHCONV=1` |
-
----
-
-## Teardown
-
-Queue a destroy from the HCP UI (Workspace → Settings → Destruction and Deletion → Queue destroy plan), or via the API with `is-destroy: true`. A VCS-connected workspace blocks CLI `terraform destroy`, not an HCP-queued destroy.
-
-Then verify — the script reports what survived and fails loudly if a check could not run:
-
-```bash
-./scripts/cleanup.sh
-```
-
-It separately checks the NAT gateway, the Elastic IP (billed hourly on its own once detached), the S3 bucket, and CloudWatch **anomaly detectors** — which are a different API from alarms and survive alarm deletion.

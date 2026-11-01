@@ -20,34 +20,6 @@ sharing one DynamoDB table — and one account-wide Lambda concurrency pool.
 
 ---
 
-## The fence
-
-**Read this before running anything.**
-
-Lambda's concurrency limit is per account **and per region**: 1,000 concurrent
-executions by default, shared by every function that has no reservation.
-
-This lab deliberately exhausts that pool. Run it in a region where other things
-live and you will throttle them. Measured in this account before choosing:
-
-```bash
-aws lambda list-functions --region us-east-1 --query 'length(Functions)'   # 13
-aws lambda list-functions --region us-east-2 --query 'length(Functions)'   # 0
-```
-
-So it runs in **us-east-2**, where the entire unreserved pool belongs to the
-experiment. **Check your own account before you copy this** — your empty region
-may not be the same as mine.
-
-```bash
-# find a region with nothing in it
-for r in us-east-2 us-west-2 eu-west-1; do
-  echo "$r: $(aws lambda list-functions --region $r --query 'length(Functions)' --output text)"
-done
-```
-
----
-
 ## 1. Prerequisites
 
 | Requirement | Detail |
@@ -145,7 +117,7 @@ aws lambda get-function-concurrency --function-name week25-microservices-checkou
 
 ---
 
-## 4. Run the experiment
+## 4. Run it
 
 **Run 1 — checkout unprotected:**
 
@@ -225,6 +197,41 @@ log groups persist and will hold data until removed.
 
 ---
 
+## References
+
+- [Understanding Lambda function scaling](https://docs.aws.amazon.com/lambda/latest/dg/lambda-concurrency.html) — the shared pool, reserved vs provisioned, the 10× requests-per-second rule
+- [Lambda quotas](https://docs.aws.amazon.com/lambda/latest/dg/gettingstarted-limits.html)
+- [`aws_lambda_function`](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lambda_function) — Terraform provider
+- [API Gateway HTTP API pricing](https://aws.amazon.com/api-gateway/pricing/)
+
+## The fence
+
+**Read this before running anything.**
+
+Lambda's concurrency limit is per account **and per region**: 1,000 concurrent
+executions by default, shared by every function that has no reservation.
+
+This lab deliberately exhausts that pool. Run it in a region where other things
+live and you will throttle them. Measured in this account before choosing:
+
+```bash
+aws lambda list-functions --region us-east-1 --query 'length(Functions)'   # 13
+aws lambda list-functions --region us-east-2 --query 'length(Functions)'   # 0
+```
+
+So it runs in **us-east-2**, where the entire unreserved pool belongs to the
+experiment. **Check your own account before you copy this** — your empty region
+may not be the same as mine.
+
+```bash
+# find a region with nothing in it
+for r in us-east-2 us-west-2 eu-west-1; do
+  echo "$r: $(aws lambda list-functions --region $r --query 'length(Functions)' --output text)"
+done
+```
+
+---
+
 ## Known limitations
 
 - **One account, one region, one pool.** The lab proves starvation *within* a
@@ -236,10 +243,3 @@ log groups persist and will hold data until removed.
 - **Not production-ready.** No authentication on the API, no WAF, no custom
   domain. The services exist to consume concurrency, not to be a reference
   application.
-
-## References
-
-- [Understanding Lambda function scaling](https://docs.aws.amazon.com/lambda/latest/dg/lambda-concurrency.html) — the shared pool, reserved vs provisioned, the 10× requests-per-second rule
-- [Lambda quotas](https://docs.aws.amazon.com/lambda/latest/dg/gettingstarted-limits.html)
-- [`aws_lambda_function`](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lambda_function) — Terraform provider
-- [API Gateway HTTP API pricing](https://aws.amazon.com/api-gateway/pricing/)

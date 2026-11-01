@@ -4,6 +4,124 @@
 
 ---
 
+## 1. Prerequisites
+
+### Prerequisites
+- State is in **HCP Terraform** (not S3) — org: `Katta` | workspace: `week-09-dev`
+- Terraform >= 1.10
+- A ServiceNow instance + service account with REST API access to `sc_req_item`
+
+---
+
+## 2. Source files
+
+What builds this. Documentation, figures and build artefacts are left out.
+
+```
+lambda/fargate_provisioner/
+  handler.py
+lambda/status_notifier/
+  handler.py
+lambda/webhook_receiver/
+  handler.py
+scripts/
+  cleanup.sh
+  deploy.sh
+  test_webhook.sh
+scripts/servicenow/
+  create_webhook_integration.py
+terraform/environments/dev/
+  main.tf
+  outputs.tf
+  terraform.tfvars.example
+  variables.tf
+terraform/modules/alb/
+  main.tf
+  outputs.tf
+  variables.tf
+terraform/modules/api-gateway/
+  main.tf
+  outputs.tf
+  variables.tf
+terraform/modules/ecs-cluster/
+  main.tf
+  outputs.tf
+  variables.tf
+terraform/modules/iam/
+  main.tf
+  outputs.tf
+  variables.tf
+terraform/modules/lambda/
+  main.tf
+  outputs.tf
+  variables.tf
+terraform/modules/security-groups/
+  main.tf
+  outputs.tf
+  variables.tf
+terraform/modules/step-functions/
+  main.tf
+  outputs.tf
+  variables.tf
+terraform/modules/vpc/
+  main.tf
+  outputs.tf
+  variables.tf
+```
+
+## 3. Deploy
+
+### Deploy Steps
+`week-09-dev` is a **VCS-connected HCP Terraform workspace** (same pattern as Weeks 5-8) — Terraform runs remotely from this GitHub repo, not from local CLI. ServiceNow creds, the webhook secret, and AWS auth (dynamic OIDC via `hcp-terraform-role`) are configured as HCP workspace variables, not a local `terraform.tfvars`.
+
+```bash
+bash scripts/deploy.sh   # rebuilds the 3 Lambda zips
+git add lambda/*/*.zip
+git commit -m "Update Lambda packages"
+git push
+```
+
+Then in the HCP UI: **week-09-dev → Start new plan**, review, and confirm **Apply**.
+
+Note: local `terraform apply`/`destroy` against this workspace will fail with `Saved plans not allowed for workspaces with a VCS connection` — that's expected; all applies/destroys go through the HCP UI.
+
+### Triggering a test ticket
+
+```bash
+bash scripts/test_webhook.sh "$API_GATEWAY_URL" "$WEBHOOK_SECRET"
+```
+
+This deploys a public `nginx` image as `demo-nginx` — see `lambda/webhook_receiver/handler.py` for the full set of required ticket fields (`service_name`, `image_uri`, `container_port`, `cpu`, `memory`, `desired_count`).
+
+---
+
+## 6. Cleanup
+
+### Cleanup
+Destroy must be confirmed from the **HCP UI** (same VCS-connection restriction as deploy) — `bash scripts/cleanup.sh` walks through the pre-destroy checklist and waits for confirmation; it does not call `terraform destroy` itself.
+
+Every self-service ticket's ECR repo, task definition, ECS service, target group, and listener rule were created imperatively via boto3 — they are **not** in Terraform state and will not be removed by a destroy run. Delete any test services first (see `scripts/cleanup.sh` for the exact AWS CLI commands), or the shared ALB/cluster/VPC destroy will fail on dependent target groups and ENIs still attached to a running service.
+
+---
+
+## Cost
+
+| Resource | Cost |
+|---|---|
+| Fargate compute (0.5 vCPU / 1GB, per task, 24/7) | ~$17.87/month per running task |
+| Shared ALB | ~$24/month regardless of how many services sit behind it |
+| VPC Interface Endpoints (ECR api + dkr + Logs) | ~$0.01/hour each (~$21.90/month combined, if left running) |
+| ECR storage | $0.10/GB-month |
+| Step Functions / Lambda / API Gateway | Well within free tier for lab-scale traffic |
+| **Pipeline infra + test services destroyed** | **$0** |
+
+Prices as of July 2026 — verify at [aws.amazon.com/fargate/pricing](https://aws.amazon.com/fargate/pricing/) and [aws.amazon.com/elasticloadbalancing/pricing](https://aws.amazon.com/elasticloadbalancing/pricing/).
+
+## References
+
+- [The article for this week](https://jayanthkatta.com/blog/week-9-ecs-fargate-self-service/) &mdash; the problem, the findings and the measured cost.
+- [This week's source](https://github.com/katta698/AWS-Platform-Engineering-Lab/tree/main/week-09-ecs-fargate-self-service)
+
 ## What It Builds
 
 **Static platform baseline (Terraform):**
@@ -80,47 +198,6 @@ Service reachable at http://<shared-alb-dns-name>/<service-name>/
 
 ---
 
-## Prerequisites
-
-- State is in **HCP Terraform** (not S3) — org: `Katta` | workspace: `week-09-dev`
-- Terraform >= 1.10
-- A ServiceNow instance + service account with REST API access to `sc_req_item`
-
----
-
-## Deploy Steps
-
-`week-09-dev` is a **VCS-connected HCP Terraform workspace** (same pattern as Weeks 5-8) — Terraform runs remotely from this GitHub repo, not from local CLI. ServiceNow creds, the webhook secret, and AWS auth (dynamic OIDC via `hcp-terraform-role`) are configured as HCP workspace variables, not a local `terraform.tfvars`.
-
-```bash
-bash scripts/deploy.sh   # rebuilds the 3 Lambda zips
-git add lambda/*/*.zip
-git commit -m "Update Lambda packages"
-git push
-```
-
-Then in the HCP UI: **week-09-dev → Start new plan**, review, and confirm **Apply**.
-
-Note: local `terraform apply`/`destroy` against this workspace will fail with `Saved plans not allowed for workspaces with a VCS connection` — that's expected; all applies/destroys go through the HCP UI.
-
-### Triggering a test ticket
-
-```bash
-bash scripts/test_webhook.sh "$API_GATEWAY_URL" "$WEBHOOK_SECRET"
-```
-
-This deploys a public `nginx` image as `demo-nginx` — see `lambda/webhook_receiver/handler.py` for the full set of required ticket fields (`service_name`, `image_uri`, `container_port`, `cpu`, `memory`, `desired_count`).
-
----
-
-## Cleanup
-
-Destroy must be confirmed from the **HCP UI** (same VCS-connection restriction as deploy) — `bash scripts/cleanup.sh` walks through the pre-destroy checklist and waits for confirmation; it does not call `terraform destroy` itself.
-
-Every self-service ticket's ECR repo, task definition, ECS service, target group, and listener rule were created imperatively via boto3 — they are **not** in Terraform state and will not be removed by a destroy run. Delete any test services first (see `scripts/cleanup.sh` for the exact AWS CLI commands), or the shared ALB/cluster/VPC destroy will fail on dependent target groups and ENIs still attached to a running service.
-
----
-
 ## Security
 
 - HMAC-SHA256 signature validation on the ServiceNow webhook (same pattern as prior weeks)
@@ -131,16 +208,3 @@ Every self-service ticket's ECR repo, task definition, ECS service, target group
 - `terraform.tfvars` gitignored — never committed
 
 ---
-
-## Cost
-
-| Resource | Cost |
-|---|---|
-| Fargate compute (0.5 vCPU / 1GB, per task, 24/7) | ~$17.87/month per running task |
-| Shared ALB | ~$24/month regardless of how many services sit behind it |
-| VPC Interface Endpoints (ECR api + dkr + Logs) | ~$0.01/hour each (~$21.90/month combined, if left running) |
-| ECR storage | $0.10/GB-month |
-| Step Functions / Lambda / API Gateway | Well within free tier for lab-scale traffic |
-| **Pipeline infra + test services destroyed** | **$0** |
-
-Prices as of July 2026 — verify at [aws.amazon.com/fargate/pricing](https://aws.amazon.com/fargate/pricing/) and [aws.amazon.com/elasticloadbalancing/pricing](https://aws.amazon.com/elasticloadbalancing/pricing/).

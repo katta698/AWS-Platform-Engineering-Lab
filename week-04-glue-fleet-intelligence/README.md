@@ -4,6 +4,90 @@
 
 ---
 
+## 1. Prerequisites
+
+### Prerequisites
+- Week 03 deployed (EC2 fleet with SSM agents registered)
+- S3 state bucket: `jay-terraformstate-bucket`
+- GitHub OIDC role: `github-actions-dev-deploy-role`
+- Terraform >= 1.10
+
+---
+
+## 2. Source files
+
+### Terraform Resources (~50 resources)
+```
+S3 buckets (raw + curated + athena results) with versioning + lifecycle
+Glue Catalog database + crawler + ETL job
+Athena workgroup + named queries
+Step Functions state machine
+3x Lambda functions + IAM roles
+API Gateway REST API
+SSM Resource Data Sync configuration
+CloudWatch log groups
+```
+
+---
+
+## 3. Deploy
+
+### Deploy Steps
+### Option A — GitHub Actions (recommended)
+
+1. Set these secrets in your GitHub repo (`Settings → Secrets and variables → Actions`):
+
+   | Secret | Value |
+   |--------|-------|
+   | `AWS_ROLE_ARN` | `arn:aws:iam::<account-id>:role/github-actions-dev-deploy-role` |
+   | `ALERT_EMAIL` | your email |
+   | `SERVICENOW_INSTANCE` | `dev388443` |
+   | `SERVICENOW_USERNAME` | your ServiceNow user |
+   | `SERVICENOW_PASSWORD` | your ServiceNow password |
+   | `WEBHOOK_SECRET` | value from terraform.tfvars |
+
+2. Trigger: `Actions → Week 04 — Deploy Fleet Intelligence → Run workflow → dev → Run workflow`
+
+The workflow packages Lambda zips, runs `terraform apply`, and uploads the Glue ETL script. Takes ~5 minutes. Check the job summary for API Gateway URL, crawler name, and ETL job name.
+
+### Option B — Local deploy
+
+Run from the `week-04-glue-fleet-intelligence/` folder:
+
+```bash
+bash scripts/deploy.sh
+```
+
+This packages all 3 Lambda zip files, runs `terraform init` + `terraform apply`, and uploads the Glue ETL script to S3.
+
+### After deploy (both options)
+
+```bash
+# 1. Submit test webhook — see COMMANDS.md section 5 for the full curl command
+# 2. Monitor in Step Functions console
+# 3. Query fleet data in Athena
+```
+
+---
+
+## Cost
+
+### Cost If Left Running
+| Resource | Cost |
+|----------|------|
+| Glue crawler (per run, 2 DPU × 10 min) | ~$0.15 |
+| Glue ETL job (per run, 2 × G.1X × 5 min) | ~$0.07 |
+| Athena (per query) | ~$0.005 per GB scanned |
+| S3 storage | ~$0.023/GB/month |
+| **Destroyed** | **$0** |
+
+---
+
+## References
+
+### Blog
+Published: [Week 4 — Building a Fleet Intelligence Platform with AWS Glue, Step Functions & ServiceNow](https://blog.jayanthkatta.com/2026/06/building-fleet-intelligence-platform.html?m=1)
+
 ## What It Builds
 
 - **SSM Resource Data Sync** — continuously exports EC2 inventory + patch compliance data to S3 (raw zone)
@@ -106,82 +190,3 @@ Week 03 automates patching. Week 04 answers: **did it work?**
 - Together: automated patching + automated visibility = complete fleet management platform
 
 ---
-
-## Terraform Resources (~50 resources)
-
-```
-S3 buckets (raw + curated + athena results) with versioning + lifecycle
-Glue Catalog database + crawler + ETL job
-Athena workgroup + named queries
-Step Functions state machine
-3x Lambda functions + IAM roles
-API Gateway REST API
-SSM Resource Data Sync configuration
-CloudWatch log groups
-```
-
----
-
-## Prerequisites
-
-- Week 03 deployed (EC2 fleet with SSM agents registered)
-- S3 state bucket: `jay-terraformstate-bucket`
-- GitHub OIDC role: `github-actions-dev-deploy-role`
-- Terraform >= 1.10
-
----
-
-## Deploy Steps
-
-### Option A — GitHub Actions (recommended)
-
-1. Set these secrets in your GitHub repo (`Settings → Secrets and variables → Actions`):
-
-   | Secret | Value |
-   |--------|-------|
-   | `AWS_ROLE_ARN` | `arn:aws:iam::<account-id>:role/github-actions-dev-deploy-role` |
-   | `ALERT_EMAIL` | your email |
-   | `SERVICENOW_INSTANCE` | `dev388443` |
-   | `SERVICENOW_USERNAME` | your ServiceNow user |
-   | `SERVICENOW_PASSWORD` | your ServiceNow password |
-   | `WEBHOOK_SECRET` | value from terraform.tfvars |
-
-2. Trigger: `Actions → Week 04 — Deploy Fleet Intelligence → Run workflow → dev → Run workflow`
-
-The workflow packages Lambda zips, runs `terraform apply`, and uploads the Glue ETL script. Takes ~5 minutes. Check the job summary for API Gateway URL, crawler name, and ETL job name.
-
-### Option B — Local deploy
-
-Run from the `week-04-glue-fleet-intelligence/` folder:
-
-```bash
-bash scripts/deploy.sh
-```
-
-This packages all 3 Lambda zip files, runs `terraform init` + `terraform apply`, and uploads the Glue ETL script to S3.
-
-### After deploy (both options)
-
-```bash
-# 1. Submit test webhook — see COMMANDS.md section 5 for the full curl command
-# 2. Monitor in Step Functions console
-# 3. Query fleet data in Athena
-```
-
----
-
-## Cost If Left Running
-
-| Resource | Cost |
-|----------|------|
-| Glue crawler (per run, 2 DPU × 10 min) | ~$0.15 |
-| Glue ETL job (per run, 2 × G.1X × 5 min) | ~$0.07 |
-| Athena (per query) | ~$0.005 per GB scanned |
-| S3 storage | ~$0.023/GB/month |
-| **Destroyed** | **$0** |
-
----
-
-## Blog
-
-Published: [Week 4 — Building a Fleet Intelligence Platform with AWS Glue, Step Functions & ServiceNow](https://blog.jayanthkatta.com/2026/06/building-fleet-intelligence-platform.html?m=1)

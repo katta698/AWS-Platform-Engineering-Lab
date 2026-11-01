@@ -6,50 +6,77 @@ A self-service platform where developers submit a ServiceNow ticket and get a
 fully isolated PostgreSQL database — with dedicated credentials, Secrets Manager
 auto-rotation, and zero DBA involvement.
 
-## Architecture
+## 1. Prerequisites
+
+### GitHub Secrets Required
+| Secret                  | Description                          |
+|-------------------------|--------------------------------------|
+| `AWS_ROLE_ARN`          | IAM role for OIDC (from Week 1)      |
+| `AWS_ACCOUNT_ID`        | Your 12-digit AWS account ID         |
+| `AURORA_MASTER_PASSWORD`| Strong password for Aurora admin     |
+| `ALERT_EMAIL`           | Email for CloudWatch alarm SNS       |
+| `PG8000_LAYER_ARN`      | Output from build_layer.sh           |
+| `SERVICENOW_INSTANCE_URL` | https://devXXXXX.service-now.com   |
+| `SERVICENOW_USERNAME`   | ServiceNow admin username            |
+| `SERVICENOW_PASSWORD`   | ServiceNow admin password            |
+| `WEBHOOK_SECRET`        | HMAC signing secret                  |
+| `GH_TOKEN_PAT`          | GitHub PAT (repo scope)              |
+
+## 2. Source files
+
+What builds this. Documentation, figures and build artefacts are left out.
 
 ```
-ServiceNow Ticket
-      │
-      ▼
-API Gateway POST /provision
-      │
-      ▼
-Lambda: webhook_receiver  (validates HMAC, starts Step Functions)
-      │
-      ▼
-Step Functions State Machine
-      │
-      ├─► Lambda: db_provisioner
-      │     ├── Connects to Aurora (via master secret)
-      │     ├── CREATE DATABASE {db_name}
-      │     ├── CREATE USER {db_name}_user
-      │     ├── GRANT ALL PRIVILEGES
-      │     ├── Stores secret: /{project}/{env}/db/{db_name}
-      │     └── Enables 30-day auto-rotation
-      │
-      └─► Lambda: status_updater
-            └── Closes ServiceNow ticket with connection details
-
-Aurora Serverless v2 (PostgreSQL 16)
-  Writer: selfservice-db-dev-aurora.cluster-xxxxx.us-east-1.rds.amazonaws.com
-  Reader: selfservice-db-dev-aurora.cluster-ro-xxxxx.us-east-1.rds.amazonaws.com
-  Scaling: 0.5 → 16 ACUs (auto, based on load)
+.github/workflows/
+  deploy.yml
+lambda/db_provisioner/
+  index.py
+lambda/secret_rotation/
+  index.py
+lambda/status_updater/
+  index.py
+lambda/webhook_receiver/
+  index.py
+scripts/
+  build_layer.sh
+  cleanup.sh
+  deploy.sh
+terraform/environments/dev/
+  main.tf
+  outputs.tf
+  terraform.tfvars
+  terraform.tfvars.example
+  tfplan
+  variables.tf
+terraform/modules/api-gateway/
+  main.tf
+  outputs.tf
+  variables.tf
+terraform/modules/aurora/
+  main.tf
+  outputs.tf
+  variables.tf
+terraform/modules/lambda/
+  main.tf
+  outputs.tf
+  variables.tf
+terraform/modules/secrets/
+  main.tf
+  outputs.tf
+  variables.tf
+terraform/modules/step-functions/
+  main.tf
+  outputs.tf
+  variables.tf
+terraform/modules/vpc/
+  main.tf
+  outputs.tf
+  variables.tf
 ```
 
-## Multi-Tenant Design
+## 3. Deploy
 
-| Concern        | Approach                                      |
-|----------------|-----------------------------------------------|
-| Isolation       | PostgreSQL database-per-tenant               |
-| Credentials     | Dedicated user per database                  |
-| Secret storage  | Secrets Manager: `/{project}/{env}/db/{name}`|
-| Rotation        | 30-day auto-rotation per secret               |
-| Scale limit     | None — Aurora Serverless v2 scales to demand |
-| Connection limit| 50 connections per tenant (configurable)      |
-
-## Quick Start
-
+### Quick Start
 ### Prerequisites
 - AWS CLI configured with admin permissions
 - Terraform >= 1.7
@@ -286,30 +313,6 @@ sh scripts/cleanup.sh
 | **Total**                      | **~$75/month**               |
 | **Destroyed between sessions** | **$0**                       |
 
-## GitHub Secrets Required
-
-| Secret                  | Description                          |
-|-------------------------|--------------------------------------|
-| `AWS_ROLE_ARN`          | IAM role for OIDC (from Week 1)      |
-| `AWS_ACCOUNT_ID`        | Your 12-digit AWS account ID         |
-| `AURORA_MASTER_PASSWORD`| Strong password for Aurora admin     |
-| `ALERT_EMAIL`           | Email for CloudWatch alarm SNS       |
-| `PG8000_LAYER_ARN`      | Output from build_layer.sh           |
-| `SERVICENOW_INSTANCE_URL` | https://devXXXXX.service-now.com   |
-| `SERVICENOW_USERNAME`   | ServiceNow admin username            |
-| `SERVICENOW_PASSWORD`   | ServiceNow admin password            |
-| `WEBHOOK_SECRET`        | HMAC signing secret                  |
-| `GH_TOKEN_PAT`          | GitHub PAT (repo scope)              |
-
-## Security Patterns
-
-- **No public database access** — Aurora lives in isolated subnets with no internet route
-- **Least-privilege** — Lambda role scoped to specific secret ARN prefixes only
-- **Secrets Manager rotation** — every tenant database rotates independently on a 30-day schedule
-- **Zero-downtime rotation** — 4-step protocol: createSecret → setSecret → testSecret → finishSecret
-- **HMAC-signed webhooks** — ServiceNow payload validated before execution starts
-- **OIDC for CI/CD** — no long-lived AWS credentials in GitHub
-
 ## Troubleshooting
 
 ### Terraform / Deploy errors
@@ -368,3 +371,59 @@ sh scripts/cleanup.sh
 | `AWS_ROLE_ARN` secret points to non-existent role | Secret was set to `github-actions-role` but actual role is `github-actions-dev-deploy-role` | Update secret to `arn:aws:iam::<YOUR_ACCOUNT_ID>:role/github-actions-dev-deploy-role`; verify with `aws iam list-roles --query "Roles[?contains(RoleName,'github')].RoleName"` |
 | `Unsupported argument: use_lockfile` in Terraform Init | `use_lockfile = true` in backend block requires Terraform >= 1.10; workflow was pinned to 1.7.5 | Upgrade `TF_VERSION` to `1.10.5` in the workflow file |
 | Deploy workflow does not build pg8000 layer | Layer build is intentionally separate — build once, reuse ARN | Run `sh scripts/build_layer.sh` once manually; store ARN in `PG8000_LAYER_ARN` GitHub secret; workflow reads from secret |
+
+## References
+
+- [The article for this week](https://jayanthkatta.com/blog/week-2-automating-postgresql-provisioning-with-servicenow-an/) &mdash; the problem, the findings and the measured cost.
+- [This week's source](https://github.com/katta698/AWS-Platform-Engineering-Lab/tree/main/week-02-aurora-self-service)
+
+## Architecture
+
+```
+ServiceNow Ticket
+      │
+      ▼
+API Gateway POST /provision
+      │
+      ▼
+Lambda: webhook_receiver  (validates HMAC, starts Step Functions)
+      │
+      ▼
+Step Functions State Machine
+      │
+      ├─► Lambda: db_provisioner
+      │     ├── Connects to Aurora (via master secret)
+      │     ├── CREATE DATABASE {db_name}
+      │     ├── CREATE USER {db_name}_user
+      │     ├── GRANT ALL PRIVILEGES
+      │     ├── Stores secret: /{project}/{env}/db/{db_name}
+      │     └── Enables 30-day auto-rotation
+      │
+      └─► Lambda: status_updater
+            └── Closes ServiceNow ticket with connection details
+
+Aurora Serverless v2 (PostgreSQL 16)
+  Writer: selfservice-db-dev-aurora.cluster-xxxxx.us-east-1.rds.amazonaws.com
+  Reader: selfservice-db-dev-aurora.cluster-ro-xxxxx.us-east-1.rds.amazonaws.com
+  Scaling: 0.5 → 16 ACUs (auto, based on load)
+```
+
+## Multi-Tenant Design
+
+| Concern        | Approach                                      |
+|----------------|-----------------------------------------------|
+| Isolation       | PostgreSQL database-per-tenant               |
+| Credentials     | Dedicated user per database                  |
+| Secret storage  | Secrets Manager: `/{project}/{env}/db/{name}`|
+| Rotation        | 30-day auto-rotation per secret               |
+| Scale limit     | None — Aurora Serverless v2 scales to demand |
+| Connection limit| 50 connections per tenant (configurable)      |
+
+## Security Patterns
+
+- **No public database access** — Aurora lives in isolated subnets with no internet route
+- **Least-privilege** — Lambda role scoped to specific secret ARN prefixes only
+- **Secrets Manager rotation** — every tenant database rotates independently on a 30-day schedule
+- **Zero-downtime rotation** — 4-step protocol: createSecret → setSecret → testSecret → finishSecret
+- **HMAC-signed webhooks** — ServiceNow payload validated before execution starts
+- **OIDC for CI/CD** — no long-lived AWS credentials in GitHub

@@ -17,18 +17,24 @@ It is **should I run it at all, or let AWS?**
 This week built both, on one cluster, reading the same Git repository and
 deploying the same application — so the only variable is who operates Argo CD.
 
-## What this builds
+## 2. Source files
 
+### Layout
 ```
-week19-gitops (EKS 1.36, one t3.medium)
-├── argocd        EKS Capability for Argo CD   ← AWS runs the controllers
-└── argocd-self   Helm chart 10.9.1            ← you run the controllers
-        │
-        └── both deploy → gitops-demo/podinfo, from this repo
+docs/FIGURE_PLAN.md    screenshot slots, written BEFORE any capture
+gitops/                what Argo CD reads — workloads and Application CRs
+scripts/prove_drift.sh the drift experiment
+scripts/cleanup.sh     teardown verification, including the capability
+terraform/
+  modules/platform_cluster      VPC, EKS, node, OIDC, access entries
+  modules/argocd_managed        aws_eks_capability, type ARGOCD
+  modules/argocd_selfmanaged    helm_release, chart pinned to 10.9.1
+  environments/dev              both paths on one cluster
 ```
 
-## What it found
+## 5. Validation
 
+### What it found
 **The two Argo CDs cannot both own the CRDs.** The first apply built everything
 and failed on the Helm release: `applications.argoproj.io in namespace "" exists
 and cannot be imported`. The capability installs Argo CD's CRDs, and CRDs are
@@ -75,6 +81,54 @@ The capability accepts only EKS cluster ARNs and does not auto-register the
 local cluster, because it runs outside the cluster — where "this cluster" is an
 AWS resource, not a network address.
 
+## 6. Cleanup
+
+### Teardown
+```bash
+# destroy via HCP, then verify nothing survived
+./scripts/cleanup.sh
+```
+
+An EKS Capability is an AWS resource with its own billing line and is invisible
+to `kubectl`. Its IAM role outlives it at no cost, which is exactly how orphans
+accumulate.
+
+## Cost
+
+| Item | Rate |
+|---|---|
+| EKS control plane | $0.10 / hr, from creation, no free tier |
+| NAT gateway | $0.045 / hr |
+| t3.medium node | ~$0.0416 / hr — twice Week 18's t3.small, because Argo CD has to fit |
+| Argo CD capability | $0.03 / hr + $0.0015 per Application-hour |
+
+About **$0.22/hr, ~$5.20/day**, whether or not anything syncs.
+
+**Billed: $1.21** for the 5h19m run (Cost Explorer, 19 September). Control
+plane $0.51, NAT $0.30, node $0.21, **capability $0.15** ($0.144 in
+capability-hours plus $0.007 in Application-hours, itemised separately), and
+$0.04 of Elastic IP, EBS and regional data transfer. The rate line predicts
+$1.17 — 3% under, and the gap is entirely the three items a rate table never
+lists.
+
+## References
+
+### Sources
+- [Comparing EKS Capability for Argo CD to self-managed Argo CD](https://docs.aws.amazon.com/eks/latest/userguide/argocd-comparison.html)
+- [Amazon EKS capability IAM role](https://docs.aws.amazon.com/eks/latest/userguide/capability-role.html)
+- [Amazon EKS pricing](https://aws.amazon.com/eks/pricing/)
+- [Argo CD releases](https://endoflife.date/argo-cd)
+
+## What this builds
+
+```
+week19-gitops (EKS 1.36, one t3.medium)
+├── argocd        EKS Capability for Argo CD   ← AWS runs the controllers
+└── argocd-self   Helm chart 10.9.1            ← you run the controllers
+        │
+        └── both deploy → gitops-demo/podinfo, from this repo
+```
+
 ## The thing deliberately broken — and what happened
 
 GitOps' headline claim is that Git is the source of truth and the cluster
@@ -100,53 +154,3 @@ of four checks green against pods that never started, because the checks only
 searched for a failure string and work that never happens produces no string.
 Every check here proves its drift actually landed before it reports on what
 happened next.
-
-## Cost
-
-| Item | Rate |
-|---|---|
-| EKS control plane | $0.10 / hr, from creation, no free tier |
-| NAT gateway | $0.045 / hr |
-| t3.medium node | ~$0.0416 / hr — twice Week 18's t3.small, because Argo CD has to fit |
-| Argo CD capability | $0.03 / hr + $0.0015 per Application-hour |
-
-About **$0.22/hr, ~$5.20/day**, whether or not anything syncs.
-
-**Billed: $1.21** for the 5h19m run (Cost Explorer, 19 September). Control
-plane $0.51, NAT $0.30, node $0.21, **capability $0.15** ($0.144 in
-capability-hours plus $0.007 in Application-hours, itemised separately), and
-$0.04 of Elastic IP, EBS and regional data transfer. The rate line predicts
-$1.17 — 3% under, and the gap is entirely the three items a rate table never
-lists.
-
-## Layout
-
-```
-docs/FIGURE_PLAN.md    screenshot slots, written BEFORE any capture
-gitops/                what Argo CD reads — workloads and Application CRs
-scripts/prove_drift.sh the drift experiment
-scripts/cleanup.sh     teardown verification, including the capability
-terraform/
-  modules/platform_cluster      VPC, EKS, node, OIDC, access entries
-  modules/argocd_managed        aws_eks_capability, type ARGOCD
-  modules/argocd_selfmanaged    helm_release, chart pinned to 10.9.1
-  environments/dev              both paths on one cluster
-```
-
-## Teardown
-
-```bash
-# destroy via HCP, then verify nothing survived
-./scripts/cleanup.sh
-```
-
-An EKS Capability is an AWS resource with its own billing line and is invisible
-to `kubectl`. Its IAM role outlives it at no cost, which is exactly how orphans
-accumulate.
-
-## Sources
-
-- [Comparing EKS Capability for Argo CD to self-managed Argo CD](https://docs.aws.amazon.com/eks/latest/userguide/argocd-comparison.html)
-- [Amazon EKS capability IAM role](https://docs.aws.amazon.com/eks/latest/userguide/capability-role.html)
-- [Amazon EKS pricing](https://aws.amazon.com/eks/pricing/)
-- [Argo CD releases](https://endoflife.date/argo-cd)

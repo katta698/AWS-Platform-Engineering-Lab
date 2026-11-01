@@ -4,81 +4,66 @@
 
 A self-service fleet management platform where ops engineers submit a ServiceNow ticket to either onboard an EC2 instance into the managed fleet or trigger a patch run across an environment — with full compliance reporting, session audit logging, and zero manual AWS console involvement.
 
-## Architecture
+## 2. Source files
+
+What builds this. Documentation, figures and build artefacts are left out.
 
 ```
-ServiceNow Ticket (onboard or patch)
-      │
-      ▼
-API Gateway POST /fleet
-      │
-      ▼
-Lambda: webhook_receiver  (validates HMAC, routes to Step Functions)
-      │
-      ▼
-Step Functions — RouteRequest
-      │
-      ├─► [request_type=onboard]
-      │     Lambda: fleet_onboarder
-      │       ├── SSM Automation: onboard-instance document
-      │       │     ├── Wait for SSM agent online
-      │       │     ├── Tag instance (PatchGroup, ManagedBy)
-      │       │     ├── Run baseline config via Run Command
-      │       │     └── Run patch scan → collect compliance
-      │       └── Returns compliance summary
-      │
-      └─► [request_type=patch]
-            Lambda: patch_orchestrator
-              ├── SSM Automation: patch-fleet document
-              │     ├── Run Command: AWS-RunPatchBaseline (Scan or Install)
-              │     ├── Target: all instances with PatchGroup tag
-              │     └── Collect per-instance patch states
-              └── Returns fleet compliance summary
-
-Lambda: status_updater
-  └── Closes ServiceNow ticket with compliance report
-
-SSM Services Used:
-  Fleet Manager   — visual fleet dashboard, instance details
-  Patch Manager   — baselines, maintenance windows, compliance
-  Run Command     — remote execution, no SSH
-  Inventory       — software, network, OS details every 30 min
-  Session Manager — audited shell access, logs to S3 + CloudWatch
-  State Manager   — enforce SSM agent updates, inventory collection
-  Automation      — custom onboarding and patching runbooks
+lambda/fleet_onboarder/
+  handler.py
+lambda/patch_orchestrator/
+  handler.py
+lambda/status_updater/
+  handler.py
+lambda/webhook_receiver/
+  handler.py
+scripts/
+  cleanup.sh
+  deploy.sh
+terraform/environments/dev/
+  main.tf
+  outputs.tf
+  terraform.tfvars
+  terraform.tfvars.example
+  tfplan
+  variables.tf
+terraform/modules/api-gateway/
+  main.tf
+  outputs.tf
+  variables.tf
+terraform/modules/cloudwatch/
+  main.tf
+  outputs.tf
+  variables.tf
+terraform/modules/ec2-fleet/
+  main.tf
+  outputs.tf
+  variables.tf
+terraform/modules/iam/
+  main.tf
+  outputs.tf
+  variables.tf
+terraform/modules/lambda/
+  main.tf
+  outputs.tf
+  variables.tf
+terraform/modules/ssm/
+  main.tf
+  outputs.tf
+  variables.tf
+terraform/modules/step-functions/
+  main.tf
+  outputs.tf
+  variables.tf
+terraform/modules/vpc/
+  main.tf
+  outputs.tf
+  variables.tf
 ```
 
-## SSM Services Deep Dive
+## 3. Deploy
 
-| Service | Purpose in this project |
-|---|---|
-| Fleet Manager | Visual dashboard — all instances, health status, OS details |
-| Patch Manager | Baselines per OS, maintenance window (Sunday 02:00 UTC), compliance reports |
-| Run Command | Execute commands across fleet without SSH — baseline config, patch operations |
-| Inventory | Collect software inventory every 30 min — apps, network config, OS info |
-| Session Manager | Audited shell access — every session logged to S3 + CloudWatch, no port 22 needed |
-| State Manager | Associations enforce SSM agent is always up to date, inventory always running |
-| Automation | Custom runbooks — onboard-instance and patch-fleet documents |
-
-## Patch Baseline Configuration
-
-| OS | Baseline | Classifications | Severity | Approve After |
-|---|---|---|---|---|
-| Amazon Linux 2023 | `fleet-mgmt-dev-amazon-linux-baseline` | Security, Bugfix | Critical, Important, Medium | 7 days |
-| Windows Server | `fleet-mgmt-dev-windows-baseline` | CriticalUpdates, SecurityUpdates | Critical, Important | 7 days |
-
-## Multi-Tenant Design
-
-| Concern | Approach |
-|---|---|
-| Fleet isolation | Instances tagged with `PatchGroup` and `ManagedBy` for targeted operations |
-| Session audit | Every session logged to S3 + CloudWatch with 90-day retention |
-| Patch compliance | Per-instance compliance tracked in SSM, reported back to ServiceNow |
-| Agent enforcement | State Manager keeps SSM agent updated every 14 days |
-| Inventory | Software and network inventory collected every 30 minutes |
-
-## Quick Start
-
+### Quick Start
 ### Prerequisites
 - AWS CLI configured with admin permissions
 - Terraform >= 1.10
@@ -339,16 +324,6 @@ sh scripts/cleanup.sh
 
 > Note: VPC endpoints are the biggest cost driver. For the lab you can remove them and use a NAT Gateway instead, but VPC endpoints are the enterprise pattern — no internet route for SSM traffic.
 
-## Security Patterns
-
-- **No SSH anywhere** — Session Manager is the only shell access, every session is logged
-- **IMDSv2 enforced** — Launch template requires HTTP tokens (prevents SSRF attacks)
-- **Least-privilege IAM** — Lambda can only call SSM actions, scoped to this project's resources
-- **Patch baselines** — Only approved patch classifications allowed, reject action blocks all others
-- **Session audit trail** — S3 + CloudWatch logs retained 90 days for compliance
-- **State Manager** — Configuration drift corrected automatically, agent always current
-- **OIDC for CI/CD** — No static AWS credentials in GitHub
-
 ## Troubleshooting
 
 ### SSM / Fleet
@@ -386,3 +361,91 @@ sh scripts/cleanup.sh
 |---|---|---|
 | `Not authorized to perform sts:AssumeRoleWithWebIdentity` | OIDC trust policy wrong repo or environment | See Week 2 troubleshooting — same fix applies |
 | `Unsupported argument: use_lockfile` | Terraform < 1.10 | Workflow uses 1.10.5 — check TF_VERSION in workflow file |
+
+## References
+
+- [The article for this week](https://jayanthkatta.com/blog/week-3-self-service-ec2-fleet-patching-with-aws-ssm/) &mdash; the problem, the findings and the measured cost.
+- [This week's source](https://github.com/katta698/AWS-Platform-Engineering-Lab/tree/main/week-03-ssm-fleet-management)
+
+## Architecture
+
+```
+ServiceNow Ticket (onboard or patch)
+      │
+      ▼
+API Gateway POST /fleet
+      │
+      ▼
+Lambda: webhook_receiver  (validates HMAC, routes to Step Functions)
+      │
+      ▼
+Step Functions — RouteRequest
+      │
+      ├─► [request_type=onboard]
+      │     Lambda: fleet_onboarder
+      │       ├── SSM Automation: onboard-instance document
+      │       │     ├── Wait for SSM agent online
+      │       │     ├── Tag instance (PatchGroup, ManagedBy)
+      │       │     ├── Run baseline config via Run Command
+      │       │     └── Run patch scan → collect compliance
+      │       └── Returns compliance summary
+      │
+      └─► [request_type=patch]
+            Lambda: patch_orchestrator
+              ├── SSM Automation: patch-fleet document
+              │     ├── Run Command: AWS-RunPatchBaseline (Scan or Install)
+              │     ├── Target: all instances with PatchGroup tag
+              │     └── Collect per-instance patch states
+              └── Returns fleet compliance summary
+
+Lambda: status_updater
+  └── Closes ServiceNow ticket with compliance report
+
+SSM Services Used:
+  Fleet Manager   — visual fleet dashboard, instance details
+  Patch Manager   — baselines, maintenance windows, compliance
+  Run Command     — remote execution, no SSH
+  Inventory       — software, network, OS details every 30 min
+  Session Manager — audited shell access, logs to S3 + CloudWatch
+  State Manager   — enforce SSM agent updates, inventory collection
+  Automation      — custom onboarding and patching runbooks
+```
+
+## SSM Services Deep Dive
+
+| Service | Purpose in this project |
+|---|---|
+| Fleet Manager | Visual dashboard — all instances, health status, OS details |
+| Patch Manager | Baselines per OS, maintenance window (Sunday 02:00 UTC), compliance reports |
+| Run Command | Execute commands across fleet without SSH — baseline config, patch operations |
+| Inventory | Collect software inventory every 30 min — apps, network config, OS info |
+| Session Manager | Audited shell access — every session logged to S3 + CloudWatch, no port 22 needed |
+| State Manager | Associations enforce SSM agent is always up to date, inventory always running |
+| Automation | Custom runbooks — onboard-instance and patch-fleet documents |
+
+## Patch Baseline Configuration
+
+| OS | Baseline | Classifications | Severity | Approve After |
+|---|---|---|---|---|
+| Amazon Linux 2023 | `fleet-mgmt-dev-amazon-linux-baseline` | Security, Bugfix | Critical, Important, Medium | 7 days |
+| Windows Server | `fleet-mgmt-dev-windows-baseline` | CriticalUpdates, SecurityUpdates | Critical, Important | 7 days |
+
+## Multi-Tenant Design
+
+| Concern | Approach |
+|---|---|
+| Fleet isolation | Instances tagged with `PatchGroup` and `ManagedBy` for targeted operations |
+| Session audit | Every session logged to S3 + CloudWatch with 90-day retention |
+| Patch compliance | Per-instance compliance tracked in SSM, reported back to ServiceNow |
+| Agent enforcement | State Manager keeps SSM agent updated every 14 days |
+| Inventory | Software and network inventory collected every 30 minutes |
+
+## Security Patterns
+
+- **No SSH anywhere** — Session Manager is the only shell access, every session is logged
+- **IMDSv2 enforced** — Launch template requires HTTP tokens (prevents SSRF attacks)
+- **Least-privilege IAM** — Lambda can only call SSM actions, scoped to this project's resources
+- **Patch baselines** — Only approved patch classifications allowed, reject action blocks all others
+- **Session audit trail** — S3 + CloudWatch logs retained 90 days for compliance
+- **State Manager** — Configuration drift corrected automatically, agent always current
+- **OIDC for CI/CD** — No static AWS credentials in GitHub

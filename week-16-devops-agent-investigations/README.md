@@ -6,6 +6,71 @@ So this week is not a demonstration that an agent can investigate. AWS's marketi
 
 ---
 
+## 1. Prerequisites
+
+### Prerequisites
+**ServiceNow OAuth credentials.** There is no Terraform path — the same shape as Week 6's SCP policy-type enablement and Week 15's CloudTrail trusted access:
+
+> ServiceNow → **System OAuth** → **Application Registry** → *Create an OAuth API endpoint for external clients*
+
+Take the Client ID and Client Secret into HCP workspace variables, marking the secret sensitive.
+
+**Wake the instance first.** A ServiceNow developer instance hibernates after roughly ten days idle. When asleep it fails registration in a way that reads like a credentials problem rather than a sleep problem.
+
+---
+
+## 2. Source files
+
+What builds this. Documentation, figures and build artefacts are left out.
+
+```
+lambda/order_processor/
+  handler.py
+scripts/
+  break_it.sh
+  fix_it.sh
+  measure_usage.sh
+terraform/environments/dev/
+  associations.tf
+  iam.tf
+  main.tf
+  outputs.tf
+  terraform.tfvars.example
+  variables.tf
+terraform/modules/agent_space/
+  main.tf
+  outputs.tf
+  variables.tf
+terraform/modules/observed_workload/
+  main.tf
+  outputs.tf
+  variables.tf
+```
+
+## Cost
+
+### Cost — the honest position
+**$0.0083 per agent-second of active work.** $0.50 a minute. No idle charge, no fixed fee, no ceiling.
+
+Every previous week in this series leaned on a service-enforced limit — Weeks 14 and 15 both capped Athena at 10 GB per query at the workgroup level, so a mistake was bounded by *configuration*. There is no equivalent here. The only lever is a concurrency quota, and it bounds how **many** tasks run, never how **long** one runs.
+
+So the control is observation:
+
+```bash
+./scripts/measure_usage.sh
+```
+
+Reads the usage meter, converts hours to dollars, and prints the absence of a limit rather than hiding it. **Run it before and after anything the agent does.**
+
+A free trial exists — 2 months, 20 hours of investigations per month — for new DevOps Agent customers. Whether it applies here is not yet confirmed; it appears as a billing credit, not as a usage limit, so it cannot be read from the API.
+
+---
+
+## References
+
+- [The article for this week](https://jayanthkatta.com/blog/week-16-devops-agent-investigations/) &mdash; the problem, the findings and the measured cost.
+- [This week's source](https://github.com/katta698/AWS-Platform-Engineering-Lab/tree/main/week-16-devops-agent-investigations)
+
 ## What makes this gradeable
 
 Week 15 built an organization trail and seven forensic queries that answer *who did what, when, from where*. That is ground truth. Week 16 produces a claim. Having both in the same account is what turns "the agent seemed clever" into "the agent was right about two of three, and confidently wrong about the third."
@@ -40,36 +105,6 @@ This is the week that collides with the series' own rule of *always HCP Terrafor
 **`awscc` is the answer**, and it is worth understanding why rather than treating it as a workaround. It generates resources from CloudFormation's registry, so a service appears there as soon as its CFN types go LIVE — no waiting for someone to hand-write a provider resource.
 
 The trade is real: awscc resources are machine-generated, so they carry CloudFormation's shapes and naming rather than the ergonomics of hand-written ones, and the documentation is thin. That is the price of being early.
-
----
-
-## Cost — the honest position
-
-**$0.0083 per agent-second of active work.** $0.50 a minute. No idle charge, no fixed fee, no ceiling.
-
-Every previous week in this series leaned on a service-enforced limit — Weeks 14 and 15 both capped Athena at 10 GB per query at the workgroup level, so a mistake was bounded by *configuration*. There is no equivalent here. The only lever is a concurrency quota, and it bounds how **many** tasks run, never how **long** one runs.
-
-So the control is observation:
-
-```bash
-./scripts/measure_usage.sh
-```
-
-Reads the usage meter, converts hours to dollars, and prints the absence of a limit rather than hiding it. **Run it before and after anything the agent does.**
-
-A free trial exists — 2 months, 20 hours of investigations per month — for new DevOps Agent customers. Whether it applies here is not yet confirmed; it appears as a billing credit, not as a usage limit, so it cannot be read from the API.
-
----
-
-## Prerequisites
-
-**ServiceNow OAuth credentials.** There is no Terraform path — the same shape as Week 6's SCP policy-type enablement and Week 15's CloudTrail trusted access:
-
-> ServiceNow → **System OAuth** → **Application Registry** → *Create an OAuth API endpoint for external clients*
-
-Take the Client ID and Client Secret into HCP workspace variables, marking the secret sensitive.
-
-**Wake the instance first.** A ServiceNow developer instance hibernates after roughly ten days idle. When asleep it fails registration in a way that reads like a credentials problem rather than a sleep problem.
 
 ---
 

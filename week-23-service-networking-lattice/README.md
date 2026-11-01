@@ -22,8 +22,9 @@ identities.
 
 ---
 
-## Before you start
+## 1. Prerequisites
 
+### Before you start
 | | |
 |---|---|
 | Terraform | >= 1.10 |
@@ -40,8 +41,36 @@ aws vpc-lattice list-services         --query 'length(items)' --output text
 
 ---
 
-## The order
+## 2. Source files
 
+What builds this. Documentation, figures and build artefacts are left out.
+
+```
+lambda/
+  README.md
+lambda/backend/
+  handler.py
+lambda/client/
+  handler.py
+scripts/
+  cleanup.sh
+  test_auth.sh
+terraform/environments/dev/
+  main.tf
+  outputs.tf
+  terraform.tfvars.example
+  variables.tf
+terraform/modules/lattice/
+  compute.tf
+  lattice.tf
+  network.tf
+  outputs.tf
+  variables.tf
+```
+
+## 3. Deploy
+
+### The order
 Eight steps. Each ends with a check, because a step you cannot verify is a step
 you cannot debug later.
 
@@ -142,6 +171,43 @@ half-finished destroy leaves a VPC that looks orphaned and is not.
 
 ---
 
+## 6. Cleanup
+
+### Teardown
+Destroyed and verified — details once the week has run.
+
+## Cost
+
+Under $0.10 for a few hours.
+
+| Dimension | Rate |
+|---|---|
+| Per service | $0.025/hr |
+| Data processed | $0.025/GB |
+| Requests | first 300,000/hr free, then $0.10/million |
+| VPC association, service network endpoints | **free** |
+
+One service is effectively the whole bill. Lambda invocations and data are
+rounding errors, and the test suite is a few dozen requests against a free
+allowance of 300,000.
+
+**Resource gateways are deliberately not used.** They bill **$0.10/hr per
+resource** — four times a service — and exist to reach things that are not
+Lattice services (an RDS instance, an on-premises host). Worth knowing before
+you switch one on to "just try it".
+
+Read the bill **grouped by usage type**, not by service. Grouping by service
+only ever says "VPC Lattice".
+
+**Billed total:** filled in from the bill after teardown, not estimated here.
+
+---
+
+## References
+
+- [The article for this week](https://jayanthkatta.com/blog/week-23-service-networking-lattice/) &mdash; the problem, the findings and the measured cost.
+- [This week's source](https://github.com/katta698/AWS-Platform-Engineering-Lab/tree/main/week-23-service-networking-lattice)
+
 ## What it builds
 
 | What | Count | Its job |
@@ -182,33 +248,6 @@ the service through the VPC association, which costs nothing.
 
 ---
 
-## Cost
-
-Under $0.10 for a few hours.
-
-| Dimension | Rate |
-|---|---|
-| Per service | $0.025/hr |
-| Data processed | $0.025/GB |
-| Requests | first 300,000/hr free, then $0.10/million |
-| VPC association, service network endpoints | **free** |
-
-One service is effectively the whole bill. Lambda invocations and data are
-rounding errors, and the test suite is a few dozen requests against a free
-allowance of 300,000.
-
-**Resource gateways are deliberately not used.** They bill **$0.10/hr per
-resource** — four times a service — and exist to reach things that are not
-Lattice services (an RDS instance, an on-premises host). Worth knowing before
-you switch one on to "just try it".
-
-Read the bill **grouped by usage type**, not by service. Grouping by service
-only ever says "VPC Lattice".
-
-**Billed total:** filled in from the bill after teardown, not estimated here.
-
----
-
 ## What production does differently
 
 - **Cross-account.** The service network is shared through RAM and consumers
@@ -221,7 +260,3 @@ only ever says "VPC Lattice".
 - **Real workloads** behind the service instead of a Lambda returning a number.
 
 ---
-
-## Teardown
-
-Destroyed and verified — details once the week has run.

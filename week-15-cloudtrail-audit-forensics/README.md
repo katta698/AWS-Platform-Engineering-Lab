@@ -8,6 +8,209 @@ This week builds the attribution layer: an organization trail, a queryable table
 
 ---
 
+## 1. Prerequisites
+
+### Prerequisites
+**Organization trails require trusted access.** There is no clean Terraform path, so this is a documented manual step — the same shape as Week 6's SCP policy-type enablement:
+
+```bash
+aws organizations enable-aws-service-access \
+  --service-principal cloudtrail.amazonaws.com
+```
+
+Without it, `CreateTrail` fails with `CloudTrailAccessNotEnabledException`.
+
+Terraform must also run in the **organization management account**.
+
+---
+
+## 2. Source files
+
+What builds this. Documentation, figures and build artefacts are left out.
+
+```
+lambda/audit_analyzer/
+  handler.py
+scripts/
+  cleanup.sh
+  generate_audit_activity.sh
+  render_query.py
+  verify_pipeline.sh
+terraform/environments/dev/
+  main.tf
+  outputs.tf
+  terraform.tfvars.example
+  variables.tf
+terraform/modules/analytics/
+  main.tf
+  outputs.tf
+  variables.tf
+terraform/modules/audit_trail/
+  main.tf
+  outputs.tf
+  variables.tf
+terraform/modules/monitoring/
+  main.tf
+  outputs.tf
+  variables.tf
+```
+
+## 3. Deploy
+
+### Quick Start
+Deployment is via **HCP Terraform** (workspace `week-15-dev`, VCS-connected). Pushing to `main` queues a plan; apply from the HCP UI.
+
+```bash
+cd week-15-cloudtrail-audit-forensics/terraform/environments/dev
+terraform init
+terraform validate
+```
+
+**After apply, in order:**
+
+```bash
+# 1. Confirm the SNS subscription from the email AWS sends.
+#    Alarms cannot notify until this is done.
+
+# 2. Wait ~20 minutes. CloudTrail delivers on a 5-15 minute lag with
+#    occasional longer tails.
+
+# 3. Verify the pipeline — not optional, see below.
+./scripts/verify_pipeline.sh
+
+# 4. Generate deliberate, attributable activity for the forensic queries.
+./scripts/generate_audit_activity.sh
+
+# 5. Force an analyzer run rather than waiting for the daily schedule.
+aws lambda invoke --function-name week15-audit-audit-analyzer out.json \
+  && cat out.json && rm out.json
+```
+
+---
+
+## 4. Run it
+
+### Run `verify_pipeline.sh`. Every failure mode here is silent.
+Four ways this build can be completely broken while reporting success:
+
+1. **A projection template that does not match the delivered prefixes** returns zero rows and reports `SUCCEEDED`. The org layout has five projected keys and more ways to be subtly wrong than the single-account one AWS documents.
+2. **An account missing from the projection enum** has its events in S3 and invisible to every query.
+3. **A region missing from the enum** does the same — and quietly makes the unused-region question unanswerable.
+4. **A bucket policy granting only the account prefix** rather than the org prefix lets the trail create successfully and silently denies every member-account delivery.
+
+None raise anything. None are findable by re-reading the Terraform. The script compares a **real delivered S3 key** against the projection template, cross-checks which accounts are delivering against which are visible in the table, and runs a query that must return rows.
+
+---
+
+## 5. Validation
+
+### Saved queries
+Published into the Athena console. Source in [`athena/`](./athena).
+
+| Query | Answers |
+|---|---|
+| `partition-sanity-check` | **Run first.** Is any data readable at all? |
+| `who-changed-this-resource` | Who deleted or modified a named resource — *the Week 12 question* |
+| `principal-activity-timeline` | Everything one user or role did in a window |
+| `changes-outside-terraform` | Mutating changes that did not come from Terraform |
+| `root-account-usage` | Root actions — should be zero |
+| `console-login-without-mfa` | Sign-ins with no second factor — should be zero |
+| `activity-in-unexpected-regions` | Mutating activity outside the regions in use — should be zero |
+
+Three CloudTrail schema traps are already handled in the SQL:
+
+- **A federated sign-in is not an MFA-less sign-in.** IAM Identity Center, SAML and any external IdP satisfy MFA *at the identity provider*, then federate into the console. Nothing happens at the AWS sign-in step, so CloudTrail records `MFAUsed = "No"` on a login that was fully MFA-protected. Counting those rows means alarming on every normal login in any estate using Identity Center — the setup AWS recommends. **This build got that wrong first time round**; see the write-up. The query is now scoped to `IAMUser` and `Root`.
+- **Read `MFAUsed` from `additionalEventData`, not `sessioncontext.attributes.mfaauthenticated`.** A root or IAM-user console login has no assumed-role session context at all, so the latter is NULL even when a second factor was used. Both are STRINGS, never booleans — `WHERE ... = false` is a type error.
+- **Role sessions leave `useridentity.username` null** — the useful name is in `sessioncontext.sessionissuer.username`. Querying only the top level misses nearly every Terraform-driven action.
+- **`ConsoleLogin` events are global** and land in us-east-1 regardless of where the user is.
+
+`changes-outside-terraform` filters on **user agent, not principal** — the same role used via the console and via Terraform is identical by principal and completely different by user agent.
+
+---
+
+## 6. Cleanup
+
+### Teardown
+Queue a destroy from the HCP UI (Workspace → Settings → Destruction and Deletion → Queue destroy plan), or via the API with `is-destroy: true`. A VCS-connected workspace blocks CLI `terraform destroy`, not an HCP-queued destroy.
+
+```bash
+./scripts/cleanup.sh
+```
+
+**The organization trail is the one that matters.** Left behind, it keeps writing every management event from every account in the organization into a bucket indefinitely — and because the first copy is free, there is no sharp cost signal to make you notice.
+
+Trusted access is deliberately left enabled: it is an organization-level setting, it was a manual prerequisite, and other services may rely on it. Removing it is a separate decision.
+
+## Cost
+
+Prices as of August 2026 — verify at [aws.amazon.com/cloudtrail/pricing](https://aws.amazon.com/cloudtrail/pricing/).
+
+| Item | Rate | This build |
+|---|---|---|
+| **Management events, first copy to S3** | **free** | see the caveat below |
+| Additional management event copies | $2.00 / 100k | not used |
+| Data events | $0.10 / 100k **from the first copy** | **not enabled** |
+| S3 storage | $0.023 / GB-month | pennies at lab volume |
+| Athena | $5 / TB scanned, capped at 10 GB/query | cents |
+| Lambda, EventBridge, SNS, SQS, Glue catalog | — | effectively free |
+| CloudWatch alarms × 6 | $0.10 / alarm / month | $0.60/month |
+| **Destroyed** | | **$0** |
+
+**No NAT gateway, no always-on compute, no anomaly-detection alarms.** Materially cheaper than Weeks 13 or 14.
+
+### The free copy may already be taken — check before you assume $0
+
+AWS gives you **one free copy of management events per region**. Everyone repeats that. What is
+rarely said is the other half: **if a trail already exists in that region delivering management
+events, yours is the second copy, and second copies bill at $2.00 per 100,000 events.**
+
+That is the case in this account. A pre-existing trail from an unrelated project
+(`ebs-savings-management-trail`) already has `IncludeManagementEvents: true` for us-east-1, so it
+holds the free copy.
+
+Measured rather than estimated — one day of that trail's own delivery:
+
+```
+253 files, 11,539 management events (partial day)
+```
+
+That extrapolates to roughly **450–600k events/month**, so a second copy in us-east-1 costs about
+**$9–12/month** while the trail is up. Over a two-day build-and-destroy it is **$1–2**.
+
+Two details soften it. Only the **management account's us-east-1** events are a second copy —
+events from member accounts and other regions are first copies and remain free. And the charge
+stops entirely when the trail is destroyed.
+
+**The general lesson: before quoting "the first copy is free", run
+`aws cloudtrail describe-trails` and check whether something already claimed it.**
+
+**Why management events only:** data events bill from the *first* copy and are generated per object access — a single busy bucket can produce more in an hour than the whole org produces in management events in a month. Every question this week asks is a management event.
+
+For contrast, the same data in CloudTrail Lake would be **$0.75/GB** (one-year) or **$2.50/GB** (seven-year, first 5 TB).
+
+---
+
+## Troubleshooting
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `CloudTrailAccessNotEnabledException` on apply | Trusted access not enabled | Run the `enable-aws-service-access` command above |
+| Trail creates, no member-account logs | Bucket policy grants only the account prefix | It must also grant `AWSLogs/<org-id>/*` |
+| Query succeeds, zero rows, objects in S3 | Projection template mismatch | Compare `terraform output partition_location_template` against a real key |
+| One account missing from results | Account absent from the projection enum | Check `terraform output projected_accounts` |
+| Unused-region query always empty | Region enum too narrow, or trail not multi-region | Both must cover the regions being asked about |
+| MFA alarm fires constantly | Federated/Identity Center logins counted as MFA-less | Scope the query to `useridentity.type IN ('IAMUser','Root')` |
+| MFA query returns nothing | `MFAUsed` compared as a boolean, or read from the wrong field | It is a string; read it from `additionalEventData` |
+| Query cancelled, `SCAN_BYTES_EXCEEDED` | Scan ceiling fired | Working as intended — add or tighten the partition filter |
+| `aws logs` CLI errors on a `/aws/...` argument | Git Bash rewrites leading-slash arguments | Prefix with `MSYS_NO_PATHCONV=1` |
+
+---
+
+## References
+
+- [The article for this week](https://jayanthkatta.com/blog/week-15-cloudtrail-audit-forensics/) &mdash; the problem, the findings and the measured cost.
+- [This week's source](https://github.com/katta698/AWS-Platform-Engineering-Lab/tree/main/week-15-cloudtrail-audit-forensics)
+
 ## The roadmap topic was impossible
 
 This was planned as *"CloudTrail Lake + Audit Automation"*. **CloudTrail Lake closed to new customers on 31 May 2026**, and this account has no event data store, so that build cannot be made. AWS recommends migrating to CloudWatch.
@@ -88,140 +291,6 @@ The account list is derived from live organization state (filtered to `ACTIVE`),
 
 ---
 
-## Cost
-
-Prices as of August 2026 — verify at [aws.amazon.com/cloudtrail/pricing](https://aws.amazon.com/cloudtrail/pricing/).
-
-| Item | Rate | This build |
-|---|---|---|
-| **Management events, first copy to S3** | **free** | see the caveat below |
-| Additional management event copies | $2.00 / 100k | not used |
-| Data events | $0.10 / 100k **from the first copy** | **not enabled** |
-| S3 storage | $0.023 / GB-month | pennies at lab volume |
-| Athena | $5 / TB scanned, capped at 10 GB/query | cents |
-| Lambda, EventBridge, SNS, SQS, Glue catalog | — | effectively free |
-| CloudWatch alarms × 6 | $0.10 / alarm / month | $0.60/month |
-| **Destroyed** | | **$0** |
-
-**No NAT gateway, no always-on compute, no anomaly-detection alarms.** Materially cheaper than Weeks 13 or 14.
-
-### The free copy may already be taken — check before you assume $0
-
-AWS gives you **one free copy of management events per region**. Everyone repeats that. What is
-rarely said is the other half: **if a trail already exists in that region delivering management
-events, yours is the second copy, and second copies bill at $2.00 per 100,000 events.**
-
-That is the case in this account. A pre-existing trail from an unrelated project
-(`ebs-savings-management-trail`) already has `IncludeManagementEvents: true` for us-east-1, so it
-holds the free copy.
-
-Measured rather than estimated — one day of that trail's own delivery:
-
-```
-253 files, 11,539 management events (partial day)
-```
-
-That extrapolates to roughly **450–600k events/month**, so a second copy in us-east-1 costs about
-**$9–12/month** while the trail is up. Over a two-day build-and-destroy it is **$1–2**.
-
-Two details soften it. Only the **management account's us-east-1** events are a second copy —
-events from member accounts and other regions are first copies and remain free. And the charge
-stops entirely when the trail is destroyed.
-
-**The general lesson: before quoting "the first copy is free", run
-`aws cloudtrail describe-trails` and check whether something already claimed it.**
-
-**Why management events only:** data events bill from the *first* copy and are generated per object access — a single busy bucket can produce more in an hour than the whole org produces in management events in a month. Every question this week asks is a management event.
-
-For contrast, the same data in CloudTrail Lake would be **$0.75/GB** (one-year) or **$2.50/GB** (seven-year, first 5 TB).
-
----
-
-## Prerequisites
-
-**Organization trails require trusted access.** There is no clean Terraform path, so this is a documented manual step — the same shape as Week 6's SCP policy-type enablement:
-
-```bash
-aws organizations enable-aws-service-access \
-  --service-principal cloudtrail.amazonaws.com
-```
-
-Without it, `CreateTrail` fails with `CloudTrailAccessNotEnabledException`.
-
-Terraform must also run in the **organization management account**.
-
----
-
-## Quick Start
-
-Deployment is via **HCP Terraform** (workspace `week-15-dev`, VCS-connected). Pushing to `main` queues a plan; apply from the HCP UI.
-
-```bash
-cd week-15-cloudtrail-audit-forensics/terraform/environments/dev
-terraform init
-terraform validate
-```
-
-**After apply, in order:**
-
-```bash
-# 1. Confirm the SNS subscription from the email AWS sends.
-#    Alarms cannot notify until this is done.
-
-# 2. Wait ~20 minutes. CloudTrail delivers on a 5-15 minute lag with
-#    occasional longer tails.
-
-# 3. Verify the pipeline — not optional, see below.
-./scripts/verify_pipeline.sh
-
-# 4. Generate deliberate, attributable activity for the forensic queries.
-./scripts/generate_audit_activity.sh
-
-# 5. Force an analyzer run rather than waiting for the daily schedule.
-aws lambda invoke --function-name week15-audit-audit-analyzer out.json \
-  && cat out.json && rm out.json
-```
-
----
-
-## Run `verify_pipeline.sh`. Every failure mode here is silent.
-
-Four ways this build can be completely broken while reporting success:
-
-1. **A projection template that does not match the delivered prefixes** returns zero rows and reports `SUCCEEDED`. The org layout has five projected keys and more ways to be subtly wrong than the single-account one AWS documents.
-2. **An account missing from the projection enum** has its events in S3 and invisible to every query.
-3. **A region missing from the enum** does the same — and quietly makes the unused-region question unanswerable.
-4. **A bucket policy granting only the account prefix** rather than the org prefix lets the trail create successfully and silently denies every member-account delivery.
-
-None raise anything. None are findable by re-reading the Terraform. The script compares a **real delivered S3 key** against the projection template, cross-checks which accounts are delivering against which are visible in the table, and runs a query that must return rows.
-
----
-
-## Saved queries
-
-Published into the Athena console. Source in [`athena/`](./athena).
-
-| Query | Answers |
-|---|---|
-| `partition-sanity-check` | **Run first.** Is any data readable at all? |
-| `who-changed-this-resource` | Who deleted or modified a named resource — *the Week 12 question* |
-| `principal-activity-timeline` | Everything one user or role did in a window |
-| `changes-outside-terraform` | Mutating changes that did not come from Terraform |
-| `root-account-usage` | Root actions — should be zero |
-| `console-login-without-mfa` | Sign-ins with no second factor — should be zero |
-| `activity-in-unexpected-regions` | Mutating activity outside the regions in use — should be zero |
-
-Three CloudTrail schema traps are already handled in the SQL:
-
-- **A federated sign-in is not an MFA-less sign-in.** IAM Identity Center, SAML and any external IdP satisfy MFA *at the identity provider*, then federate into the console. Nothing happens at the AWS sign-in step, so CloudTrail records `MFAUsed = "No"` on a login that was fully MFA-protected. Counting those rows means alarming on every normal login in any estate using Identity Center — the setup AWS recommends. **This build got that wrong first time round**; see the write-up. The query is now scoped to `IAMUser` and `Root`.
-- **Read `MFAUsed` from `additionalEventData`, not `sessioncontext.attributes.mfaauthenticated`.** A root or IAM-user console login has no assumed-role session context at all, so the latter is NULL even when a second factor was used. Both are STRINGS, never booleans — `WHERE ... = false` is a type error.
-- **Role sessions leave `useridentity.username` null** — the useful name is in `sessioncontext.sessionissuer.username`. Querying only the top level misses nearly every Terraform-driven action.
-- **`ConsoleLogin` events are global** and land in us-east-1 regardless of where the user is.
-
-`changes-outside-terraform` filters on **user agent, not principal** — the same role used via the console and via Terraform is identical by principal and completely different by user agent.
-
----
-
 ## Alarms: all static, on purpose
 
 | Alarm | Why static |
@@ -249,31 +318,3 @@ Side effect: nothing creates an implicit anomaly detector, so teardown leaves no
 - **Spend as a control** — the 10 GB per-query ceiling is enforced at workgroup level, so a forensic query written under pressure cannot become an unbounded bill
 
 ---
-
-## Troubleshooting
-
-| Symptom | Cause | Fix |
-|---|---|---|
-| `CloudTrailAccessNotEnabledException` on apply | Trusted access not enabled | Run the `enable-aws-service-access` command above |
-| Trail creates, no member-account logs | Bucket policy grants only the account prefix | It must also grant `AWSLogs/<org-id>/*` |
-| Query succeeds, zero rows, objects in S3 | Projection template mismatch | Compare `terraform output partition_location_template` against a real key |
-| One account missing from results | Account absent from the projection enum | Check `terraform output projected_accounts` |
-| Unused-region query always empty | Region enum too narrow, or trail not multi-region | Both must cover the regions being asked about |
-| MFA alarm fires constantly | Federated/Identity Center logins counted as MFA-less | Scope the query to `useridentity.type IN ('IAMUser','Root')` |
-| MFA query returns nothing | `MFAUsed` compared as a boolean, or read from the wrong field | It is a string; read it from `additionalEventData` |
-| Query cancelled, `SCAN_BYTES_EXCEEDED` | Scan ceiling fired | Working as intended — add or tighten the partition filter |
-| `aws logs` CLI errors on a `/aws/...` argument | Git Bash rewrites leading-slash arguments | Prefix with `MSYS_NO_PATHCONV=1` |
-
----
-
-## Teardown
-
-Queue a destroy from the HCP UI (Workspace → Settings → Destruction and Deletion → Queue destroy plan), or via the API with `is-destroy: true`. A VCS-connected workspace blocks CLI `terraform destroy`, not an HCP-queued destroy.
-
-```bash
-./scripts/cleanup.sh
-```
-
-**The organization trail is the one that matters.** Left behind, it keeps writing every management event from every account in the organization into a bucket indefinitely — and because the first copy is free, there is no sharp cost signal to make you notice.
-
-Trusted access is deliberately left enabled: it is an organization-level setting, it was a manual prerequisite, and other services may rely on it. Removing it is a separate decision.

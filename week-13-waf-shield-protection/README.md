@@ -4,6 +4,83 @@
 
 ---
 
+## 2. Source files
+
+### Layout
+```
+week-13-waf-shield-protection/
+├── lambda/echo_api/handler.py
+├── scripts/
+│   ├── attack_simulation.sh
+│   └── cleanup.sh
+└── terraform/
+    ├── environments/dev/
+    └── modules/
+        ├── waf/              ← one web ACL + rules + logging (used twice)
+        ├── protected_app/    ← Lambda + REST API + CloudFront
+        └── monitoring/       ← SNS + alarms (used twice)
+```
+
+## 3. Deploy
+
+### Quick start
+Deployed via HCP Terraform (workspace `week-13-dev`, VCS-driven). Push to `main`; if no run appears within ~30s, queue one from the HCP UI.
+
+`alert_email` comes from the global HCP variable set `shared-alert-email` — do not put it in a tfvars file.
+
+```bash
+terraform output
+```
+
+Then run the simulation against your own endpoints:
+
+```bash
+./scripts/attack_simulation.sh "$(terraform output -raw cloudfront_url)" "$(terraform output -raw api_invoke_url)"
+```
+
+Every payload is a signature string sent to an echo Lambda that does nothing but reflect its input. There is no third-party target.
+
+---
+
+## Cost
+
+Prices as of August 2026 — verify at [aws.amazon.com/waf/pricing](https://aws.amazon.com/waf/pricing/).
+
+| Item | Monthly |
+|---|---|
+| Web ACL × 2 | $10.00 |
+| Rules × 5 per ACL × 2 | $10.00 |
+| Requests | $0.60 / million |
+| WCU overage | $0 (~953 of 1500 used) |
+| CloudFront, API Gateway, Lambda | ~$0 at demo volume |
+| Shield Standard | $0 — always on |
+| **If left running** | **~$20** |
+| **Destroyed** | **$0** |
+
+**WAF charges are prorated hourly.** The $5/web ACL and $1/rule are monthly *rates*, not minimums — build, test, and destroy in a day and the whole exercise costs well under a dollar. Shield Advanced, by contrast, is $3,000/month on a one-year commitment and cannot be prorated away.
+
+---
+
+## Troubleshooting
+
+| Symptom | Cause |
+|---|---|
+| `terraform plan` fails with "No valid credential sources found" | New HCP workspace missing `TFC_AWS_PROVIDER_AUTH` and `TFC_AWS_RUN_ROLE_ARN` |
+| Logging config rejected | Log group name must start with `aws-waf-logs-`, and live in the web ACL's region and account |
+| Alarm stuck in `INSUFFICIENT_DATA` | Wrong `Region` metric dimension. CLOUDFRONT-scope metrics have **no `Region` dimension at all** — omit it. Only REGIONAL metrics carry the region name. `Global` looks plausible and matches nothing |
+| Metric query returns nothing for a rule | The `Rule` dimension uses the rule's **`visibility_config.metric_name`**, not its `name` |
+| WAF logs empty right after a test | Delivery lags by a few minutes; the metrics land sooner |
+| Web ACL healthy but inspects nothing | Regional resources need `aws_wafv2_web_acl_association`; only CloudFront takes the ACL as an attribute |
+| `GET /` returns 403 "Missing Authentication Token" | Not a WAF block — REST APIs need the root path defined separately from `{proxy+}` |
+| WAF can't be associated with the API | It must be a REST API; **HTTP APIs are not supported by WAF at all** |
+| `aws logs` fails on a `/`-prefixed argument | Git Bash path rewriting — prefix with `MSYS_NO_PATHCONV=1` |
+| Web ACL won't delete | Still associated with a resource; CloudFront must also be disabled and fully propagated (~15 min) |
+
+## References
+
+### Blog
+Published: _(pending)_
+
 ## Shield Standard is not something you deploy
 
 There is no Terraform resource for AWS Shield Standard. There is no console toggle. It is already active on every AWS account at no charge, protecting CloudFront, Route 53, Global Accelerator, and Elastic Load Balancing against layer 3 and 4 volumetric attacks — SYN floods, UDP reflection — and AWS reports mitigating over 99% of those in under a second.
@@ -90,61 +167,6 @@ A subtlety the monitoring module handles: during Count mode `BlockedRequests` st
 
 ---
 
-## Layout
-
-```
-week-13-waf-shield-protection/
-├── lambda/echo_api/handler.py
-├── scripts/
-│   ├── attack_simulation.sh
-│   └── cleanup.sh
-└── terraform/
-    ├── environments/dev/
-    └── modules/
-        ├── waf/              ← one web ACL + rules + logging (used twice)
-        ├── protected_app/    ← Lambda + REST API + CloudFront
-        └── monitoring/       ← SNS + alarms (used twice)
-```
-
-## Quick start
-
-Deployed via HCP Terraform (workspace `week-13-dev`, VCS-driven). Push to `main`; if no run appears within ~30s, queue one from the HCP UI.
-
-`alert_email` comes from the global HCP variable set `shared-alert-email` — do not put it in a tfvars file.
-
-```bash
-terraform output
-```
-
-Then run the simulation against your own endpoints:
-
-```bash
-./scripts/attack_simulation.sh "$(terraform output -raw cloudfront_url)" "$(terraform output -raw api_invoke_url)"
-```
-
-Every payload is a signature string sent to an echo Lambda that does nothing but reflect its input. There is no third-party target.
-
----
-
-## Cost
-
-Prices as of August 2026 — verify at [aws.amazon.com/waf/pricing](https://aws.amazon.com/waf/pricing/).
-
-| Item | Monthly |
-|---|---|
-| Web ACL × 2 | $10.00 |
-| Rules × 5 per ACL × 2 | $10.00 |
-| Requests | $0.60 / million |
-| WCU overage | $0 (~953 of 1500 used) |
-| CloudFront, API Gateway, Lambda | ~$0 at demo volume |
-| Shield Standard | $0 — always on |
-| **If left running** | **~$20** |
-| **Destroyed** | **$0** |
-
-**WAF charges are prorated hourly.** The $5/web ACL and $1/rule are monthly *rates*, not minimums — build, test, and destroy in a day and the whole exercise costs well under a dollar. Shield Advanced, by contrast, is $3,000/month on a one-year commitment and cannot be prorated away.
-
----
-
 ## Security notes
 
 - **WAF logs are redacted.** `authorization`, `cookie`, and `x-api-key` headers are dropped before logging. A WAF log records the request it inspected, which means it records credentials unless told otherwise — the security control becoming the disclosure vector.
@@ -152,22 +174,3 @@ Prices as of August 2026 — verify at [aws.amazon.com/waf/pricing](https://aws.
 - **A per-web-ACL log resource policy** instead of the shared account-wide `AWSWAF-LOGS` policy, which can exceed maximum policy size in accounts with many web ACLs and cause logging configs to fail to create.
 - **Default action is Allow.** A WAF fronting a general web application blocks by exception; a default-deny posture would require enumerating every legitimate request shape up front.
 - **Log retention is 7 days.** WAF writes one record per inspected request.
-
-## Troubleshooting
-
-| Symptom | Cause |
-|---|---|
-| `terraform plan` fails with "No valid credential sources found" | New HCP workspace missing `TFC_AWS_PROVIDER_AUTH` and `TFC_AWS_RUN_ROLE_ARN` |
-| Logging config rejected | Log group name must start with `aws-waf-logs-`, and live in the web ACL's region and account |
-| Alarm stuck in `INSUFFICIENT_DATA` | Wrong `Region` metric dimension. CLOUDFRONT-scope metrics have **no `Region` dimension at all** — omit it. Only REGIONAL metrics carry the region name. `Global` looks plausible and matches nothing |
-| Metric query returns nothing for a rule | The `Rule` dimension uses the rule's **`visibility_config.metric_name`**, not its `name` |
-| WAF logs empty right after a test | Delivery lags by a few minutes; the metrics land sooner |
-| Web ACL healthy but inspects nothing | Regional resources need `aws_wafv2_web_acl_association`; only CloudFront takes the ACL as an attribute |
-| `GET /` returns 403 "Missing Authentication Token" | Not a WAF block — REST APIs need the root path defined separately from `{proxy+}` |
-| WAF can't be associated with the API | It must be a REST API; **HTTP APIs are not supported by WAF at all** |
-| `aws logs` fails on a `/`-prefixed argument | Git Bash path rewriting — prefix with `MSYS_NO_PATHCONV=1` |
-| Web ACL won't delete | Still associated with a resource; CloudFront must also be disabled and fully propagated (~15 min) |
-
-## Blog
-
-Published: _(pending)_

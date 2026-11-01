@@ -4,6 +4,141 @@
 
 ---
 
+## 2. Source files
+
+What builds this. Documentation, figures and build artefacts are left out.
+
+```
+.
+  out.json
+lambda/object_tagger/
+  handler.py
+lambda/storage_cost_reporter/
+  handler.py
+scripts/
+  cleanup.sh
+  deploy.sh
+terraform/environments/dev/
+  main.tf
+  outputs.tf
+  terraform.tfvars.example
+  variables.tf
+terraform/modules/cost-automation/
+  main.tf
+  outputs.tf
+  variables.tf
+terraform/modules/s3-storage/
+  main.tf
+  outputs.tf
+  variables.tf
+```
+
+## 3. Deploy
+
+### Quick Start
+### Prerequisites
+
+- AWS CLI configured with appropriate permissions
+- Terraform >= 1.10.0
+- `SNS_EMAIL` and `AWS_ACCOUNT_ID` set as GitHub Actions secrets
+
+### Local Deploy
+
+```bash
+cd terraform/environments/dev
+cp terraform.tfvars.example terraform.tfvars
+# Edit terraform.tfvars — set sns_email to your address
+terraform init
+terraform plan
+terraform apply
+```
+
+After deploy, **confirm the SNS email subscription** from the AWS notification in your inbox — the daily report will not deliver until you confirm.
+
+### GitHub Actions Deploy
+
+| Workflow | Trigger | Action |
+|---|---|---|
+| `week-08-deploy.yml` | Manual (`workflow_dispatch`) | `terraform apply` |
+| `week-08-destroy.yml` | Manual (`workflow_dispatch`) | Empty bucket, then `terraform destroy` |
+
+**Required GitHub Actions secrets:**
+
+| Secret | Value |
+|---|---|
+| `AWS_ACCOUNT_ID` | Your AWS account ID |
+| `SNS_EMAIL` | Email address for daily reports |
+
+---
+
+## 4. Run it
+
+### Testing After Deploy
+**Upload test objects:**
+```bash
+BUCKET=$(cd terraform/environments/dev && terraform output -raw bucket_name)
+
+# Create a logs/ object to trigger lifecycle rules
+echo "test log entry" | aws s3 cp - s3://$BUCKET/logs/app/2026-06-30.log
+
+# Create a data/ object
+echo '{"event":"test"}' | aws s3 cp - s3://$BUCKET/data/events/test.json
+
+# Verify object_tagger applied tags
+aws s3api get-object-tagging --bucket $BUCKET --key logs/app/2026-06-30.log
+```
+
+**Invoke the cost reporter manually** (CloudWatch metrics take 24h to appear; first run may show empty data):
+```bash
+REPORTER=$(cd terraform/environments/dev && terraform output -raw storage_reporter_function_name)
+aws lambda invoke --function-name $REPORTER out.json && cat out.json && rm out.json
+```
+
+**Check object_tagger DLQ:**
+```bash
+aws sqs get-queue-attributes \
+  --queue-url $(cd terraform/environments/dev && terraform output -raw sqs_queue_url | sed 's/object-events/object-events-dlq/') \
+  --attribute-names ApproximateNumberOfMessages
+```
+
+---
+
+## Cost
+
+All prices us-east-1, verified 2026-06-30 — verify current rates at [aws.amazon.com/s3/pricing](https://aws.amazon.com/s3/pricing/).
+
+| Resource | Estimated Monthly Cost |
+|---|---|
+| S3 Standard storage | $0.023/GB |
+| S3 Standard-IA (after 30d) | $0.0125/GB |
+| S3 Glacier IR (after 90d) | $0.004/GB |
+| IT monitoring fee | $0.0025/1,000 objects |
+| Lambda (2 functions, low invocations) | < $0.01 |
+| SQS (pay per request) | < $0.01 |
+| SNS (1 email/day) | < $0.01 |
+| **Destroyed** | **$0** |
+
+**Typical savings:** 67% reduction in storage costs for buckets with mixed hot/cold data, per AWS data across thousands of customer buckets.
+
+---
+
+## Troubleshooting
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| No report email after deploy | SNS subscription not confirmed | Check inbox for AWS confirmation email and click confirm |
+| Reporter shows no data | CloudWatch S3 metrics have 24h delay | Wait 24h after uploading objects, then invoke reporter again |
+| object_tagger DLQ has messages | S3 event format mismatch or S3 permissions issue | Check CloudWatch logs for the object_tagger Lambda |
+| `terraform destroy` fails on bucket | Bucket not empty (versioned objects remain) | Run `scripts/cleanup.sh` which empties versions before destroy |
+| Lifecycle not transitioning objects | Objects in `logs/` prefix are < 30 days old | Lifecycle evaluates daily; transitions happen at the configured age |
+
+---
+
+## References
+
+### Blog Post
+[Week 08 — S3 Intelligent Storage Platform](https://jayanthkatta.com/blog/week-8-s3-intelligent-storage-platform/)
+
 ## Architecture
 
 ```
@@ -63,93 +198,6 @@
 
 ---
 
-## Quick Start
-
-### Prerequisites
-
-- AWS CLI configured with appropriate permissions
-- Terraform >= 1.10.0
-- `SNS_EMAIL` and `AWS_ACCOUNT_ID` set as GitHub Actions secrets
-
-### Local Deploy
-
-```bash
-cd terraform/environments/dev
-cp terraform.tfvars.example terraform.tfvars
-# Edit terraform.tfvars — set sns_email to your address
-terraform init
-terraform plan
-terraform apply
-```
-
-After deploy, **confirm the SNS email subscription** from the AWS notification in your inbox — the daily report will not deliver until you confirm.
-
-### GitHub Actions Deploy
-
-| Workflow | Trigger | Action |
-|---|---|---|
-| `week-08-deploy.yml` | Manual (`workflow_dispatch`) | `terraform apply` |
-| `week-08-destroy.yml` | Manual (`workflow_dispatch`) | Empty bucket, then `terraform destroy` |
-
-**Required GitHub Actions secrets:**
-
-| Secret | Value |
-|---|---|
-| `AWS_ACCOUNT_ID` | Your AWS account ID |
-| `SNS_EMAIL` | Email address for daily reports |
-
----
-
-## Testing After Deploy
-
-**Upload test objects:**
-```bash
-BUCKET=$(cd terraform/environments/dev && terraform output -raw bucket_name)
-
-# Create a logs/ object to trigger lifecycle rules
-echo "test log entry" | aws s3 cp - s3://$BUCKET/logs/app/2026-06-30.log
-
-# Create a data/ object
-echo '{"event":"test"}' | aws s3 cp - s3://$BUCKET/data/events/test.json
-
-# Verify object_tagger applied tags
-aws s3api get-object-tagging --bucket $BUCKET --key logs/app/2026-06-30.log
-```
-
-**Invoke the cost reporter manually** (CloudWatch metrics take 24h to appear; first run may show empty data):
-```bash
-REPORTER=$(cd terraform/environments/dev && terraform output -raw storage_reporter_function_name)
-aws lambda invoke --function-name $REPORTER out.json && cat out.json && rm out.json
-```
-
-**Check object_tagger DLQ:**
-```bash
-aws sqs get-queue-attributes \
-  --queue-url $(cd terraform/environments/dev && terraform output -raw sqs_queue_url | sed 's/object-events/object-events-dlq/') \
-  --attribute-names ApproximateNumberOfMessages
-```
-
----
-
-## Cost
-
-All prices us-east-1, verified 2026-06-30 — verify current rates at [aws.amazon.com/s3/pricing](https://aws.amazon.com/s3/pricing/).
-
-| Resource | Estimated Monthly Cost |
-|---|---|
-| S3 Standard storage | $0.023/GB |
-| S3 Standard-IA (after 30d) | $0.0125/GB |
-| S3 Glacier IR (after 90d) | $0.004/GB |
-| IT monitoring fee | $0.0025/1,000 objects |
-| Lambda (2 functions, low invocations) | < $0.01 |
-| SQS (pay per request) | < $0.01 |
-| SNS (1 email/day) | < $0.01 |
-| **Destroyed** | **$0** |
-
-**Typical savings:** 67% reduction in storage costs for buckets with mixed hot/cold data, per AWS data across thousands of customer buckets.
-
----
-
 ## Security
 
 | Control | Implementation |
@@ -161,19 +209,3 @@ All prices us-east-1, verified 2026-06-30 — verify current rates at [aws.amazo
 | SQS source condition | Queue policy restricts `SendMessage` to the specific bucket ARN only |
 
 ---
-
-## Troubleshooting
-
-| Symptom | Cause | Fix |
-|---|---|---|
-| No report email after deploy | SNS subscription not confirmed | Check inbox for AWS confirmation email and click confirm |
-| Reporter shows no data | CloudWatch S3 metrics have 24h delay | Wait 24h after uploading objects, then invoke reporter again |
-| object_tagger DLQ has messages | S3 event format mismatch or S3 permissions issue | Check CloudWatch logs for the object_tagger Lambda |
-| `terraform destroy` fails on bucket | Bucket not empty (versioned objects remain) | Run `scripts/cleanup.sh` which empties versions before destroy |
-| Lifecycle not transitioning objects | Objects in `logs/` prefix are < 30 days old | Lifecycle evaluates daily; transitions happen at the configured age |
-
----
-
-## Blog Post
-
-[Week 08 — S3 Intelligent Storage Platform](https://jayanthkatta.com/blog/week-8-s3-intelligent-storage-platform/)

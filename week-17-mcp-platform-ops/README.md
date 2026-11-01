@@ -6,6 +6,80 @@ This week builds that way to ask: a **Model Context Protocol server** exposing f
 
 ---
 
+## 2. Source files
+
+What builds this. Documentation, figures and build artefacts are left out.
+
+```
+lambda/mcp_server/
+  handler.py
+scripts/
+  cleanup.sh
+  mcp_client.py
+  mcp_stdio_bridge.py
+terraform/environments/dev/
+  main.tf
+  outputs.tf
+  terraform.tfvars.example
+  variables.tf
+terraform/modules/mcp_server/
+  main.tf
+  outputs.tf
+  variables.tf
+```
+
+## 3. Deploy
+
+### Quick start
+```bash
+# Deploy via HCP (workspace: week-17-dev, VCS-driven)
+git push            # HCP plans on push; confirm the apply in the UI or via API
+
+# Then talk to it
+URL=$(terraform -chdir=terraform/environments/dev output -raw mcp_endpoint)
+
+python scripts/mcp_client.py "$URL" list
+python scripts/mcp_client.py "$URL" call get_daily_cost '{"days": 7}'
+python scripts/mcp_client.py "$URL" ask "what did I leave running"
+```
+
+---
+
+## 6. Cleanup
+
+### Cleanup
+Queue a destroy from HCP, then verify against AWS rather than trusting the run status:
+
+```bash
+./scripts/cleanup.sh
+```
+
+It checks Lambda, IAM, DynamoDB, alarms, log groups **and a tag search on `Week=17`** — because a destroy run reporting "applied" only says Terraform removed what it knew about. Two Week 12 buckets survived their teardown by being created outside Terraform, and a tag search is what catches that class of leftover.
+
+---
+
+## Cost
+
+Prices as of September 2026 — verify at [aws.amazon.com/aws-cost-management/pricing](https://aws.amazon.com/aws-cost-management/pricing/).
+
+| Item | Rate | This build |
+|---|---|---|
+| Cost Explorer API | **$0.01 / request** (each page counts) | the only metered read |
+| Lambda | per-request, sub-second calls | pennies |
+| DynamoDB | on-demand | pennies |
+| CloudWatch alarm | $0.10 / alarm / month | $0.10 |
+| Function URL | no hourly charge | **$0 idle** |
+| **Destroyed** | | **$0** |
+
+Nothing here bills while idle: no NAT gateway, no API Gateway, no always-on compute.
+
+---
+
+## References
+
+- [The article for this week](https://jayanthkatta.com/blog/week-17-mcp-platform-ops/) &mdash; the problem, the findings and the measured cost.
+- [This week's source](https://github.com/katta698/AWS-Platform-Engineering-Lab/tree/main/week-17-mcp-platform-ops)
+
 ## The topic survived; the data source did not
 
 The Year 1 roadmap planned this as a server over Weeks 10–16's own operational data — Athena tables, Config, Security Hub findings. **That data no longer exists.** Those weeks were destroyed on 30 August once their 30-day free trials expired and they began billing, taking the Glue databases, the Config recorder and the findings with them.
@@ -50,51 +124,6 @@ The trade is real: the client must sign requests with **SigV4**, so an off-the-s
 > **In production**, expose it through API Gateway with an OAuth provider instead. That works with any MCP client, at the cost of two more services. The 2026-07-28 spec revision hardened this path specifically — issuer validation per RFC 9207, issuer-bound client credentials, and Client ID Metadata Documents as the preferred registration route.
 
 **Why not Bedrock AgentCore Runtime?** It bills per vCPU-second for sessions that can live up to 14 days. For a server answering occasional questions that is both dearer and open-ended — the same uncapped-meter shape as the charge that motivated this week. Runtime is the right call for a long-lived stateful agent; this is not that.
-
----
-
-## Quick start
-
-```bash
-# Deploy via HCP (workspace: week-17-dev, VCS-driven)
-git push            # HCP plans on push; confirm the apply in the UI or via API
-
-# Then talk to it
-URL=$(terraform -chdir=terraform/environments/dev output -raw mcp_endpoint)
-
-python scripts/mcp_client.py "$URL" list
-python scripts/mcp_client.py "$URL" call get_daily_cost '{"days": 7}'
-python scripts/mcp_client.py "$URL" ask "what did I leave running"
-```
-
----
-
-## Cost
-
-Prices as of September 2026 — verify at [aws.amazon.com/aws-cost-management/pricing](https://aws.amazon.com/aws-cost-management/pricing/).
-
-| Item | Rate | This build |
-|---|---|---|
-| Cost Explorer API | **$0.01 / request** (each page counts) | the only metered read |
-| Lambda | per-request, sub-second calls | pennies |
-| DynamoDB | on-demand | pennies |
-| CloudWatch alarm | $0.10 / alarm / month | $0.10 |
-| Function URL | no hourly charge | **$0 idle** |
-| **Destroyed** | | **$0** |
-
-Nothing here bills while idle: no NAT gateway, no API Gateway, no always-on compute.
-
----
-
-## Cleanup
-
-Queue a destroy from HCP, then verify against AWS rather than trusting the run status:
-
-```bash
-./scripts/cleanup.sh
-```
-
-It checks Lambda, IAM, DynamoDB, alarms, log groups **and a tag search on `Week=17`** — because a destroy run reporting "applied" only says Terraform removed what it knew about. Two Week 12 buckets survived their teardown by being created outside Terraform, and a tag search is what catches that class of leftover.
 
 ---
 

@@ -17,8 +17,9 @@ Most writing on this topic stops after the first two and calls it a pipeline.
 
 ---
 
-## Before you start
+## 1. Prerequisites
 
+### Before you start
 | | |
 |---|---|
 | Terraform | >= 1.10 |
@@ -45,8 +46,31 @@ Inspector. That is the single most confusing thing about this week.
 
 ---
 
-## The order
+## 2. Source files
 
+What builds this. Documentation, figures and build artefacts are left out.
+
+```
+lambda/image_gate/
+  handler.py
+scripts/
+  cleanup.sh
+  push_images.sh
+  test_gate.sh
+terraform/environments/dev/
+  main.tf
+  outputs.tf
+  terraform.tfvars.example
+  variables.tf
+terraform/modules/image_pipeline/
+  main.tf
+  outputs.tf
+  variables.tf
+```
+
+## 3. Deploy
+
+### The order
 Eight steps. Each one ends with a check, because a step you cannot verify is a
 step you cannot debug later.
 
@@ -182,8 +206,9 @@ bash scripts/cleanup.sh                        # verifies, and undoes what destr
 
 ---
 
-## The tests
+## 4. Run it
 
+### The tests
 Run in order. A failure in test 2 means nothing if test 1 never passed.
 
 | # | Test | Why it earns its place |
@@ -198,6 +223,72 @@ Run in order. A failure in test 2 means nothing if test 1 never passed.
 Tests 3, 5 and 6 are the ones worth the week.
 
 ---
+
+## 6. Cleanup
+
+### Teardown
+**Destroyed 2026-10-09**: 24 resources via HCP run `run-UcvQxgEL4N2Ym11T`, then
+`scripts/cleanup.sh` verified the account-level state.
+
+| Checked | Result |
+|---|---|
+| Registry scanning | `BASIC` |
+| Inspector — all five scan types | `DISABLED` |
+| ECR repositories | none remaining |
+| Signer signing profiles | none active |
+| Signing configuration | none |
+| Log groups | none remaining |
+
+Worth recording: **`terraform destroy` had already removed the Inspector
+enabler and the scanning configuration** — the cleanup script found both
+already clean, with no "still enabled" branch taken. In this build they are
+Terraform resources, so destroy owns them. The script still checks, because
+account-level settings are where an unowned leftover bills quietly, but the
+risk here was smaller than anticipated.
+
+## Cost
+
+### Cost control
+- Scanning and signing are **scoped by repository filter**, not registry-wide.
+  A registry-wide rule would also scan unrelated repositories in the account —
+  and Inspector bills per image.
+- A **lifecycle policy expires untagged images**. Under continuous scanning
+  every retained image is re-scanned each time the CVE database updates, so an
+  image nobody can deploy is a recurring charge rather than a one-off.
+- `SCAN_ON_PUSH`, not `CONTINUOUS_SCAN`. Continuous is the right production
+  choice and the wrong one for a lab that lives for a few hours.
+- Teardown **explicitly disables Inspector**. It is enabled per *account*, so
+  no stack owns it and `terraform destroy` cannot be relied on to remove it.
+  Week 14 proved this shape of risk when anomaly detectors survived a destroy
+  and kept billing.
+### Cost
+**Billed $0.2409**, and 99.7% of it was signing.
+
+| Line | Cost |
+|---|---|
+| ECR managed signing — 12 signatures at $0.02 | $0.2400 |
+| ECR storage, 6-9 October | $0.0009 |
+| Amazon Inspector | $0.00 — 15-day free trial, started 2026-10-05, expires 2026-10-20 |
+| CodeBuild, Lambda, EventBridge, SNS | $0.00 — free tier |
+
+**ECR bills managed signing at $0.02 per signature**, as usage type
+`AsyncActions-ImageSigning`. AWS Signer's pricing page says "no additional
+charge" and is correct about Signer; the charge is on ECR's side, and the ECR
+pricing page carries a "Managed Signing" heading with no figure under it. The
+bill was the only place the number appeared.
+
+Twelve signatures rather than three, because **every rebuild re-signs**. Four
+builds during one night of debugging cost four times a single build. On a busy
+pipeline that is the line to watch, not storage — which came to eight
+hundredths of a cent.
+
+## References
+
+- [ECR managed signing](https://docs.aws.amazon.com/AmazonECR/latest/userguide/managed-signing.html)
+- [ECR enhanced scanning](https://docs.aws.amazon.com/AmazonECR/latest/userguide/image-scanning-enhanced.html)
+- [Inspector EventBridge event schema](https://docs.aws.amazon.com/inspector/latest/user/eventbridge-integration.html)
+- [AWS Signer pricing](https://docs.aws.amazon.com/signer/latest/developerguide/whatis-pricing.html)
+- [`AWS::ECR::SigningConfiguration`](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-ecr-signingconfiguration.html)
 
 ## Security decisions, and why
 
@@ -222,21 +313,6 @@ Tests 3, 5 and 6 are the ones worth the week.
   it, and cannot rotate it on your own schedule. That is a trust decision, not
   an absence of one.
 
-## Cost control
-
-- Scanning and signing are **scoped by repository filter**, not registry-wide.
-  A registry-wide rule would also scan unrelated repositories in the account —
-  and Inspector bills per image.
-- A **lifecycle policy expires untagged images**. Under continuous scanning
-  every retained image is re-scanned each time the CVE database updates, so an
-  image nobody can deploy is a recurring charge rather than a one-off.
-- `SCAN_ON_PUSH`, not `CONTINUOUS_SCAN`. Continuous is the right production
-  choice and the wrong one for a lab that lives for a few hours.
-- Teardown **explicitly disables Inspector**. It is enabled per *account*, so
-  no stack owns it and `terraform destroy` cannot be relied on to remove it.
-  Week 14 proved this shape of risk when anomaly detectors survived a destroy
-  and kept billing.
-
 ## What production does differently
 
 Written down rather than silently skipped:
@@ -255,54 +331,3 @@ Written down rather than silently skipped:
 - **Verification at deploy time**, not just quarantine after the fact. ECS does
   not verify signatures natively; on EKS an admission controller does it with
   the Notation verifier.
-
-## References
-
-- [ECR managed signing](https://docs.aws.amazon.com/AmazonECR/latest/userguide/managed-signing.html)
-- [ECR enhanced scanning](https://docs.aws.amazon.com/AmazonECR/latest/userguide/image-scanning-enhanced.html)
-- [Inspector EventBridge event schema](https://docs.aws.amazon.com/inspector/latest/user/eventbridge-integration.html)
-- [AWS Signer pricing](https://docs.aws.amazon.com/signer/latest/developerguide/whatis-pricing.html)
-- [`AWS::ECR::SigningConfiguration`](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-ecr-signingconfiguration.html)
-
-## Cost
-
-**Billed $0.2409**, and 99.7% of it was signing.
-
-| Line | Cost |
-|---|---|
-| ECR managed signing — 12 signatures at $0.02 | $0.2400 |
-| ECR storage, 6-9 October | $0.0009 |
-| Amazon Inspector | $0.00 — 15-day free trial, started 2026-10-05, expires 2026-10-20 |
-| CodeBuild, Lambda, EventBridge, SNS | $0.00 — free tier |
-
-**ECR bills managed signing at $0.02 per signature**, as usage type
-`AsyncActions-ImageSigning`. AWS Signer's pricing page says "no additional
-charge" and is correct about Signer; the charge is on ECR's side, and the ECR
-pricing page carries a "Managed Signing" heading with no figure under it. The
-bill was the only place the number appeared.
-
-Twelve signatures rather than three, because **every rebuild re-signs**. Four
-builds during one night of debugging cost four times a single build. On a busy
-pipeline that is the line to watch, not storage — which came to eight
-hundredths of a cent.
-
-## Teardown
-
-**Destroyed 2026-10-09**: 24 resources via HCP run `run-UcvQxgEL4N2Ym11T`, then
-`scripts/cleanup.sh` verified the account-level state.
-
-| Checked | Result |
-|---|---|
-| Registry scanning | `BASIC` |
-| Inspector — all five scan types | `DISABLED` |
-| ECR repositories | none remaining |
-| Signer signing profiles | none active |
-| Signing configuration | none |
-| Log groups | none remaining |
-
-Worth recording: **`terraform destroy` had already removed the Inspector
-enabler and the scanning configuration** — the cleanup script found both
-already clean, with no "still enabled" branch taken. In this build they are
-Terraform resources, so destroy owns them. The script still checks, because
-account-level settings are where an unowned leftover bills quietly, but the
-risk here was smaller than anticipated.
