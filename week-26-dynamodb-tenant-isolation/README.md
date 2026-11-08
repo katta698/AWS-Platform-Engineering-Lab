@@ -10,9 +10,10 @@ it — then ten calls that show which of those controls survive the cache.
 | **Provisioning** | Terraform ≥ 1.10, HCP Terraform workspace `week-26-dev` |
 | **Region** | us-east-1 — a DAX cluster can only read tables in its own Region |
 
-> **Status:** built; not yet deployed or validated. The Validation section
-> below states what each case *should* do; the measured results go in the
-> article once the lab has run.
+> **Status:** built, validated and destroyed on 2026-11-08. All ten cases
+> behaved as predicted. The DAX cluster, the table, the three functions and
+> the VPC were confirmed gone against the API, not against the destroy
+> output.
 
 The finding is not a misconfiguration. All three behaviours this lab
 reproduces are documented by AWS, and all three read as safe:
@@ -45,15 +46,17 @@ what is committed, and `build/` is not.
 
 | Path | Its job |
 |---|---|
-| `terraform/environments/dev/main.tf` | VPC, gateway endpoint, table, DAX cluster and service role |
-| `terraform/modules/tenant/main.tf` | one principal: Lambda, role, and the policy that is supposed to isolate it |
+| `terraform/environments/dev/main.tf` | everything: VPC, gateway endpoint, table, DAX cluster and service role, and the three principals |
 | `src/tenant_api/handler.py` | identical code for every tenant; takes the path as an argument |
 | `scripts/build_package.sh` | installs `amazon-dax-client`, which is not in the Lambda runtime |
 | `scripts/seed.py` | writes items for both tenants, each with a `secret_note` |
 | `scripts/prove_isolation.py` | the ten cases, with expectations declared up front |
 | `scripts/cleanup.sh` | destroy, then verify against the API |
 
-Three principals are created from one module:
+Three principals are created with one `for_each`. They were a child module
+until it met HCP's upload boundary -- a remote run uploads the root module
+directory and nothing above it, so `../../modules` did not exist at plan
+time:
 
 | Label | Scoped to | Guards | What it is for |
 |---|---|---|---|
@@ -105,6 +108,13 @@ The four bold rows are the week. `secret_note` is in no policy's allowed
 attribute list, so its presence in a response is the finding showing itself
 rather than a claim about what a policy says.
 
+**Measured 2026-11-08: 10/10 cases matched.** The two that matter most, side
+by side -- `alpha` asking for `tenant-beta`'s item returned
+`AccessDeniedException` on the direct path and returned tenant-beta's data
+through DAX. Same call, same role, same table. `vacuous-scan` returned
+`tenants=tenant-alpha,tenant-beta`, and `attributes-on-request` returned
+`LEAKED=secret_note`. Figure `02-isolation-truth-table.png`.
+
 ## 6. Cleanup
 
 ```bash
@@ -127,12 +137,55 @@ is left in the account. Exits non-zero if anything survives.
 
 DAX is effectively the whole bill and it meters by the hour whether idle or
 not. The lab's own request volume is a few hundred calls, which rounds to
-nothing. Measured total goes here once the lab has run.
+nothing.
+
+The cluster existed for roughly 50 minutes on 2026-11-08. DAX bills per
+node-hour **or partial hour**, so that is three node-hours: **$0.12**. A
+deploy-test-destroy cycle cannot cost less than that however fast it runs.
+
+That figure is arithmetic on a rate confirmed from the AWS Price List API,
+not a reading from the bill. The measured number replaces it here once Cost
+Explorer catches up, which takes about a day.
 
 ## Troubleshooting
 
-To be filled from the build. Anything written here before the lab has run
-would be a guess.
+**A Local Zone sorted first, and DAX refused the subnet group.**
+`SubnetNotAllowedFault: Subnet ... is not in a supported availability zone`.
+This account has a Local Zone enabled (`us-east-1-dfw-1a`, Dallas), and
+`aws_availability_zones` returns names sorted alphabetically -- where
+`us-east-1-dfw-1a` sorts *before* `us-east-1a`, because `-` precedes `a`. So
+taking the first three names put a Local Zone at index 0.
+*Fix:* filter the data source to `zone-type = availability-zone`, which
+excludes Local Zones and Wavelength Zones. Do not hardcode AZ names; the
+filter says what was meant.
+
+**A child module that does not exist during a remote run.**
+`Unable to evaluate directory symlink: lstat ../../modules: no such file or
+directory`. An HCP remote run uploads the root module directory and nothing
+above it, so `../../modules` is simply absent at plan time. The same applies
+to anything an `archive_file` reads from a parent directory.
+*Fix:* express the three principals with `for_each` in the root module, and
+build the Lambda zip into the root module directory. Switching the workspace
+to local execution also works and produces no HCP run page, which this series
+needs every week.
+
+**Terraform replaced all three functions on every apply.**
+The package hashed differently each build. `pip` emits console-script
+wrappers into `bin/`, which on Windows are `.exe` files that embed a path --
+unreproducible, and useless in a Linux runtime. `RECORD` then stores a hash
+of each one.
+*Fix:* delete `bin/` and the `*.dist-info/RECORD` files before zipping, write
+the zip with fixed member timestamps, and strip the `__pycache__` the import
+check leaves behind. The package went from 4.9MB to 652KB as a side effect.
+
+**The teardown check could only ever pass.**
+`cleanup.sh` looked for a DAX cluster named `week26-tenant-isolation`, but
+DAX caps `cluster_name` at 20 characters so the cluster is
+`week26-isolation`. The check queried a name that never existed and reported
+"gone" regardless -- on the one resource billing by the hour.
+*Fix:* query the real name. The failure was proved first by running the old
+query against a cluster that was running at the time and watching it report
+not-found.
 
 ## References
 
