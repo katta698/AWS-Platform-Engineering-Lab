@@ -32,10 +32,17 @@ Thumbs.db
 # Execution files
 EXECUTION*
 
-# Local docs and notes
-docs/
+# Local docs and notes. Narrowed 2026-11-08: a blanket docs/ rule is why
+# week 1's screenshots were never in the repo, while every other week
+# tracks its own. Notes stay out; the published evidence goes in.
+docs/*
+!docs/blog/
+docs/blog/*
+!docs/blog/screenshots/
 
-# Blog / personal artifacts
-BLOG*
-embed*
-LINKEDIN*
+# Removed 2026-11-08: BLOG*, embed* and LINKEDIN* lived here, unanchored.
+# Everything they matched (docs/blog-notes.md, docs/embed_screenshots.py,
+# docs/blog/blog-blogger.html) is already ignored by the docs rules above,
+# and because the last matching pattern wins, BLOG* was re-excluding
+# docs/blog/ and defeating the screenshots negation. docs/linkedin/ is
+# guarded repo-wide by the root .gitignore.
