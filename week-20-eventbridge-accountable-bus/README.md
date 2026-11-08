@@ -55,7 +55,7 @@ checkout: `terraform apply` is refused with
 git push
 ```
 
-The push queues a plan in the `week-20-dev` workspace (organization `Katta`). Confirm
+The push queues a plan in the `week-20-dev` workspace (project **AWS Platform Lab**, organization `Katta`). Confirm
 the apply on its run page.
 
 ## 4. Run it
