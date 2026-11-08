@@ -12,23 +12,15 @@ output "dax_node_count" {
 }
 
 output "functions" {
-  description = "label -> function name, for the experiment script."
-  value = {
-    alpha = module.alpha.function_name
-    beta  = module.beta.function_name
-    audit = module.audit.function_name
-  }
+  description = "principal -> function name, for the experiment script."
+  value       = { for k, f in aws_lambda_function.tenant : k => f.function_name }
 }
 
 output "policies" {
   description = <<-EOT
     The three data-access policies as IAM sees them. alpha and beta carry the
-    Null and Select guards; audit is the same policy without them. Printed so
+    Null and Select guards; audit is the same policy without them. Emitted so
     a reader can diff the policy against the result it produced.
   EOT
-  value = {
-    alpha = module.alpha.policy_json
-    beta  = module.beta.policy_json
-    audit = module.audit.policy_json
-  }
+  value       = local.policies
 }

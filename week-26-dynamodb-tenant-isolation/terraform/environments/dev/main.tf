@@ -44,10 +44,6 @@ terraform {
       source  = "hashicorp/aws"
       version = ">= 6.0, < 7.0"
     }
-    archive = {
-      source  = "hashicorp/archive"
-      version = ">= 2.4"
-    }
   }
 
   cloud {
@@ -93,8 +89,23 @@ locals {
   allowed_attributes = ["tenant_id", "item_id", "description", "amount"]
 }
 
+# zone-type matters here. This account has a Local Zone enabled
+# (us-east-1-dfw-1a, Dallas), and this data source returns names sorted
+# alphabetically -- where "us-east-1-dfw-1a" sorts BEFORE "us-east-1a",
+# because "-" precedes "a". So taking the first three names put a Local Zone
+# at index 0, and DAX refused the subnet group with
+#
+#   SubnetNotAllowedFault: Subnet ... is not in a supported availability zone
+#
+# Filtering to zone-type availability-zone excludes Local Zones and
+# Wavelength Zones, which is what "three AZs" was always meant to say.
 data "aws_availability_zones" "available" {
   state = "available"
+
+  filter {
+    name   = "zone-type"
+    values = ["availability-zone"]
+  }
 }
 
 # ---------------------------------------------------------------- network --
@@ -303,76 +314,205 @@ resource "aws_dax_parameter_group" "main" {
 
 # --------------------------------------------------------------- function --
 
-# Built by scripts/build_lambda.sh, which pip-installs amazon-dax-client into
-# build/. The DAX client is not in the Lambda runtime and the DAX path cannot
-# work without it.
-data "archive_file" "package" {
-  type        = "zip"
-  source_dir  = "${path.module}/../../../build/package"
-  output_path = "${path.module}/../../../build/tenant_api.zip"
+
+# Three principals, running identical code, separated only by the policy on
+# their execution role.
+#
+# These were a child module until it met HCP's upload boundary: a remote run
+# uploads the root module directory and nothing above it, so ../../modules
+# was simply absent at plan time. Switching the workspace to local execution
+# would have fixed that and produced no HCP run page, and every week in this
+# series needs one. So the three are expressed here with for_each instead,
+# which turns out to read better than three near-identical module blocks --
+# the only things that actually differ are in the map below.
+locals {
+  principals = {
+    # The policy AWS documents.
+    alpha = { tenant = "tenant-alpha", guard = true }
+    beta  = { tenant = "tenant-beta", guard = true }
+
+    # Same tenant as alpha. Same policy with both guards removed and Scan
+    # added -- what you get by writing the obvious thing and testing it with
+    # GetItem. Everything it can do that alpha cannot is the consequence of
+    # two missing condition blocks.
+    audit = { tenant = "tenant-alpha", guard = false }
+  }
+
+  package_path = "${path.module}/tenant_api.zip"
+  table_arns   = [aws_dynamodb_table.pool.arn, "${aws_dynamodb_table.pool.arn}/index/*"]
+
+  read_actions = [
+    "dynamodb:GetItem",
+    "dynamodb:BatchGetItem",
+    "dynamodb:Query",
+  ]
+
+  # The DAX statement, identical for all three. Note what is NOT in it: any
+  # condition at all. dynamodb:LeadingKeys is not a valid condition key for
+  # dax: actions, and once a request reaches the cluster the caller's identity
+  # is gone -- the cluster's own service role decides what may be read.
+  # Granting this is granting the whole table.
+  dax_statement = {
+    Sid      = "DaxAccessWhichIgnoresEverythingAbove"
+    Effect   = "Allow"
+    Action   = ["dax:GetItem", "dax:BatchGetItem", "dax:Query", "dax:Scan"]
+    Resource = [aws_dax_cluster.main.arn]
+  }
+
+  # Both policies are built whole and one is chosen per principal, rather than
+  # one policy with conditional parts: Terraform requires both arms of a
+  # conditional to have the same type, and these two deliberately do not.
+  # Choosing between finished JSON strings sidesteps that, and has the better
+  # property that each policy can be read end to end.
+  guarded_policies = {
+    for k, v in local.principals : k => jsonencode({
+      Version = "2012-10-17"
+      Statement = [
+        {
+          Sid      = "TenantScopedReads"
+          Effect   = "Allow"
+          Action   = local.read_actions
+          Resource = local.table_arns
+          Condition = {
+            "ForAllValues:StringEquals" = {
+              "dynamodb:LeadingKeys" = [v.tenant]
+              "dynamodb:Attributes"  = local.allowed_attributes
+            }
+
+            # "A ForAllValues condition evaluates to true when the condition
+            # key is not present in the request." Scan carries no
+            # LeadingKeys, so without this the statement grants every
+            # partition.
+            "Null" = { "dynamodb:LeadingKeys" = "false" }
+
+            # "If no ProjectionExpression is provided in the request, all
+            # attributes will be returned regardless of any attribute
+            # restrictions in the policy." This forces one to be provided.
+            "StringEqualsIfExists" = { "dynamodb:Select" = "SPECIFIC_ATTRIBUTES" }
+          }
+        },
+        local.dax_statement,
+      ]
+    })
+  }
+
+  open_policies = {
+    for k, v in local.principals : k => jsonencode({
+      Version = "2012-10-17"
+      Statement = [
+        {
+          Sid      = "TenantScopedReadsButNotReally"
+          Effect   = "Allow"
+          Action   = concat(local.read_actions, ["dynamodb:Scan"])
+          Resource = local.table_arns
+          Condition = {
+            "ForAllValues:StringEquals" = {
+              "dynamodb:LeadingKeys" = [v.tenant]
+              "dynamodb:Attributes"  = local.allowed_attributes
+            }
+          }
+        },
+        local.dax_statement,
+      ]
+    })
+  }
+
+  policies = {
+    for k, v in local.principals :
+    k => v.guard ? local.guarded_policies[k] : local.open_policies[k]
+  }
 }
 
-module "alpha" {
-  source = "../../modules/tenant"
+resource "aws_iam_role" "tenant" {
+  for_each = local.principals
 
-  name_prefix        = local.name
-  label              = "alpha"
-  tenant_id          = "tenant-alpha"
-  guard              = true
-  allowed_attributes = local.allowed_attributes
+  name = "${local.name}-${each.key}"
 
-  table_name      = aws_dynamodb_table.pool.name
-  table_arn       = aws_dynamodb_table.pool.arn
-  dax_cluster_arn = aws_dax_cluster.main.arn
-  dax_endpoint    = aws_dax_cluster.main.cluster_address
-
-  package_path       = data.archive_file.package.output_path
-  package_hash       = data.archive_file.package.output_base64sha256
-  subnet_ids         = aws_subnet.private[*].id
-  security_group_ids = [aws_security_group.lambda.id]
-  tags               = local.tags
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "lambda.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+    }]
+  })
 }
 
-module "beta" {
-  source = "../../modules/tenant"
+resource "aws_iam_role_policy" "tenant_data" {
+  for_each = local.principals
 
-  name_prefix        = local.name
-  label              = "beta"
-  tenant_id          = "tenant-beta"
-  guard              = true
-  allowed_attributes = local.allowed_attributes
-
-  table_name      = aws_dynamodb_table.pool.name
-  table_arn       = aws_dynamodb_table.pool.arn
-  dax_cluster_arn = aws_dax_cluster.main.arn
-  dax_endpoint    = aws_dax_cluster.main.cluster_address
-
-  package_path       = data.archive_file.package.output_path
-  package_hash       = data.archive_file.package.output_base64sha256
-  subnet_ids         = aws_subnet.private[*].id
-  security_group_ids = [aws_security_group.lambda.id]
-  tags               = local.tags
+  name   = "tenant-data-access"
+  role   = aws_iam_role.tenant[each.key].id
+  policy = local.policies[each.key]
 }
 
-# Same tenant as alpha, policy without the guards. Everything it can do that
-# alpha cannot is a consequence of two missing condition blocks.
-module "audit" {
-  source = "../../modules/tenant"
+resource "aws_iam_role_policy" "tenant_runtime" {
+  for_each = local.principals
 
-  name_prefix        = local.name
-  label              = "audit"
-  tenant_id          = "tenant-alpha"
-  guard              = false
-  allowed_attributes = local.allowed_attributes
+  name = "lambda-runtime"
+  role = aws_iam_role.tenant[each.key].id
 
-  table_name      = aws_dynamodb_table.pool.name
-  table_arn       = aws_dynamodb_table.pool.arn
-  dax_cluster_arn = aws_dax_cluster.main.arn
-  dax_endpoint    = aws_dax_cluster.main.cluster_address
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"]
+        Resource = "arn:aws:logs:*:*:*"
+      },
+      {
+        # Required for Lambda to build the Hyperplane ENI that puts the
+        # function in the VPC. Without a VPC it cannot reach DAX at all.
+        Effect = "Allow"
+        Action = [
+          "ec2:CreateNetworkInterface",
+          "ec2:DescribeNetworkInterfaces",
+          "ec2:DescribeSubnets",
+          "ec2:DeleteNetworkInterface",
+          "ec2:AssignPrivateIpAddresses",
+          "ec2:UnassignPrivateIpAddresses",
+        ]
+        Resource = "*"
+      },
+    ]
+  })
+}
 
-  package_path       = data.archive_file.package.output_path
-  package_hash       = data.archive_file.package.output_base64sha256
-  subnet_ids         = aws_subnet.private[*].id
-  security_group_ids = [aws_security_group.lambda.id]
-  tags               = local.tags
+resource "aws_cloudwatch_log_group" "tenant" {
+  for_each = local.principals
+
+  name              = "/aws/lambda/${local.name}-${each.key}"
+  retention_in_days = 7
+}
+
+resource "aws_lambda_function" "tenant" {
+  for_each = local.principals
+
+  function_name = "${local.name}-${each.key}"
+  role          = aws_iam_role.tenant[each.key].arn
+  handler       = "handler.handler"
+  runtime       = "python3.13"
+  timeout       = 30
+  memory_size   = 512
+
+  filename         = local.package_path
+  source_code_hash = filebase64sha256(local.package_path)
+
+  vpc_config {
+    subnet_ids         = aws_subnet.private[*].id
+    security_group_ids = [aws_security_group.lambda.id]
+  }
+
+  environment {
+    variables = {
+      TABLE_NAME   = aws_dynamodb_table.pool.name
+      TENANT_ID    = each.value.tenant
+      DAX_ENDPOINT = aws_dax_cluster.main.cluster_address
+    }
+  }
+
+  depends_on = [
+    aws_iam_role_policy.tenant_runtime,
+    aws_cloudwatch_log_group.tenant,
+  ]
 }
