@@ -6,9 +6,9 @@
 
 WHY THIS EXISTS (2026-10-25)
 ----------------------------
-Jay asked the right question while 23 published posts were being restructured:
-"should I worry about data being rewritten... or do I have to go through each
-and every post again to validate?"
+Restructuring 23 published posts raises one question worth answering
+mechanically: can a fact be rewritten in the move, and if so, does every post
+have to be re-read by hand to find out?
 
 The restructure is not a mechanical move. Each post is READ and RE-EXPRESSED
 into the mandated nine sections. `lab_post_kit.py` guarantees the front matter,

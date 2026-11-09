@@ -11,11 +11,11 @@ and the replay proof -- were typeset by hand and their sources thrown away. Jay
 asked what one of them was and where it came from, and the only honest answer
 was "a card I rendered, from data I no longer have in any committed form."
 
-That is exactly the failure render_card.py was written for after Week 16: a card
-generated ad hoc, the source discarded, and nothing to re-export when it needed
-changing. The LinkedIn card has committed HTML for that reason. The figure cards
-did not, and the data behind the CloudTrail one lives in an S3 bucket that
-teardown deletes.
+A figure whose source is not committed cannot be re-exported, and so cannot be
+corrected. render_card.py applies that rule to the LinkedIn card; this applies
+it to figure cards, which previously had no committed source at all. It matters
+most for the CloudTrail card, whose data lives in an S3 bucket that teardown
+deletes.
 
 A figure whose source is gone is a claim you can no longer check or correct.
 

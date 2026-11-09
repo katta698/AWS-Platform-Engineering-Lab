@@ -446,10 +446,10 @@ def main():
 
             # ---- EVERY CAPTURE IS EITHER USED OR DELIBERATELY NOT ----------
             #
-            # Week 18 captured ten screenshots and wired four into the post.
-            # The HCP run was the one left out, and Jay had to ask twice. The
-            # check above only proves that referenced files exist; it is blind
-            # to files captured and never referenced.
+            # Week 18 captured ten screenshots and wired four into the
+            # post, leaving the HCP run unused. The check above only proves
+            # that referenced files exist; it is blind to files captured and
+            # never referenced.
             #
             # If a capture is genuinely not for the post, list it in
             # docs/blog/screenshots/UNUSED.txt, one filename per line. Saying

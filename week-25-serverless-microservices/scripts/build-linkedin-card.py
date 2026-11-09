@@ -7,7 +7,8 @@
 The card embeds the SAME diagram the blog post carries, generated from the same
 aws_arch source rather than redrawn for social. Week 16's card was produced ad
 hoc and its source thrown away, so when it was called not sharp there was
-nothing to re-export. Worse than losing the source is a card that disagrees
+no committed source to re-export from. Worse than losing the source is a card
+that disagrees
 with the article it links to.
 
 Outputs, beside this file's week folder under docs/linkedin/:

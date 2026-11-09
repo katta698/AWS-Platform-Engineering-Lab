@@ -6,11 +6,10 @@
 
 WHY THIS EXISTS (2026-10-25)
 ----------------------------
-Jay asked where the AWS CLI figures were taken, and the honest answer was that
-three of them were not taken anywhere: they were typeset by
-render_terminal_card.py from a committed .card file, styled to look like a
-terminal. The data in them was real, but the command lines had been retyped and
-trimmed for width, and no terminal was photographed.
+A typeset card is not a photograph. render_terminal_card.py builds figures
+from a committed .card file, styled to look like a terminal: the data in them
+is real, but the command lines are retyped and trimmed for width, and no
+terminal is captured. Three AWS CLI figures were built that way.
 
 His instruction, for every cloud lab from here on: real terminal screenshots
 when possible.

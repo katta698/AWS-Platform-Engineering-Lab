@@ -1,10 +1,9 @@
 """
 Render a week's LinkedIn architecture card from its HTML source.
 
-Why this exists (2026-08-29): Week 16's card was generated ad hoc and the
-source was thrown away. When Jay said it was not sharp, there was nothing to
-re-export -- it had to be rebuilt from the image. Cards are now HTML files
-committed next to the PNG, and this renders them.
+Why this exists (2026-08-29): a card whose source is not committed cannot be
+re-exported, and so cannot be corrected. Every card is therefore an HTML file
+committed next to its PNG, and this script renders it.
 
 Sharpness comes from the device scale factor, not from the CSS size. The board
 is authored at 1200x675 CSS pixels and shot at 2x, so the PNG is 2400x1350 and

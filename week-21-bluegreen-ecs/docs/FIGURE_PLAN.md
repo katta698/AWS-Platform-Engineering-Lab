@@ -27,10 +27,9 @@ two weeks before anyone noticed.
 | 05 | `05-failed-deploy-healthcheck.png` | testing | The bad version rejected at the target group -- `Target.ResponseCodeMismatch`, traffic never moved | **AWS console** | bad v3 deploy |
 | 06 | `06-cost-explorer.png` | Cost | Cost Explorer for the run window, by service | **AWS console** | ~24h after teardown |
 
-Eight slots. Seven and eight were added on 2026-09-30, after Jay asked "no need to show
-screenshots on what we deployed?" He was right: the plan had one console shot of the service
-and nothing showing the resources themselves, so a reader asking *what did they build* got a
-table and no picture.
+Eight slots. Seven and eight were added on 2026-09-30, to answer a reader asking
+*what did they build*. The plan had one console shot of the service and nothing
+showing the resources themselves, so that question got a table and no picture.
 
 **Slots 07 and 08 are the answer to "what was deployed".** Every future week needs at least
 one, and `check_figures_before_destroy.py` blocks teardown until every declared slot is

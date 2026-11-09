@@ -16,9 +16,9 @@ Architecture / Multi-Tenant Design / Quick Start, weeks 11-15 used lowercase
 Quick start / Security patterns / Teardown, and only weeks 24-25 used the
 numbered runbook that actually reads like something you follow.
 
-Jay asked why consistency kept slipping. The answer each time was the same:
-the rule lived in a document and the document is not consulted while typing.
-So this is a check, and it blocks.
+Consistency kept slipping for one reason: the rule lived in a document, and
+a document is not consulted while typing. So it lives here instead, and it
+blocks.
 
 WHAT IT REQUIRES
 

@@ -9,8 +9,8 @@ WHY THIS EXISTS (2026-10-27)
 Jay: "Do I have to remind you for every lab to take screenshots? What am I
 missing? Why are you missing?"
 
-The honest answer was structural rather than careless. Every figure gate in
-this repository runs AFTER the moment its figure was capturable:
+The cause is structural rather than careless. Every figure gate in this
+repository runs AFTER the moment its figure was capturable:
 
     01-before-state                 capturable : BEFORE terraform apply
     check_figures_before_destroy.py runs       : before destroy
