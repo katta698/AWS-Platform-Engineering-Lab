@@ -6,7 +6,7 @@ it — then ten calls that show which of those controls survive the cache.
 
 | | |
 |---|---|
-| **Cost** | ~$0.12/hour while the DAX cluster exists (3 × `dax.t3.small`); everything else is a few cents |
+| **Cost** | **$0.1202 measured** for one cycle (DAX $0.1200, DynamoDB $0.0002); ~$0.12/hour for as long as the cluster exists |
 | **Provisioning** | Terraform ≥ 1.10, HCP Terraform workspace `week-26-dev` |
 | **Region** | us-east-1 — a DAX cluster can only read tables in its own Region |
 
@@ -143,9 +143,11 @@ The cluster existed for roughly 50 minutes on 2026-11-08. DAX bills per
 node-hour **or partial hour**, so that is three node-hours: **$0.12**. A
 deploy-test-destroy cycle cannot cost less than that however fast it runs.
 
-That figure is arithmetic on a rate confirmed from the AWS Price List API,
-not a reading from the bill. The measured number replaces it here once Cost
-Explorer catches up, which takes about a day.
+**Measured 2026-11-09, for the 8 November run: $0.1202.** Cost Explorer
+reports $0.1200 against DynamoDB Accelerator and $0.0002 against DynamoDB.
+The estimate and the bill agree, which is worth recording only because they
+often do not — a rate card gives the price of a thing, not how many of them
+a lab turns out to use.
 
 ## Troubleshooting
 
