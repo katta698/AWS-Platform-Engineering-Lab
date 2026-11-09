@@ -185,9 +185,10 @@ check leaves behind. The package went from 4.9MB to 652KB as a side effect.
 DAX caps `cluster_name` at 20 characters so the cluster is
 `week26-isolation`. The check queried a name that never existed and reported
 "gone" regardless -- on the one resource billing by the hour.
-*Fix:* query the real name. The failure was proved first by running the old
-query against a cluster that was running at the time and watching it report
-not-found.
+*Fix:* query the real name, and confirm the check is capable of failing by
+running it while the cluster still exists. A teardown check that cannot fail
+is worse than none, because it is load-bearing in your confidence and
+nowhere else.
 
 ## References
 

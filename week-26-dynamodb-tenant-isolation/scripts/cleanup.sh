@@ -16,11 +16,10 @@ NAME="week26-tenant-isolation"
 # destroying cannot, and every uncaptured figure becomes permanently
 # uncapturable the moment the destroy applies.
 #
-# scripts/check_figures_before_destroy.py exists to stop exactly that, and it
-# did not stop it here: it is wired into hcp_destroy.py, this script was
-# written fresh and never called it, and week 26 had no FIGURE_PLAN.md for it
-# to read. The stack was destroyed with no AWS console figure taken. Calling
-# it here closes the path this script opened.
+# So docs/FIGURE_PLAN.md declares what this week must capture, and the check
+# below refuses the destroy until each slot exists, is retired in
+# docs/UNUSED.txt with a reason, or is a cost slot that cannot be read until
+# the bill settles.
 echo "==> figures captured? (teardown is irreversible)"
 python "$ROOT/../scripts/check_figures_before_destroy.py"   week-26-dynamodb-tenant-isolation || {
     echo

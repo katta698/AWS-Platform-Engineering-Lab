@@ -4,11 +4,10 @@
     python week-26-dynamodb-tenant-isolation/scripts/build-linkedin-card.py
     python scripts/render_card.py week-26-dynamodb-tenant-isolation
 
-The diagram is not redrawn for social. It is imported from
-katta698-aws/scripts/build_week26_diagram.py -- the same function that
-produces the figure in the article -- so the card cannot disagree with the
-post it links to. Week 16's card was made ad hoc and its source discarded;
-when it was called not sharp there was nothing to re-export.
+The diagram is imported from katta698-aws/scripts/build_week26_diagram.py,
+the same function that produces the figure in the article, so the card and
+the post cannot drift apart. Regenerate both from source rather than editing
+the PNG.
 
 Outputs, beside this file's week folder under docs/linkedin/:
     architecture-diagram.html   authored at 1200x675, rendered at 2x
@@ -32,8 +31,7 @@ CARD = """<!doctype html>
      Render:  python scripts/render_card.py week-26-dynamodb-tenant-isolation
      Authored at 1200x675, shot at deviceScaleFactor 2 -> 2400x1350.
 
-     The diagram is imported from the article's own builder, so the card
-     cannot drift from the post. -->
+     The diagram comes from the article's own builder. -->
 <meta charset="utf-8">
 <style>
   * {{ box-sizing: border-box }}

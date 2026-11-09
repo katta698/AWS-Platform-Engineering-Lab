@@ -318,13 +318,12 @@ resource "aws_dax_parameter_group" "main" {
 # Three principals, running identical code, separated only by the policy on
 # their execution role.
 #
-# These were a child module until it met HCP's upload boundary: a remote run
-# uploads the root module directory and nothing above it, so ../../modules
-# was simply absent at plan time. Switching the workspace to local execution
-# would have fixed that and produced no HCP run page, and every week in this
-# series needs one. So the three are expressed here with for_each instead,
-# which turns out to read better than three near-identical module blocks --
-# the only things that actually differ are in the map below.
+# Expressed with for_each here rather than as a child module. A remote HCP
+# run uploads the root module directory and nothing above it, so a
+# ../../modules source does not exist at plan time. Local execution resolves
+# it and produces no HCP run page, which this series needs every week.
+#
+# The only things that differ between the three are in the map below.
 locals {
   principals = {
     # The policy AWS documents.
