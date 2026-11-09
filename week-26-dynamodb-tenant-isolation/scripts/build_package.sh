@@ -1,18 +1,9 @@
 #!/usr/bin/env bash
-# Build the Lambda package.
+# Build the Lambda package. amazon-dax-client is not in the Python runtime.
 #
-# The DAX path needs amazon-dax-client, which is not in the Python runtime.
-# Without it the "dax" half of every comparison raises ImportError and the
-# week has nothing to show, so this runs before every apply.
-#
-# The package is built locally and uploaded with the configuration, which
-# means the week-26-dev workspace must be CLI-driven rather than
-# VCS-connected: a VCS run has only what is committed, and build/ is not.
-#
-# The finished zip is written INTO terraform/environments/dev rather than
-# alongside this script. A remote run uploads the root module directory and
-# nothing above it, so a package sitting at ../build would simply not be
-# there when the apply ran.
+# The zip goes into terraform/environments/dev because a remote run uploads
+# only the root module directory. Built locally, so the workspace must be
+# CLI-driven, not VCS-connected.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

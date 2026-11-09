@@ -1,38 +1,14 @@
 """One tenant API, two paths to the same table.
 
-The code is identical for every tenant. What differs is the execution role
-attached to the function, and -- the point of the week -- which path the
-request takes to reach the data:
+Identical code for every tenant; what differs is the execution role. Going
+direct, the role's dynamodb:LeadingKeys condition is evaluated. Going through
+DAX it is not -- the cluster's own role authorises the read.
 
-    path="direct"   boto3 -> DynamoDB endpoint
-                    The role's dynamodb:LeadingKeys condition is evaluated.
+Event: {"op": get|query|scan, "path": direct|dax, "tenant_id", "item_id",
+"project"}. `project` controls whether a ProjectionExpression is sent, which
+matters because dynamodb:Attributes is evaluated on the request.
 
-    path="dax"      amazondax -> DAX cluster -> DynamoDB
-                    The role's dynamodb: conditions are NOT evaluated. AWS:
-                    "users inherit the permissions of the DAX cluster's IAM
-                    policy when they access that cluster ... No other
-                    permissions are recognized."
-
-Both paths are exercised against the same item so the difference is the path
-and nothing else.
-
-Event shape
------------
-    {
-      "op":        "get" | "query" | "scan",
-      "path":      "direct" | "dax",
-      "tenant_id": "tenant-alpha",      # partition key to ask for
-      "item_id":   "order-1",           # sort key, for op=get
-      "project":   true                 # send a ProjectionExpression
-    }
-
-`project` exists because dynamodb:Attributes is evaluated on the REQUEST, not
-the response: "If no ProjectionExpression is provided in the request, all
-attributes will be returned regardless of any attribute restrictions in the
-policy." Setting it false is how the lab shows that.
-
-Errors are returned, not raised. An AccessDeniedException is the expected
-result of half these calls and is evidence, not a failure.
+Errors are returned, not raised: an AccessDeniedException is evidence here.
 """
 import json
 import os

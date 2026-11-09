@@ -1,40 +1,16 @@
 # Week 26 -- tenant isolation on one pooled DynamoDB table, and the cache
-# that quietly removes it.
+# that removes it.
 #
-# THE SHAPE
-# ---------
-# One table. Items partitioned by tenant_id. Three Lambda functions running
-# identical code, separated only by the IAM policy on their execution role:
+# One table partitioned by tenant_id. Three Lambda functions running the same
+# code, separated only by their role's policy: alpha and beta carry the guards
+# AWS documents, audit carries the same policy without them. All three also
+# hold dax: permissions on the cluster, which is the point.
 #
-#   alpha   scoped to tenant-alpha, with the guards AWS documents
-#   beta    scoped to tenant-beta,  with the same guards
-#   audit   scoped to tenant-alpha, with the guards removed -- the policy you
-#           get by writing the obvious thing and testing it with GetItem
+# The VPC exists only because DAX has no public endpoint. DynamoDB is reached
+# from it by a gateway endpoint, which is free; a NAT gateway would be
+# $0.045/hour. CloudWatch Logs needs neither.
 #
-# All three also hold dax: permissions on the cluster, because that is what a
-# team adds when the read latency becomes a problem. That grant is what the
-# week is about.
-#
-# WHY THERE IS A VPC HERE AT ALL
-# ------------------------------
-# DAX has no public endpoint. "Access to DAX cluster nodes is restricted to
-# applications running on Amazon EC2 instances within an Amazon VPC
-# environment", and a cluster must be given a subnet group at creation. So
-# the functions have to be attached to a VPC to reach it, and once they are,
-# they lose the default route to the public DynamoDB endpoint too.
-#
-# That is solved with a GATEWAY endpoint for DynamoDB, which is free, rather
-# than a NAT gateway at $0.045/hour or interface endpoints at $0.01/hour per
-# AZ. CloudWatch Logs needs neither: log delivery is performed by the Lambda
-# service from the Lambda-managed VPC, which is unaffected by attaching the
-# function to this one.
-#
-# COST
-# ----
-# DAX is the only meaningful line and it bills per node-hour whether or not
-# anything reads from it: 3 x dax.t3.small at ~$0.04/hour is ~$0.12/hour, or
-# ~$2.88/day. Everything else here is on-demand and the lab's volume is a few
-# hundred requests. Destroy when done; this is not a week to leave running.
+# Cost: 3 x dax.t3.small at ~$0.04/node-hour, billing whether idle or not.
 
 terraform {
   required_version = ">= 1.10"
@@ -66,15 +42,9 @@ provider "aws" {
 locals {
   name = "week26-tenant-isolation"
 
-  # DAX caps cluster_name at 20 characters, which local.name exceeds, so the
-  # cluster carries a shorter name of its own rather than everything being
-  # shortened to suit one resource.
-  #
-  # Keep it non-identifying: enabling encryption in transit makes ACM issue a
-  # certificate carrying the cluster name, and ACM records every public
-  # certificate in Certificate Transparency logs. AWS: "do not include
-  # sensitive identifying information, such as your customers' account
-  # numbers, in the cluster name."
+  # DAX caps cluster_name at 20 chars, and the name reaches public
+  # Certificate Transparency logs when encryption in transit is on. Keep it
+  # short and non-identifying.
   dax_name = "week26-isolation"
 
   tags = {
@@ -89,16 +59,9 @@ locals {
   allowed_attributes = ["tenant_id", "item_id", "description", "amount"]
 }
 
-# zone-type matters here. This account has a Local Zone enabled
-# (us-east-1-dfw-1a, Dallas), and this data source returns names sorted
-# alphabetically -- where "us-east-1-dfw-1a" sorts BEFORE "us-east-1a",
-# because "-" precedes "a". So taking the first three names put a Local Zone
-# at index 0, and DAX refused the subnet group with
-#
-#   SubnetNotAllowedFault: Subnet ... is not in a supported availability zone
-#
-# Filtering to zone-type availability-zone excludes Local Zones and
-# Wavelength Zones, which is what "three AZs" was always meant to say.
+# Filter to real AZs. Names come back sorted, and a Local Zone like
+# "us-east-1-dfw-1a" sorts before "us-east-1a", so "the first three" can pick
+# one; DAX then rejects it with SubnetNotAllowedFault.
 data "aws_availability_zones" "available" {
   state = "available"
 
@@ -318,12 +281,8 @@ resource "aws_dax_parameter_group" "main" {
 # Three principals, running identical code, separated only by the policy on
 # their execution role.
 #
-# Expressed with for_each here rather than as a child module. A remote HCP
-# run uploads the root module directory and nothing above it, so a
-# ../../modules source does not exist at plan time. Local execution resolves
-# it and produces no HCP run page, which this series needs every week.
-#
-# The only things that differ between the three are in the map below.
+# for_each rather than a child module: a remote HCP run uploads only the root
+# module directory, so ../../modules is absent at plan time.
 locals {
   principals = {
     # The policy AWS documents.
@@ -358,11 +317,8 @@ locals {
     Resource = [aws_dax_cluster.main.arn]
   }
 
-  # Both policies are built whole and one is chosen per principal, rather than
-  # one policy with conditional parts: Terraform requires both arms of a
-  # conditional to have the same type, and these two deliberately do not.
-  # Choosing between finished JSON strings sidesteps that, and has the better
-  # property that each policy can be read end to end.
+  # Two whole policies, one chosen per principal: a Terraform conditional
+  # needs both arms to share a type, and these deliberately do not.
   guarded_policies = {
     for k, v in local.principals : k => jsonencode({
       Version = "2012-10-17"

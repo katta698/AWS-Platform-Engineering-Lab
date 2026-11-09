@@ -1,12 +1,8 @@
 #!/usr/bin/env bash
-# Deploy week 26: build the package, then apply.
+# Deploy week 26: build the package, apply, seed.
 #
-# Expect the apply to take roughly 10-12 minutes, nearly all of it the DAX
-# cluster. Three nodes are provisioned one at a time and the resource does not
-# return until the cluster is available.
-#
-# From the moment the cluster exists it bills at ~$0.12/hour whether anything
-# reads from it or not. ./scripts/cleanup.sh when finished.
+# ~10-12 minutes, nearly all of it the DAX cluster. It bills ~$0.12/hour from
+# the moment it exists. ./scripts/cleanup.sh when finished.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

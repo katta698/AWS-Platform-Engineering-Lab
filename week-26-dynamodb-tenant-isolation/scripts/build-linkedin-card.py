@@ -1,17 +1,11 @@
 # -*- coding: utf-8 -*-
-"""Build week 26's LinkedIn card and the standalone architecture diagram.
+"""Build week 26's LinkedIn card and standalone architecture diagram.
 
     python week-26-dynamodb-tenant-isolation/scripts/build-linkedin-card.py
     python scripts/render_card.py week-26-dynamodb-tenant-isolation
 
-The diagram is imported from katta698-aws/scripts/build_week26_diagram.py,
-the same function that produces the figure in the article, so the card and
-the post cannot drift apart. Regenerate both from source rather than editing
-the PNG.
-
-Outputs, beside this file's week folder under docs/linkedin/:
-    architecture-diagram.html   authored at 1200x675, rendered at 2x
-    architecture-diagram.svg    the diagram alone, vector, for reuse anywhere
+The diagram is imported from the article's own builder so the card and post
+cannot drift. Authored at 1200x675, rendered at 2x.
 """
 import io
 import os

@@ -1,28 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Does the isolation hold? Ten calls that answer it.
+"""Ten calls that establish whether the tenant isolation holds.
 
-    python scripts/prove_isolation.py
-    python scripts/prove_isolation.py --json results.json
+    python scripts/prove_isolation.py [--json results.json]
 
-Each case states what it EXPECTS before it runs, and the script exits non-zero
-if any case disagrees. That matters more here than in most labs: three of
-these cases expect to be allowed something they should not be allowed, and a
-script that merely printed what happened would read the same whether the
-finding reproduced or quietly stopped reproducing.
-
-The three cases marked FINDING are the week. They are not bugs in this code
-and not bugs in AWS; all three are documented behaviour that reads as safe:
-
-  dax-crosses-tenant   AWS: "users inherit the permissions of the DAX
-                       cluster's IAM policy ... No other permissions are
-                       recognized."
-  vacuous-scan         AWS: "A ForAllValues condition evaluates to true when
-                       the condition key is not present in the request."
-  attributes-on-request
-                       AWS: "If no ProjectionExpression is provided in the
-                       request, all attributes will be returned regardless of
-                       any attribute restrictions in the policy."
+Each case declares its expected outcome before it runs and the script exits
+non-zero on any mismatch. Three cases expect to be ALLOWED something they
+should not be, so a script that only reported what happened would read the
+same whether the finding reproduced or not.
 """
 from __future__ import annotations
 

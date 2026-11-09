@@ -1,49 +1,17 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Committed files describe the control, never the incident.
+"""Committed files describe the control, not how they came to be written.
 
-    python scripts/check_no_process_narration.py
-    python scripts/check_no_process_narration.py week-26-dynamodb-tenant-isolation
+    python scripts/check_no_process_narration.py [week-NN-...]
     python scripts/check_no_process_narration.py --self-test
 
-THE RULE
+Keep "DAX caps cluster_name at 20 characters". Cut "the URL that cost a
+redeploy". The test is whether the sentence helps a reader avoid breaking
+something.
 
-This repository is read by people who want to run these labs. A comment
-should tell the next person what they need in order not to break something.
-It should not tell them how the file came to be written.
-
-    keep   "A remote HCP run uploads only the root module directory, so a
-            ../../modules source is absent at plan time."
-    keep   "DAX caps cluster_name at 20 characters."
-    cut    "it did not stop it here, because this script was written fresh
-            and never called it"
-    cut    "the console URL that cost a redeploy"
-    cut    "a card generated ad hoc, its source discarded"
-
-The test is whether the sentence helps a reader avoid breaking something. A
-constraint does. A story about how it was discovered does not, and on a
-public portfolio a trail of them invites a reader to distrust the rest.
-
-WHAT IS DELIBERATELY NOT FLAGGED
-
-  Published posts and lab-guide Troubleshooting sections. A genuine failure
-  against the cloud provider -- an API that lied, a permission that was not
-  what it looked like -- is exactly what those are for. This checks the
-  authoring voice in code and repo docs, not the engineering content.
-
-  First-person prose in a week's README. Several of these labs are written
-  as a story in Jay's own voice and that is the house style; "on 30 August I
-  asked my own AWS account what it was doing" is the premise of week 17, not
-  a confession.
-
-  Captured transcripts and recorded evidence. week-16's agent transcript is
-  full of "I can help you manage this investigation" because that is what
-  the agent said. Evidence is not narration.
-
-So the phrases below are narrow and specific on purpose: each one describes
-an authoring mishap rather than a technical fact. A broad "no first person"
-rule was tried against the tree first and produced 41 hits in week 16 alone,
-every one of them a false positive.
+Out of scope, deliberately: READMEs (house narrative voice), lab-guide
+Troubleshooting (real AWS failures belong there), BRIEFINGS.md (a sign-off
+record), and this file (it quotes the banned phrases).
 """
 from __future__ import annotations
 

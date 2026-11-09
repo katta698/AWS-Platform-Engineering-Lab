@@ -1,17 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Put a few items in each tenant's partition.
+"""Write a few items into each tenant's partition.
 
     python scripts/seed.py
 
-Written with the deployer's own credentials, not a tenant role. The tenant
-roles are read-only by design -- a tenant that can write its neighbour's
-partition is a different lab.
-
-Every item carries a `secret_note`. It is not in the policies' allowed
-attribute list, so it is the thing that should never come back. When it does,
-that is the attribute finding showing itself rather than a wrong guess about
-what a policy says.
+Uses the deployer's credentials; the tenant roles are read-only. Every item
+carries a `secret_note`, which no policy allows, so its appearance in a
+response is the attribute finding showing itself.
 """
 from __future__ import annotations
 

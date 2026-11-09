@@ -2,57 +2,15 @@
 # -*- coding: utf-8 -*-
 """Hold every week's README to one shape.
 
-    python scripts/check_lab_guide_shape.py
-    python scripts/check_lab_guide_shape.py week-07
-    python scripts/check_lab_guide_shape.py --self-test
+    python scripts/check_lab_guide_shape.py [week-NN] [--self-test]
 
-WHY THIS EXISTS (2026-11-01)
-----------------------------
-The blog posts have had a blocking shape check since 2026-10-25 and all 25 now
-share one heading sequence. The lab guides had nothing, and drifted into
-roughly 25 different shapes: week 1 used lettered sections (A. Business
-Problem ... M. Enterprise Best Practices), weeks 2-3 used
-Architecture / Multi-Tenant Design / Quick Start, weeks 11-15 used lowercase
-Quick start / Security patterns / Teardown, and only weeks 24-25 used the
-numbered runbook that actually reads like something you follow.
+Requires an H1, a "What you build:" line, a Cost row, a Status line, then:
+1. Prerequisites, 2. Source files, 3. Deploy, 4. Run it, 5. Validation,
+6. Cleanup, Cost, Troubleshooting, References.
 
-Consistency kept slipping for one reason: the rule lived in a document, and
-a document is not consulted while typing. So it lives here instead, and it
-blocks.
-
-WHAT IT REQUIRES
-
-  A header block carrying
-    * an H1 title
-    * a "What you build:" line, so the reader knows within one line
-    * a facts table with a Cost row -- what a reader wants to know BEFORE
-      starting, and something AWS's own lab format puts up front that this
-      series did not
-
-      DURATION IS NOT REQUIRED, and that is deliberate. AWS states "requires
-      approximately 60 minutes" on every lab and it is genuinely useful, but
-      no figure was ever recorded for these twenty-five. Writing one per week
-      would mean inventing twenty-five numbers that look measured. The field
-      is worth adding once Jay supplies real values; until then its absence
-      is honest and its presence would not be.
-    * a Status line
-
-  Then these nine headings, in this order:
-
-    1. Prerequisites      2. Source files   3. Deploy
-    4. Run it             5. Validation     6. Cleanup
-    Cost                  Troubleshooting   References
-
-WHAT IT DELIBERATELY ALLOWS
-
-Extra sections, anywhere. A guide may carry Architecture, Security patterns,
-or a design-rationale section, and several carry good ones. The nine above are
-a floor, not a cage: a check that deleted twenty-five weeks of rationale to
-make a list match would be a worse outcome than the drift it fixed.
-
-Step 4's noun varies with the lab -- "Run it", "Run the experiment", "Run the
-experiments" are all accepted, because some weeks run a workload and some run
-an experiment against one.
+Extra sections are allowed anywhere. Step 4's noun may vary ("Run the
+experiment"). Duration is not required: no figure was ever recorded for
+these weeks, and inventing them would look measured.
 """
 from __future__ import annotations
 
