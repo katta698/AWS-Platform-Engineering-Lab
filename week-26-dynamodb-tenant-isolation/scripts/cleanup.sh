@@ -12,6 +12,26 @@ ROOT="$(dirname "$HERE")"
 REGION="${AWS_REGION:-us-east-1}"
 NAME="week26-tenant-isolation"
 
+# Teardown is the only irreversible step in a week. Publishing can be edited;
+# destroying cannot, and every uncaptured figure becomes permanently
+# uncapturable the moment the destroy applies.
+#
+# scripts/check_figures_before_destroy.py exists to stop exactly that, and it
+# did not stop it here: it is wired into hcp_destroy.py, this script was
+# written fresh and never called it, and week 26 had no FIGURE_PLAN.md for it
+# to read. The stack was destroyed with no AWS console figure taken. Calling
+# it here closes the path this script opened.
+echo "==> figures captured? (teardown is irreversible)"
+python "$ROOT/../scripts/check_figures_before_destroy.py"   week-26-dynamodb-tenant-isolation || {
+    echo
+    echo "REFUSING TO DESTROY: figures above are still uncaptured."
+    echo "Capture them, retire them in docs/UNUSED.txt with a reason, or"
+    echo "pass --force to this script if you mean to override it."
+    [ "${1:-}" = "--force" ] || exit 1
+    echo "--force given; continuing anyway."
+    shift
+  }
+
 cd "$ROOT/terraform/environments/dev"
 
 # Plan the destroy first and apply that plan, rather than destroying blind.
