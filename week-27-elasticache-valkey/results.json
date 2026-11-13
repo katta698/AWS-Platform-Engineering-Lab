@@ -1,0 +1,26 @@
+[
+  {
+    "size_kb": 1,
+    "requests": 20000,
+    "seconds": 58.73,
+    "kb_moved": 20000,
+    "ecpus_estimated": 20000,
+    "ecpus_billed": 20803.044
+  },
+  {
+    "size_kb": 10,
+    "requests": 20000,
+    "seconds": 62.17,
+    "kb_moved": 200000,
+    "ecpus_estimated": 200000,
+    "ecpus_billed": 200830.046
+  },
+  {
+    "size_kb": 100,
+    "requests": 20000,
+    "seconds": 87.05,
+    "kb_moved": 2000000,
+    "ecpus_estimated": 2000000,
+    "ecpus_billed": 2000960.048
+  }
+]
