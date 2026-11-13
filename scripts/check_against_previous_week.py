@@ -56,13 +56,16 @@ def structural_headings(before_week, threshold=0.6):
 
 def shape(text):
     """The structural facts worth comparing."""
-    figs = re.findall(r'<img[^>]+src="([^"]+)"', text)
+    imgs = re.findall(r"<img[^>]*>", text)
+    # Source is judged from the filename AND the alt text. Filenames alone
+    # undercount: a CloudWatch capture named 04-cloudwatch-ecpus.png is a
+    # console figure whether or not the word "console" is in its name.
+    console = re.compile(r"console|hcp|cloudwatch|terraform\.io", re.I)
     return {
         "sections": set(re.findall(r'<div class="section" id="([^"]+)"', text)),
         "h3": {h.strip().lower() for h in re.findall(r"<h3>(.*?)</h3>", text, re.S)},
-        "figures": len(figs),
-        "console_figures": sum(1 for f in figs
-                               if re.search(r"console|aws-console|hcp", f, re.I)),
+        "figures": len(imgs),
+        "console_figures": sum(1 for i in imgs if console.search(i)),
         "ordered_lists": len(re.findall(r"<ol>", text)),
         "tables": len(re.findall(r"<table", text)),
         "svg": len(re.findall(r"<svg", text)),

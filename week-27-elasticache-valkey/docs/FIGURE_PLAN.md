@@ -17,7 +17,7 @@ Target is 4-7 figures in the published post.
 
 ## Console deep links
 
-    https://us-east-1.console.aws.amazon.com/elasticache/home?region=us-east-1#/serverless-caches
+    https://us-east-1.console.aws.amazon.com/elasticache/home?region=us-east-1#/valkey
     https://us-east-1.console.aws.amazon.com/cloudwatch/home?region=us-east-1#metricsV2
 
 Find others by reading the `href` off the console's left nav with Playwright
