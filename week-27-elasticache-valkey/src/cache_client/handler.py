@@ -48,8 +48,8 @@ def handler(event, context):
         "requests": requests,
         "seconds": round(elapsed, 2),
         "kb_moved": kb_moved,
-        # 1 ECPU per KB for a simple read, so this is the floor the byte
-        # dimension sets. The bill is the higher of this and vCPU time.
-        "ecpus_from_bytes": kb_moved,
-        "cost_usd": round(kb_moved / 1_000_000 * 0.0023, 6),
+        # What the byte dimension implies. This is an ESTIMATE and is
+        # labelled as one everywhere it is printed: the billed figure comes
+        # from CloudWatch, which is the point of the week.
+        "ecpus_estimated": kb_moved,
     }

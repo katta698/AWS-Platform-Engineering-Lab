@@ -66,9 +66,10 @@ python scripts/run_experiment.py --json results.json
 
 | Test | Expected |
 |---|---|
-| 200k reads at 1 KB | ~200k ECPUs |
-| 200k reads at 10 KB | ~2M ECPUs — same requests, ten times the ECPUs |
-| 200k reads at 100 KB | ~20M ECPUs — same requests, a hundred times |
+| 200k reads at 1 KB | ~200k ECPUs estimated; CloudWatch reports the billed figure |
+| 200k reads at 10 KB | ~2M estimated — same requests, ten times the ECPUs |
+| 200k reads at 100 KB | ~20M estimated — same requests, a hundred times |
+| Billed vs estimated | the article's table uses the **billed** column only |
 | CloudWatch `ElastiCacheProcessingUnits` | three plateaus at one request rate |
 | `BytesUsedForCache` | below the 100 MB minimum billed storage |
 
