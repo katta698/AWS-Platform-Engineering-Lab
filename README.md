@@ -46,15 +46,15 @@
 | Week 21 | [Blue/green on ECS](week-21-bluegreen-ecs) | ECS native blue/green, ALB target-group switching, bake time, CloudWatch alarm rollback, Fargate | ✅ Complete |
 | Week 22 | [Container image security](week-22-container-image-security) | ECR **managed signing** (Nov 2025), Amazon Inspector enhanced scanning, and a Lambda gate that quarantines what the other two only describe | ✅ Complete |
 | Week 23 | [Service networking with VPC Lattice](week-23-service-networking-lattice) | VPC Lattice service networks, two layers of auth policy, SigV4 between services, and the switch that decides whether either policy is read | ✅ Complete |
-| Week 24 | Chaos Engineering + Agent Evaluation | FIS fault injection, resilience testing, runbooks — plus measuring whether AWS DevOps Agent finds a fault you deliberately caused | 📅 Planned |
-| Week 25 | Serverless Microservices | API Gateway + Lambda, DynamoDB, SAM, local testing | 📅 Planned |
+| Week 24 | [Chaos engineering with AWS FIS](week-24-chaos-engineering-fis) | FIS fault injection against ECS Fargate, CloudWatch alarms as stop conditions, and the discovery that a stop condition's alarm could not reach ALARM for the fault it guarded | ✅ Complete |
+| Week 25 | [The neighbour that starved checkout](week-25-serverless-microservices) | Three Lambda functions sharing one Regional concurrency pool; checkout served 5.4% of requests unreserved and 99.5% with a reservation of 50 | ✅ Complete |
 
 ### Phase 4 — Data & Database (Weeks 26–33)
 
 | Week | Project | Key AWS Services | Status |
 |------|---------|-----------------|--------|
-| Week 26 | DynamoDB Self-Service Platform | DynamoDB, DAX, on-demand capacity, table-per-tenant | 📅 Planned |
-| Week 27 | ElastiCache for Valkey | ElastiCache Serverless for Valkey, caching layer, automated failover (Valkey is AWS's recommended engine for new deployments) | 📅 Planned |
+| Week 26 | [Tenant isolation on DynamoDB](week-26-dynamodb-tenant-isolation) | One pooled table, `dynamodb:LeadingKeys` isolation, and a DAX cluster in front — the same cross-tenant read refused directly and served through the cache | ✅ Complete |
+| Week 27 | [What a cache actually costs](week-27-elasticache-valkey) | ElastiCache Serverless for Valkey; 20,000 identical requests billed 20,803 to 2,000,960 ECPUs depending only on value size | ✅ Complete |
 | Week 28 | RDS Multi-Region with Read Replicas | RDS, read replicas, global database pattern, failover automation | 📅 Planned |
 | Week 29 | Database Migration Service | DMS, homogeneous + heterogeneous migrations, CDC, cutover | 📅 Planned |
 | Week 30 | Redshift Data Warehouse | Redshift Serverless, data sharing, Spectrum, RA3 | 📅 Planned |
