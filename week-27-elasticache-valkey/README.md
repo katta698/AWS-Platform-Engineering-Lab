@@ -5,7 +5,7 @@ number of requests issued against three value sizes — then the bill for each.
 
 | | |
 |---|---|
-| **Cost** | ~$0.08 estimated; $0.0084/hour storage floor plus $0.0023 per million ECPUs |
+| **Cost** | **$0.078 measured** (storage $0.065, ECPUs $0.013); the floor dominates |
 | **Provisioning** | Terraform ≥ 1.10, HCP Terraform workspace `week-27-dev` |
 | **Region** | us-east-1 — a serverless cache is reachable only from its own VPC |
 
@@ -95,7 +95,12 @@ destroys and checks the cache and functions against the API.
 The 100 MB floor is ~$0.0084/hour, about $6.13/month. AWS states there is
 "no minimum fee" and also a 100 MB minimum billed storage; both are true.
 
-Measured total goes here once the lab has run.
+**Measured 2026-11-13: $0.078.** Cost Explorer splits it as $0.0649 for
+0.773 GB-hours of storage and $0.0130 for 5,633,206 ECPUs. Storage is 83%
+of the bill and nearly all of that is the 100 MB floor.
+
+The ECPU figure covers discarded attempts as well as the three measured
+runs; those three account for 2.2 million of it, about half a cent.
 
 ## Troubleshooting
 
