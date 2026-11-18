@@ -11,6 +11,18 @@ PRIMARY_REGION="us-east-1"
 REPLICA_REGION="us-west-2"
 NAME="week28-failover"
 
+# The agreed order is: deploy, capture, send the draft URL while the stack is
+# still up, THEN tear down. Teardown is where that order stops being
+# recoverable, so it is checked here rather than remembered.
+echo "==> draft reviewed?"
+if [ ! -f "$ROOT/docs/DRAFT_SENT" ]; then
+  echo "  no docs/DRAFT_SENT -- the draft URL has not gone to Jay yet."
+  echo "  Anything he asks for after teardown needs a redeploy to capture."
+  [ "${1:-}" = "--force" ] || exit 1
+  shift
+fi
+echo "  draft sent $(cat "$ROOT/docs/DRAFT_SENT" 2>/dev/null)"
+
 echo "==> figures captured?"
 python "$ROOT/../scripts/check_figures_before_destroy.py" week-28-rds-multi-region-failover || {
   echo
