@@ -78,9 +78,11 @@ def main() -> int:
 
     rds_r = boto3.client("rds", region_name=REPLICA)
     cw_r = boto3.client("cloudwatch", region_name=REPLICA)
-    # The plan is addressed from the primary region; ARC runs a data plane in
-    # every region so the execution does not depend on the one being left.
-    arc = boto3.client("arc-region-switch", region_name=PRIMARY)
+    # An activate flow must be STARTED in the region being activated:
+    # "An activate flow should be run on the target region." That is the point
+    # of a per-region data plane -- failing over to us-west-2 must not require
+    # a call into the region you are evacuating.
+    arc = boto3.client("arc-region-switch", region_name=REPLICA)
     # A synchronous invoke must outlast the function's own 300s timeout;
     # boto3's default read timeout is 60s.
     lam = boto3.client("lambda", region_name=PRIMARY, config=Config(
