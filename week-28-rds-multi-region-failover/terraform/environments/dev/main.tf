@@ -230,6 +230,12 @@ resource "aws_db_instance" "replica" {
   # omitting this is the usual first-apply failure.
   kms_key_id = data.aws_kms_alias.rds_replica.target_key_arn
 
+  # Declare this even though RDS sets it on its own: a replica of an encrypted
+  # source comes up encrypted, so AWS reports true while the config says null,
+  # and "true -> null forces replacement" destroys the database on the NEXT
+  # apply. The first apply succeeds either way, which is what makes it a trap.
+  storage_encrypted = true
+
   db_subnet_group_name   = aws_db_subnet_group.replica.name
   vpc_security_group_ids = [aws_security_group.db_replica.id]
   publicly_accessible    = false
@@ -274,6 +280,19 @@ resource "aws_iam_role_policy" "arc" {
         "rds:PromoteReadReplica",
         "rds:CreateDBInstanceReadReplica",
         "rds:ModifyDBInstance",
+
+        # Not in AWS's sample policy for the RDS execution block, and the plan
+        # sits at "Action required" without it: Region switch pre-flights the
+        # role against each step, and when it cannot simulate it reports both
+        # a missing-policy warning and "does not have data on DB instance".
+        # One permission, two warnings that read like unrelated problems.
+        "iam:SimulatePrincipalPolicy",
+
+        # The ManualApproval step needs the role to be able to approve it.
+        # Surfaced only after the simulate permission was granted -- the
+        # evaluator reports what it can currently see, so the warnings arrive
+        # one layer at a time rather than all at once.
+        "arc-region-switch:ApprovePlanExecutionStep",
       ]
       Resource = "*"
     }]
@@ -292,6 +311,37 @@ resource "aws_arcregionswitch_plan" "failover" {
   regions           = [var.primary_region, var.replica_region]
   primary_region    = var.primary_region
 
+  # Declared us-east-1 first to match the order GetPlan returns. The provider
+  # compares workflows by position, so the reverse order makes every plan show
+  # the two workflows swapping places -- and the first apply fail outright with
+  # "block count changed from 0 to 1".
+  #
+  # Every region in an activePassive plan needs its own ACTIVATE workflow.
+  # Two API rejections pin the shape down, and the provider's own example
+  # satisfies neither:
+  #   "activePassive plans must not specify target action 'deactivate'"
+  #   "must have activate workflows defined for each region but found
+  #    workflow for only us-west-2"
+  #
+  # Activating us-east-1 is the failback direction, and there is nothing to
+  # automate there: the promoted instance in us-west-2 is now a standalone
+  # primary, so coming back means building a new replica and promoting it.
+  # An approval step says that out loud rather than implying a button exists.
+  workflow {
+    workflow_target_action = "activate"
+    workflow_target_region = var.primary_region
+
+    step {
+      name                 = "failback-is-not-a-button"
+      execution_block_type = "ManualApproval"
+
+      execution_approval_config {
+        approval_role   = aws_iam_role.arc.arn
+        timeout_minutes = 60
+      }
+    }
+  }
+
   workflow {
     workflow_target_action = "activate"
     workflow_target_region = var.replica_region
@@ -306,25 +356,6 @@ resource "aws_arcregionswitch_plan" "failover" {
           (var.replica_region) = aws_db_instance.replica.arn
         }
         timeout_minutes = 30
-      }
-    }
-  }
-
-  # Failing back from a promoted replica means rebuilding replication in the
-  # other direction, which is a new database, not a switch. The deactivate
-  # workflow is a required part of the plan shape; it stops at approval
-  # deliberately, because there is nothing automatic to go back to.
-  workflow {
-    workflow_target_action = "deactivate"
-    workflow_target_region = var.primary_region
-
-    step {
-      name                 = "acknowledge-no-automatic-failback"
-      execution_block_type = "ManualApproval"
-
-      execution_approval_config {
-        approval_role   = aws_iam_role.arc.arn
-        timeout_minutes = 60
       }
     }
   }

@@ -389,6 +389,32 @@ def self_test_quiet():
 
 
 
+def dismiss_console_announcements(page):
+    """Close the console's own pop-ups before the shot.
+
+    AWS floats product announcements ("Visual update to the AWS Management
+    Console") over the top-left of the page, which is exactly where the
+    breadcrumb and resource name sit. Best effort: never fails a capture.
+    """
+    closed = page.evaluate("""
+        () => {
+            const wanted = /visual update|new console|take a tour|what's new/i;
+            let n = 0;
+            for (const box of document.querySelectorAll(
+                    '[role=dialog],[role=alertdialog],[data-analytics*=announce]')) {
+                if (!wanted.test(box.innerText || '')) continue;
+                const shut = box.querySelector(
+                    'button[aria-label*="lose" i],button[aria-label*="ismiss" i],button');
+                if (shut) { shut.click(); n++; }
+            }
+            return n;
+        }
+    """)
+    if closed:
+        print(f"Dismissed {closed} console announcement(s) before capturing")
+        page.wait_for_timeout(600)
+
+
 def authenticated_url(url):
     """For an AWS console URL, a federated login URL that lands on it.
 
@@ -1091,6 +1117,8 @@ def capture(url: str, output_path: Path, wait_selector: str | None, wait_ms: int
                     "Capturing anyway would silently produce the top of the page "
                     "instead of the section asked for." % scroll_to)
             settle(page, "after scroll")
+
+        dismiss_console_announcements(page)
 
         # Separate question from the leak checks above: is this the page we asked
         # for at all? A sign-in screen passes every redaction assertion.

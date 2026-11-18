@@ -67,7 +67,12 @@ def get_signin_url(destination: str) -> str:
     login_url = (
         "https://signin.aws.amazon.com/federation"
         f"?Action=login&Issuer=AWSPlatformEngineeringLab"
-        f"&Destination={urllib.parse.quote(destination)}"
+        # safe="" so "#" and "/" are encoded too. quote()'s default leaves
+        # "/" alone and, more importantly, leaves "#" alone -- which ends the
+        # query string early, so the console deep link became a fragment of
+        # the SIGNIN url and federation answered 400. Every console figure
+        # that needs a #fragment depends on this.
+        f"&Destination={urllib.parse.quote(destination, safe='')}"
         f"&SigninToken={signin_token}"
     )
     return login_url
