@@ -20,8 +20,11 @@ back. Rehearsing the procedure costs you the thing the procedure protects.
 This lab runs it anyway, and records two numbers: how far behind the replica
 actually was, and how long the failover actually took.
 
-**Measured:** failover **726 s (12.1 minutes)**, replication lag **20 s peak /
-4.2 s average** under a 6.4-million-row write load.
+**Measured:** the database was serving as a standalone primary **160 s** after
+`PromoteReadReplica` was called; the Region switch plan did not report itself
+complete for **726 s**, because it waits out an automatic post-promotion
+backup. Replication lag **20 s peak / 4.2 s average** under a 6.4-million-row
+write load.
 
 ---
 
@@ -81,7 +84,7 @@ proposes replacing the replica, see the `storage_encrypted` note in
 Troubleshooting before you apply anything.
 
 **Capture now, not later:** figure 01 (the HCP run) exists only while the run
-page does, and figures 03 and 04 need the stack alive.
+page does, and figure 04 needs the stack alive.
 
 ## 5. Run the failover
 
@@ -103,6 +106,18 @@ lag rises in step with the clock, because that is idleness, not replication.
 **Check:** the output reports a lag peak and average, then
 `plan execution: completed`, then `still replicating: False`. Anything else
 and the measurement is not usable.
+
+Then read the database's own record, because the script's clock and the
+database's are not the same clock:
+
+```bash
+aws rds describe-events --region us-west-2 \
+  --source-identifier week28-failover-replica --source-type db-instance \
+  --duration 1440 --query 'Events[].[Date,Message]' --output text
+```
+
+`DB instance restarted` is when it was usable. Everything after that is RDS
+taking a backup.
 
 ## 6. Cleanup
 

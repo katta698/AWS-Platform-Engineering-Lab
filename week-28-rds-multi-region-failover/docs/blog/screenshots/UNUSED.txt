@@ -1,0 +1,19 @@
+# Capture slots declared but not published, with the reason.
+# A number is never recycled; a capture not worth publishing is retired here.
+
+# 03 - the primary with its cross-region replica listed under Replication.
+#      Captured and sound, but it proves the setup rather than the finding.
+#      Replication is already evidenced twice over: 05 shows lag rising and
+#      falling, which cannot happen without it, and 07 carries the RDS event
+#      log. The standard allows 4-7 published screenshots and this was the
+#      weakest of nine.
+03-primary-and-replica.png
+
+# 06 - the script's own recorded measurement.
+#      Retired in favour of 07, which answers the same question with AWS's
+#      records instead of this repo's. The numbers it showed are in the
+#      validation table; a terminal printing values out of a JSON file this
+#      lab wrote is the weakest evidence in the post, and the 726 seconds it
+#      led with turned out to be the orchestrator's clock rather than the
+#      database's.
+06-failover-timed.png
