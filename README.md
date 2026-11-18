@@ -55,7 +55,7 @@
 |------|---------|-----------------|--------|
 | Week 26 | [Tenant isolation on DynamoDB](week-26-dynamodb-tenant-isolation) | One pooled table, `dynamodb:LeadingKeys` isolation, and a DAX cluster in front — the same cross-tenant read refused directly and served through the cache | ✅ Complete |
 | Week 27 | [What a cache actually costs](week-27-elasticache-valkey) | ElastiCache Serverless for Valkey; 20,000 identical requests billed 20,803 to 2,000,960 ECPUs depending only on value size | ✅ Complete |
-| Week 28 | RDS Multi-Region with Read Replicas | RDS, read replicas, global database pattern, failover automation | 📅 Planned |
+| Week 28 | [A failover that has actually been run](week-28-rds-multi-region-failover) | Postgres primary in us-east-1, cross-region replica in us-west-2, and the failover runbook declared as an ARC Region switch plan — promotion timed against the clock | 🔨 In progress |
 | Week 29 | Database Migration Service | DMS, homogeneous + heterogeneous migrations, CDC, cutover | 📅 Planned |
 | Week 30 | Redshift Data Warehouse | Redshift Serverless, data sharing, Spectrum, RA3 | 📅 Planned |
 | Week 31 | Lake Formation + Data Catalog | Lake Formation, Glue, fine-grained access, self-service data lake | 📅 Planned |
