@@ -7,8 +7,12 @@
 
 Cost Explorer reports the current day as partial and keeps revising it. A
 figure taken the same day reads low -- week 27 published $0.078 and settled at
-$0.1435, 84% higher. This refuses a cost claim dated less than a full day ago,
-and one carrying no date at all.
+$0.1435, 84% higher. This refuses a cost claim read before its usage day
+closed, and one carrying no date at all.
+
+Pass --deployed-on with the UTC day the stack ran. Cost Explorer bills in UTC,
+so an evening run in CST lands on the NEXT UTC day: week 28 ran on the evening
+of 17 Nov local and every line of it was billed to 18 Nov UTC.
 
 Either form counts, in the week's README:
 
@@ -57,16 +61,24 @@ def problems_in(text, today, deployed_on=None):
     measured = dt.date.fromisoformat(m.group(1) or m.group(2))
     if measured > today:
         out.append("the measurement date %s is in the future" % measured)
-    elif (today - measured).days < 1:
-        out.append("cost dated %s, which is today -- Cost Explorer still "
-                   "reports this day as partial. Re-read tomorrow."
-                   % measured)
+        return out
 
+    # What has to have closed is the day the USAGE fell on, not the day
+    # before the reading. Cost Explorer bills in UTC days, so a stack run
+    # late evening local lands on the next UTC day -- week 28 ran on the
+    # evening of 17 Nov CST and every line of it was billed to 18 Nov UTC.
+    # Reading on the day after the usage day is correct and must pass;
+    # reading a day that is still open must not.
     if deployed_on:
         ran = dt.date.fromisoformat(deployed_on)
         if measured <= ran:
-            out.append("cost measured %s but the stack ran on %s -- the "
-                       "usage cannot have been billed yet" % (measured, ran))
+            out.append("cost dated %s but the usage day %s (UTC) had not "
+                       "closed yet -- Cost Explorer still reports it as "
+                       "partial" % (measured, ran))
+    elif measured >= today:
+        out.append("cost dated %s with no --deployed-on to check it against. "
+                   "Pass the UTC day the stack ran, or re-read once it has "
+                   "closed." % measured)
     return out
 
 
@@ -76,10 +88,14 @@ def self_test() -> int:
         ("no cost figure at all", "Nothing priced here.", None, 0),
         ("a rate is not a measurement", "The plan is $70/month.", None, 0),
         ("figure with no stamp", "Cost: $0.14 measured.", None, 1),
-        ("figure stamped today",
+        ("stamped today, no usage day given",
          "Cost: $0.14 <!-- COST_MEASURED_ON: 2026-11-20 -->", None, 1),
-        ("figure stamped yesterday",
+        ("stamped yesterday, no usage day given",
          "Cost: $0.14 <!-- COST_MEASURED_ON: 2026-11-19 -->", None, 0),
+        ("read the day after a UTC usage day that closed",
+         "Cost: $0.14 <!-- COST_MEASURED_ON: 2026-11-20 -->", "2026-11-19", 0),
+        ("read while the usage day is still open",
+         "Cost: $0.14 <!-- COST_MEASURED_ON: 2026-11-20 -->", "2026-11-20", 1),
         ("stamp in the future",
          "Cost: $0.14 <!-- COST_MEASURED_ON: 2026-11-25 -->", None, 1),
         ("measured the same day it ran",
