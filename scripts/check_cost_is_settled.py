@@ -138,7 +138,11 @@ def main() -> int:
         return 0
 
     text = io.open(path, encoding="utf-8").read()
-    probs = problems_in(text, dt.date.today(), a.deployed_on)
+    # UTC, because the thing being judged is a UTC billing day. Reading a
+    # closed UTC day during the preceding local evening is correct, and
+    # comparing it to a local 'today' calls that date the future.
+    probs = problems_in(text, dt.datetime.now(dt.timezone.utc).date(),
+                        a.deployed_on)
     for p in probs:
         print("  %s" % p)
     if probs:

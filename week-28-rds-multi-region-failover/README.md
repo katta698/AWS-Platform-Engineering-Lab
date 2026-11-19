@@ -6,7 +6,7 @@ switch plan — then you run it and time it.
 
 | | |
 |---|---|
-| **Cost** | COST_PENDING |
+| **Cost** | **$0.2359 measured**, settled 2026-11-19 UTC (RDS $0.1604, ARC plan $0.0755) |
 | **Provisioning** | Terraform ≥ 1.10, AWS provider ≥ 6.47, HCP workspace `week-28-dev` |
 | **Regions** | us-east-1 (primary) and us-west-2 (replica) |
 
@@ -136,7 +136,28 @@ billed as a flat monthly fee.
 
 ## Cost
 
-COST_PENDING
+**Measured, settled 2026-11-19 UTC: $0.2359** for the UTC day the lab ran
+(18 Nov UTC), read once that day had closed.
+
+| Line | Cost |
+|---|---|
+| Amazon RDS (2 x db.t4g.micro + storage, ~2h40m) | $0.1604 |
+| ARC Region switch plan | $0.0755 |
+
+The plan line answers this week's open question. AWS publishes "$70 per plan
+per month", "prorated for partial months", without defining partial. The bill
+is explicit: usage type `Global-AmazonARCRegionSwitchPlan`, quantity
+**0.001078 Months**, implied rate **$69.999998 per month**. Fractional months,
+at exactly the published rate — so rehearsing a failover costs cents, while
+keeping a plan costs $840/year per application.
+
+Unreconciled: CloudTrail puts the plan's life at 81 minutes (created
+22:13:25, deleted 23:34:51 CST) and the meter recorded about 47 minutes'
+worth. Both are recorded here rather than explained away.
+
+Read from Cost Explorer after the UTC day closed. Cost Explorer bills in UTC
+days, so an evening run in CST lands on the NEXT UTC day — this lab ran the
+evening of 17 Nov local and every line of it was billed to 18 Nov UTC.
 
 ## What is different in production
 
