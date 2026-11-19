@@ -6,11 +6,11 @@ switch plan — then you run it and time it.
 
 | | |
 |---|---|
-| **Cost** | **$0.2359 measured**, settled 2026-11-19 UTC (RDS $0.1604, ARC plan $0.0755) |
+| **Cost** | **$0.3731 measured** (RDS $0.2412, ARC plan $0.1319) |
 | **Provisioning** | Terraform ≥ 1.10, AWS provider ≥ 6.47, HCP workspace `week-28-dev` |
 | **Regions** | us-east-1 (primary) and us-west-2 (replica) |
 
-> **Status:** built, measured and destroyed 2026-11-17.
+> **Status:** built, validated and destroyed 2026-11-17. Published 2026-11-18.
 
 Every disaster recovery document contains a recovery time. Almost none contain
 a measurement, because promoting a read replica destroys it: the replica
@@ -126,9 +126,17 @@ bash scripts/cleanup.sh
 ```
 
 Refuses while a declared figure is uncaptured, then destroys both regions and
-asks the API — including snapshots, which outlive a destroyed instance and
-keep charging, and the Region switch plan, which is the only resource here
-billed as a flat monthly fee.
+asks the API — including snapshots and the Region switch plan.
+
+Snapshots are checked because deleting a database does not delete them, and
+the bill for them goes UP afterwards. The free backup allowance is 100% of
+the storage you have provisioned in that region, so a snapshot sitting beside
+a live 20 GB database is usually free; delete the database and the allowance
+goes with it, leaving the snapshot billable at $0.095/GB-month. AWS also
+attributes those charges to the snapshot's own ARN rather than the instance,
+so nothing in the bill still carries the name you would search for. This lab
+sets `skip_final_snapshot = true` and does not retain automated backups, so
+there should be none — the check is there to prove it.
 
 **Check:** `Teardown verified in both regions.`
 
@@ -136,28 +144,30 @@ billed as a flat monthly fee.
 
 ## Cost
 
-**Measured, settled 2026-11-19 UTC: $0.2359** for the UTC day the lab ran
-(18 Nov UTC), read once that day had closed.
+**Measured: $0.3731** for 18 Nov UTC, the day the lab ran.
+<!-- COST_MEASURED_ON: 2026-11-19 COST_STABLE_OVER: 7h -->
+Read 2026-11-19 at 12:45 UTC and again at 20:05 UTC, unchanged.
 
 | Line | Cost |
 |---|---|
-| Amazon RDS (2 x db.t4g.micro + storage, ~2h40m) | $0.1604 |
-| ARC Region switch plan | $0.0755 |
+| Amazon RDS (2 x db.t4g.micro + storage) | $0.2412 |
+| ARC Region switch plan | $0.1319 |
 
 The plan line answers this week's open question. AWS publishes "$70 per plan
 per month", "prorated for partial months", without defining partial. The bill
 is explicit: usage type `Global-AmazonARCRegionSwitchPlan`, quantity
-**0.001078 Months**, implied rate **$69.999998 per month**. Fractional months,
-at exactly the published rate — so rehearsing a failover costs cents, while
-keeping a plan costs $840/year per application.
+**0.001885 Months**, implied rate **$70.0000 per month**. That quantity is
+81.4 minutes; CloudTrail puts the plan's life at 81 minutes 26 seconds
+(`CreatePlan` 22:13:25, `DeletePlan` 23:34:51 CST). Metered to the minute at
+the published rate, so rehearsing a failover costs cents while keeping a plan
+costs $840/year per application.
 
-Unreconciled: CloudTrail puts the plan's life at 81 minutes (created
-22:13:25, deleted 23:34:51 CST) and the meter recorded about 47 minutes'
-worth. Both are recorded here rather than explained away.
-
-Read from Cost Explorer after the UTC day closed. Cost Explorer bills in UTC
-days, so an evening run in CST lands on the NEXT UTC day — this lab ran the
-evening of 17 Nov local and every line of it was billed to 18 Nov UTC.
+**Read it a day late, and read it twice.** Taken five minutes after the UTC
+day closed, this same day reported $0.2359 — 58% low, with the ARC line at
+$0.0755 and RDS at $0.1604. Cost Explorer keeps filling a day in for hours
+after it ends. Cost Explorer also bills in UTC days, so an evening run in CST
+lands on the NEXT UTC day: this lab ran the evening of 17 Nov local and every
+line of it was billed to 18 Nov UTC.
 
 ## What is different in production
 
